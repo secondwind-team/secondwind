@@ -59,23 +59,7 @@ AI 가 `git commit` 을 생성할 때:
 
 ## 문서 작성 규칙 (`docs/`)
 
-`docs/` 아래 `.md` 파일을 생성·수정할 때는 반드시 frontmatter 를 포함·갱신:
-
-```yaml
----
-title: 문서 제목
-author: ai-<스킬이름>            # 또는 "human: <이름>", "mixed"
-status: draft                    # draft | reviewed | approved
-created: YYYY-MM-DD
-last-edited-by: <이름 또는 스킬>
----
-```
-
-- 새 문서: 모든 필드 채움
-- 기존 문서 수정: `last-edited-by` 갱신, 상태가 올라가면 `status` 도 갱신
-- `status: approved` 문서는 사소한 편집도 **사람에게 먼저 확인** 후 진행
-
-폴더 구조·파일명 규칙 등 상세는 `docs/README.md`.
+폴더 구조·파일명 규칙은 `docs/README.md` 참고. **frontmatter 는 쓰지 않는다** — 문서가 지저분해져서 규칙에서 제외함.
 
 ---
 

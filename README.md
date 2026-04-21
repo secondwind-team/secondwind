@@ -209,7 +209,7 @@ AI 에이전트도 함께 지키는 기본 규칙입니다. 전체 내용은 `CL
 | `app/` | 서비스 개발 코드 (프레임워크 확정 후 채워짐) | 사람 + AI |
 | `scripts/` | 팀 공용 스크립트 (`bootstrap.sh` 등) | 사람 + AI |
 
-문서 하위 폴더 구조와 파일명·frontmatter 규칙은 [`docs/README.md`](./docs/README.md) 참고.
+문서 하위 폴더 구조와 파일명 규칙은 [`docs/README.md`](./docs/README.md) 참고.
 
 ---
 
