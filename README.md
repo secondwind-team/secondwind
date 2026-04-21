@@ -27,7 +27,7 @@
 1. **AI CLI 설치** — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 또는 [Codex CLI](https://github.com/openai/codex) 중 본인이 사용할 것.
 2. **프로젝트 클론**
    ```bash
-   git clone <repo-url> secondwind
+   git clone https://github.com/akushig/secondwind.git secondwind
    cd secondwind
    ```
 3. 완료. 이후는 [GSTACK.md](./GSTACK.md) 의 "설치" 섹션 참고.
@@ -146,11 +146,9 @@ wsl --install
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone <repo-url> secondwind
+git clone https://github.com/akushig/secondwind.git secondwind
 cd secondwind
 ```
-
-`<repo-url>` 자리는 **개발자에게 받은 실제 GitHub 주소** 로 바꿔 넣으세요.
 
 > ⚠️ 반드시 `~/projects/...` (Ubuntu 홈) 아래에 둬야 합니다. `/mnt/c/...` (Windows 드라이브) 에 두면 파일 읽기·쓰기가 매우 느리고 일부 도구가 권한 문제로 깨집니다.
 

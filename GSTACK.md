@@ -23,7 +23,7 @@
 저장소를 클론한 뒤 프로젝트 루트에서 한 번만 실행하면 됩니다.
 
 ```bash
-git clone <repo-url> secondwind
+git clone https://github.com/akushig/secondwind.git secondwind
 cd secondwind
 ./scripts/bootstrap.sh          # Claude Code + Codex 둘 다 설치
 ```
