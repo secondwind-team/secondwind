@@ -9,7 +9,7 @@ If you are Codex or another agent, the instructions below apply.
 
 ## Workflow layer: gstack
 
-This project uses [gstack](https://github.com/garrytan/gstack) for shared slash commands and conventions. The full ruleset lives in `.agents/skills/gstack/AGENTS.md` and per-skill `SKILL.md` files. Read them on demand.
+This project uses [gstack](https://github.com/garrytan/gstack) for shared slash commands and conventions. The full ruleset lives in `~/.claude/skills/gstack/AGENTS.md` and per-skill `SKILL.md` files. Read them on demand.
 
 In Codex, gstack skills are namespaced with `gstack-` prefix (e.g., `/gstack-qa`, `/gstack-ship`).
 

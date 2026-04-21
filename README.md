@@ -33,7 +33,7 @@ That's it. The script is idempotent — safe to re-run.
 
 On Codex these are prefixed with `gstack-` — e.g., `/gstack-qa`, `/gstack-ship`.
 
-Full command list (23 skills + 8 power tools): `.agents/skills/gstack/docs/skills.md`.
+Full command list (23 skills + 8 power tools): `~/.claude/skills/gstack/docs/skills.md` (after running bootstrap).
 
 ---
 
@@ -70,4 +70,4 @@ Your muscle memory transfers — same slash command names (drop the `gstack-` pr
 | `bun: command not found` | Restart shell, or `export PATH="$HOME/.bun/bin:$PATH"` |
 | Slash commands not showing in Claude Code | Restart Claude Code after `bootstrap.sh` |
 | Slash commands not showing in Codex | `ls ~/.codex/skills/` — should contain `gstack-*` entries. Re-run bootstrap if missing. |
-| "gstack is outdated" | `cd .agents/skills/gstack && git pull && ./setup --quiet` |
+| "gstack is outdated" | `./scripts/bootstrap.sh` (it pulls + re-runs setup) |

@@ -1,5 +1,5 @@
-# gstack + per-host skill links (each teammate regenerates via scripts/bootstrap.sh)
-.agents/
+# gstack is installed into each teammate's home dir (~/.claude/skills/gstack)
+# by scripts/bootstrap.sh — nothing to ignore inside the repo for that.
 
 # Node / Bun
 node_modules/

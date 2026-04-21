@@ -8,7 +8,7 @@ The team has 3 people:
 
 ## For the AI agent (read this every session)
 
-1. **Follow gstack conventions.** Full rules live in `.agents/skills/gstack/CLAUDE.md` and individual `SKILL.md` files under `.agents/skills/gstack/`. Read them on demand; do not re-state them here.
+1. **Follow gstack conventions.** Full rules live in `~/.claude/skills/gstack/CLAUDE.md` and individual `SKILL.md` files under `~/.claude/skills/gstack/`. Read them on demand; do not re-state them here.
 2. **Investigation before modification.** Never patch without reproducing or tracing the root cause (`/investigate`).
 3. **Respect `/freeze` and `/careful`.** If a path is frozen, do not edit it. If a command is destructive, confirm with the user first.
 4. **Small, reviewable changes.** Prefer one concern per PR. Use `/ship` to open PRs — it runs tests and a coverage audit first.
