@@ -6,6 +6,19 @@ The team has 3 people:
 - 1 developer (Claude Code)
 - 2 non-developers (Codex today, Claude Code later)
 
+## Current phase — read this first
+
+**Setup: complete (2026-04-21).** gstack is installed at `~/.claude/skills/gstack`, Bun is on PATH, Claude Code and Codex both have all slash commands registered. See `git log` for scaffold history.
+
+**What does *not* exist yet:** no framework chosen, no package.json, no code, no database, no deployment target. The product itself is undefined.
+
+**Next step (suggested):** the developer should start with `/office-hours` to clarify what secondwind is. Only after `/office-hours` + `/autoplan` should anyone scaffold a framework or write code.
+
+**Agent instructions while in this phase:**
+- Do **not** pick a framework, run `npm init`, or scaffold code on your own initiative.
+- If the user asks an open-ended "let's build X" prompt, steer them into `/office-hours` first.
+- It is fine to read/edit `README.md`, `CLAUDE.md`, `AGENTS.md`, and `scripts/` to refine the team setup.
+
 ## For the AI agent (read this every session)
 
 1. **Follow gstack conventions.** Full rules live in `~/.claude/skills/gstack/CLAUDE.md` and individual `SKILL.md` files under `~/.claude/skills/gstack/`. Read them on demand; do not re-state them here.
