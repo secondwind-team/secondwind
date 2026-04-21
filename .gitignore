@@ -1,0 +1,25 @@
+# gstack + per-host skill links (each teammate regenerates via scripts/bootstrap.sh)
+.agents/
+
+# Node / Bun
+node_modules/
+.bun/
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Claude Code / Codex per-user state (skill links, local settings)
+.claude/settings.local.json
+.codex/
