@@ -1,0 +1,10 @@
+# secondwind — Code Owners
+#
+# GitHub 이 PR 에서 자동으로 reviewer 로 지정하고,
+# branch protection 의 "Require review from Code Owners" 규칙이
+# 이 파일을 기준으로 동작합니다.
+#
+# 규칙: 저장소 전체를 akushig 이 소유 — main 으로 가는 모든 변경은
+# akushig 의 approve 가 반드시 포함되어야 merge 가능.
+
+* @akushig

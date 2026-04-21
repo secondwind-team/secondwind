@@ -1,0 +1,91 @@
+name: guard
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  author-email-check:
+    name: 커밋 author 검증
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 회사 도메인이 commit author 에 섞였는지 확인
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            RANGE="$BASE..$HEAD"
+          else
+            # push 이벤트: 최근 20개 커밋까지만 확인
+            RANGE="HEAD~20..HEAD"
+          fi
+
+          # 검사 대상 패턴 (이메일 전체 또는 일부에 포함되면 차단)
+          BAD=$(git log --format='%H %ae' "$RANGE" 2>/dev/null | \
+                grep -Ei 'woowahan|@corp\.|internal|@.*\.work$' || true)
+
+          if [ -n "$BAD" ]; then
+            echo "::error::회사/조직 계정 이메일이 감지되었습니다:"
+            echo "$BAD"
+            echo ""
+            echo "secondwind 은 개인 GitHub 계정만 허용합니다."
+            echo "과거 커밋이라면 rebase 로 author 를 재작성하세요."
+            exit 1
+          fi
+
+          echo "✅ 커밋 author 전부 개인 계정 도메인입니다."
+
+  docs-frontmatter-check:
+    name: docs/ frontmatter 검증
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docs/ 마크다운 frontmatter 필수 필드 확인
+        shell: bash
+        run: |
+          set -e
+          REQUIRED=(title author status created last-edited-by)
+          FAILED=0
+
+          # docs/README.md 는 상위 가이드 문서라 프레임워터 강제 대상 아님
+          FILES=$(find docs -type f -name "*.md" ! -name "README.md" 2>/dev/null || true)
+
+          if [ -z "$FILES" ]; then
+            echo "✅ docs/ 아래 검증 대상 문서 없음 (빈 상태)."
+            exit 0
+          fi
+
+          for f in $FILES; do
+            if ! head -1 "$f" | grep -q "^---$"; then
+              echo "::error file=$f::frontmatter 블록이 없습니다 (첫 줄이 '---' 이어야 함)"
+              FAILED=1
+              continue
+            fi
+
+            # 첫 --- 와 두 번째 --- 사이의 블록을 추출
+            FM=$(awk '/^---$/{c++; next} c==1{print} c==2{exit}' "$f")
+
+            for field in "${REQUIRED[@]}"; do
+              if ! echo "$FM" | grep -qE "^${field}:"; then
+                echo "::error file=$f::frontmatter 에 '${field}' 필드가 없습니다"
+                FAILED=1
+              fi
+            done
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "docs/ 규칙은 docs/README.md 참고."
+            exit 1
+          fi
+
+          echo "✅ 모든 docs/ 문서 frontmatter 가 유효합니다."
