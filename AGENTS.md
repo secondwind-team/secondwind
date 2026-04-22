@@ -17,10 +17,12 @@
 
 ## 현재 단계
 
-**제품이 아직 없습니다.** 프레임워크·코드·DB·배포 타깃 모두 미정.
+**v0 스캐폴딩 진입 (2026-04-22).** Next.js 15 + App Router + Tailwind + TypeScript. 첫 서비스는 `/travel`. 거절한 리뷰 챌린지·수용한 리스크는 `docs/decisions/0001-v0-stack-and-accepted-risks.md` 참고.
 
-- 스스로 프레임워크를 고르거나 스캐폴딩 하지 말 것.
-- 사용자가 "X 만들자" 라고 모호하게 말하면 먼저 `/gstack-office-hours` 를 제안.
+- `npm install` · Gemini API 키 · PWA · 실제 플랜 생성 흐름은 아직 미연결 (다음 이터레이션).
+- Dogfooding gate (2026-05-06 여행 날짜) 오픈. 해결 실패 시 Plan A/B.
+- Cross-service 직접 import 금지 — 공유는 `components/common` · `lib/common`.
+- 새 패키지 추가는 사용자 확인 후. sovereignty 결정 (공유 `/api/gemini`, "70%" 카피, 3-4 주말 스코프) 존중.
 
 ---
 

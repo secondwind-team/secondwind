@@ -7,16 +7,19 @@
 
 ## 현재 단계 — 이 섹션부터 먼저 읽을 것
 
-**세팅 완료 (2026-04-21).** 개발자 로컬에 gstack 설치·스킬 등록 완료. 설치 상태는 `GSTACK.md` 참고.
+**v0 스캐폴딩 진입 (2026-04-22).** Next.js 15 + App Router + Tailwind + TypeScript 기본 골격 작성 완료. 첫 서비스는 `/travel`. 제품 방향·거절한 챌린지·수용한 리스크는 `docs/decisions/0001-v0-stack-and-accepted-risks.md` 를 먼저 읽을 것.
 
-**아직 존재하지 않는 것:** 프레임워크 선택 전, `package.json` 없음, 코드 없음, DB 없음, 배포 타깃 없음. **제품 자체가 미정.**
+**아직 없는 것:** `npm install` 미실행 (`node_modules` 없음), Gemini API 키 미설정, PWA manifest·서비스 워커 미작성, travel 폼 제출이 아직 `/api/gemini` 로 연결되지 않음 (scaffold 상태).
 
-**추천 다음 단계:** 개발자가 `/office-hours` 로 secondwind 가 무엇이 될지 명확히 합니다. `/office-hours` → `/autoplan` 까지 끝내기 전에는 아무도 프레임워크를 고르거나 코드를 작성하지 않습니다.
+**오픈 블로커 (사용자 sovereignty 하에 진행):**
+- **Dogfooding gate 미해결** — 2026-05-06 까지 실제 여행 날짜 확보 못 하면 Plan A/B 재검토 (ADR 0001 참고).
+- Pre-code exit criteria 의 골든셋·validator·rate limit 설계 등은 의식적으로 건너뜀 (ADR 0001).
 
 **이 단계에서의 에이전트 행동 규칙:**
-- 스스로 프레임워크를 고르거나 `npm init`·스캐폴딩을 **하지 말 것**.
-- 사용자가 모호하게 "X 만들자" 라고 하면 먼저 `/office-hours` 를 제안.
-- `README.md`, `CLAUDE.md`, `AGENTS.md`, `GSTACK.md`, `scripts/` 는 팀 세팅 보강 목적으로 자유롭게 읽고 수정 가능.
+- Cross-service 직접 import 금지 (ESLint `no-restricted-imports` 로 차단). 공유 코드는 `components/common` · `lib/common`.
+- 설계 문서와 ADR 0001 에 명시된 sovereignty 결정을 존중 (공유 `/api/gemini` 프록시, "70%" 카피, chat edit v0 포함, 3-4 주말 스코프).
+- 새 패키지 추가는 사용자 확인 후. 가능한 한 의존성 최소.
+- `README.md`, `CLAUDE.md`, `AGENTS.md`, `GSTACK.md`, `scripts/`, `docs/` 는 팀 세팅 보강 목적으로 자유롭게 수정 가능.
 
 ---
 

@@ -1,15 +1,32 @@
 # app/
 
-secondwind 의 **서비스 개발 코드** 가 들어갈 자리입니다.
+secondwind 의 **Next.js 15 App Router** 엔트리 포인트입니다.
 
-**현재 비어 있습니다.** 프레임워크는 아직 선정되지 않았습니다.
+## 구조
 
-## 언제 채워지는가
+```
+app/
+  layout.tsx            루트 레이아웃 (html, body, globals.css)
+  globals.css           Tailwind base
+  (site)/               공용 헤더·푸터가 붙는 사이트 group
+    layout.tsx
+    page.tsx            랜딩 (서비스 카드 리스트)
+    travel/             지헌 오너십 — 여행 계획 (v0)
+      page.tsx
+      _components/
+      _lib/
+    diary/              태훈 오너십 placeholder
+    experiment-3/       덕우 오너십 placeholder
+  api/
+    gemini/route.ts     3개 서비스 공용 LLM 프록시 (v0 스코프 선택)
+```
 
-1. `/office-hours` 로 제품 아이디어 확정
-2. `/autoplan` 으로 기획 + 기술 스택 결정 (→ `docs/decisions/` 에 ADR 기록)
-3. 이 폴더에 해당 프레임워크의 초기 구조 스캐폴딩
+## 서비스 폴더 규칙
 
-## 에이전트에게
+- `app/(site)/<service>/_components/` · `_lib/` 아래에 서비스 전용 코드 배치 (`_` prefix 는 Next.js route 에서 제외됨).
+- 서비스끼리 직접 import 금지. 공유는 `components/common` · `lib/common` 으로 올려야 함 (ESLint `no-restricted-imports` 로 차단).
 
-현재 단계에서는 **자발적으로 `package.json` 을 만들거나 프레임워크를 스캐폴딩하지 마세요.** 팀이 결정을 내린 뒤 진행해야 합니다. 자세한 규칙은 루트 `CLAUDE.md` / `AGENTS.md` 참고.
+## 참고
+
+- 설계 의도: `docs/decisions/0001-v0-stack-and-accepted-risks.md`
+- 프로젝트 원칙: 루트 `CLAUDE.md` / `AGENTS.md`
