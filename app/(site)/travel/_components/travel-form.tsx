@@ -53,18 +53,8 @@ export function TravelForm() {
       });
       const json = (await res.json()) as Record<string, unknown>;
 
-      if (res.status === 503 && json.status === "not-configured") {
-        setState({
-          kind: "error",
-          message: "Gemini API 키가 아직 연결되지 않았습니다 (GEMINI_API_KEY 환경변수 설정 필요).",
-        });
-        return;
-      }
       if (!res.ok || json.status !== "ok") {
-        setState({
-          kind: "error",
-          message: `계획 생성 실패: ${String(json.reason ?? res.statusText)}`,
-        });
+        setState({ kind: "error", message: friendlyErrorMessage(res.status, json) });
         return;
       }
       setState({ kind: "ok", plan: json.plan as TravelPlan });
@@ -219,6 +209,34 @@ function PartyRow({
       </div>
     </div>
   );
+}
+
+function friendlyErrorMessage(httpStatus: number, json: Record<string, unknown>): string {
+  const status = typeof json.status === "string" ? json.status : "";
+  const reason = typeof json.reason === "string" ? json.reason : "";
+
+  if (status === "not-configured") {
+    return "Gemini API 키가 아직 연결되지 않았습니다 (서버 환경변수 설정 필요).";
+  }
+  if (status === "disabled") {
+    return "점검 중입니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (reason.includes("429")) {
+    return "지금 많이 이용되고 있어요. 1~2분 뒤 다시 시도해주세요.";
+  }
+  if (reason.includes("timeout")) {
+    return "응답이 늦어 중단됐어요. 다시 시도해주세요.";
+  }
+  if (reason.startsWith("upstream")) {
+    return "Gemini 응답에 문제가 있었습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (status === "invalid-response") {
+    return "받은 플랜을 이해하지 못했어요. 요청 사항을 조금 구체화하고 다시 시도해주세요.";
+  }
+  if (reason === "invalid-json" || reason === "invalid-input" || reason === "unknown-service") {
+    return "입력값을 다시 확인해주세요.";
+  }
+  return `계획 생성 실패 (${reason || httpStatus || "unknown"})`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
