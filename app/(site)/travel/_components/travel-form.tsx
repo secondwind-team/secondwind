@@ -85,7 +85,7 @@ export function TravelForm() {
             maxLength={80}
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            placeholder="예: 제주, 후쿠오카"
+            placeholder="예: 제주, 부산, 강릉"
             className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
           />
         </Field>
