@@ -6,6 +6,7 @@ import {
   type TravelItem,
   type TravelPlan,
 } from "@/lib/common/services/travel";
+import { MapView } from "./map-view";
 
 export function PlanCard({ plan }: { plan: TravelPlan }) {
   const budget = computeBudget(plan);
@@ -16,6 +17,8 @@ export function PlanCard({ plan }: { plan: TravelPlan }) {
         <p className="text-xs uppercase tracking-wide text-neutral-400">이 정도면 됩니다</p>
         <p className="text-base font-medium leading-korean">{plan.summary_line}</p>
       </header>
+
+      <MapView plan={plan} />
 
       <ol className="space-y-6">
         {plan.days.map((day, i) => (
