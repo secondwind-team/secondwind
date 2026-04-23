@@ -2,6 +2,19 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.6.0] - 2026-04-24
+
+### Added
+- **숙소 자동 추출 + 지도 표시.** 사용자 자유 요청에 구체적인 숙소명이 명시돼 있으면 (예: `숙소: 네스트호텔`) LLM 이 `TravelPlan.stay = { name }` 으로 추출. Naver 지역검색으로 lat/lng 매칭해 지도에 다크 컬러 `🏨 숙소` 마커 + legend 에 상호명 표기. 플랜 카드 헤더에도 `🏨 네스트호텔` 한 줄 추가 (enrich 성공 여부와 무관하게 사용자 입력 확인용).
+- `TravelPlan.stay?: { name: string; place?: PlaceInfo }` 필드 추가 (optional).
+
+### Changed
+- `travel-enrich.ts` 가 `stay.name` 도 Naver 지역검색 대상에 추가.
+- 지도 legend 렌더 조건 확장: 이전엔 `plan.days.length > 1` 일 때만. 이제 `plan.stay.place` 있으면 1일 여행이어도 legend 렌더 (숙소 라인 표시).
+
+### Note
+- "아직 안 정함"·"미정"·"게스트하우스 아무거나" 처럼 특정되지 않은 경우는 stay 필드 자체 생략 (시스템 프롬프트 명시). 실측으로 확인.
+
 ## [0.1.5.0] - 2026-04-24
 
 ### Changed

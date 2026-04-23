@@ -166,6 +166,22 @@ export function MapView({
           new kakao.maps.CustomOverlay({ position: ll, content, yAnchor: 0.5, xAnchor: 0.5, map });
         }
 
+        // 숙소 마커 — day 색과 구분되는 다크 컬러 + 호텔 아이콘
+        const stayLat = plan.stay?.place?.lat;
+        const stayLng = plan.stay?.place?.lng;
+        if (typeof stayLat === "number" && typeof stayLng === "number") {
+          const stayLl = new kakao.maps.LatLng(stayLat, stayLng);
+          bounds.extend(stayLl);
+          const stayContent = `<div style="background:#111827;color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);white-space:nowrap;">🏨 숙소</div>`;
+          new kakao.maps.CustomOverlay({
+            position: stayLl,
+            content: stayContent,
+            yAnchor: 0.5,
+            xAnchor: 0.5,
+            map,
+          });
+        }
+
         // Day 별 그룹화
         const byDay = new Map<number, PointEntry[]>();
         for (const p of points) {
@@ -257,18 +273,25 @@ export function MapView({
         ref={containerRef}
         className="h-72 w-full overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900"
       />
-      {plan.days.length > 1 && (
+      {(plan.days.length > 1 || plan.stay?.place) && (
         <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-500">
-          {plan.days.map((day, i) => (
-            <li key={i} className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="inline-block h-2 w-2 rounded-full"
-                style={{ background: DAY_COLORS[i % DAY_COLORS.length] }}
-              />
-              <span>{day.label}</span>
+          {plan.days.length > 1 &&
+            plan.days.map((day, i) => (
+              <li key={i} className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: DAY_COLORS[i % DAY_COLORS.length] }}
+                />
+                <span>{day.label}</span>
+              </li>
+            ))}
+          {plan.stay?.place && (
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden>🏨</span>
+              <span>{plan.stay.place.name ?? plan.stay.name}</span>
             </li>
-          ))}
+          )}
         </ul>
       )}
     </section>

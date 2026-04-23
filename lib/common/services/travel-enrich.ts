@@ -148,5 +148,13 @@ export async function enrichPlan(plan: TravelPlan, destHint?: string): Promise<v
       );
     }
   }
+  if (plan.stay) {
+    const stay = plan.stay;
+    tasks.push(
+      searchPlace(stay.name, destHint).then((info) => {
+        if (info) stay.place = info;
+      }),
+    );
+  }
   await Promise.all(tasks);
 }

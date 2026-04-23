@@ -22,6 +22,14 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
     <article className="space-y-6 rounded-xl border border-neutral-300 p-5 dark:border-neutral-700">
       <header className="space-y-2">
         <p className="text-xs uppercase tracking-wide text-neutral-400">이 정도면 됩니다</p>
+        {plan.stay && (
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            🏨 {plan.stay.name}
+            {plan.stay.place?.name && plan.stay.place.name !== plan.stay.name && (
+              <span className="text-neutral-400 dark:text-neutral-500"> · {plan.stay.place.name}</span>
+            )}
+          </p>
+        )}
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700 dark:text-neutral-200">
           {plan.rationale}
         </p>
