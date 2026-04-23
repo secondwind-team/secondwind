@@ -2,6 +2,20 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.2.0] - 2026-04-23
+
+### Added
+- `/travel` 폼의 요청사항 textarea 상단에 `가이드 양식` · `예시 보기` 아이콘 버튼 추가 (`lucide-react`).
+- 가이드 양식: 여행예산 · 숙소 · 구성원 · 주 이동수단 · 여행스타일 · 그 외 추가정보 라벨만 있는 빈 skeleton 을 textarea 에 삽입.
+- 예시 보기: 5개 완성된 샘플 프롬프트를 인라인 아코디언으로 표시 — 아이 동반/부모님 동반/커플/혼자/친구 여럿 각 상황. 카드 클릭 시 textarea 에 삽입.
+- 삽입 시 기존 입력이 있으면 confirm 후 replace (기존 입력 보호).
+
+### Changed
+- 요청사항 textarea placeholder 를 두 버튼으로 유도하는 문구로 교체.
+
+### Dependencies
+- `lucide-react` ^1.8.0 추가 (아이콘 2개 사용: `ListPlus`, `Lightbulb`).
+
 ## [0.1.1.0] - 2026-04-23
 
 ### Changed
