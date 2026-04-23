@@ -4,12 +4,12 @@ import { Fragment, useState } from "react";
 import {
   computeBudget,
   enumeratePoints,
-  kakaoMapSearchUrl,
   type TransitInfo,
   type TravelItem,
   type TravelPlan,
 } from "@/lib/common/services/travel";
 import { MapView, type LegsByItem, type OsrmLeg } from "./map-view";
+import { PlacePopup } from "./place-popup";
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
 
@@ -17,6 +17,7 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
   const budget = computeBudget(plan);
   const labelByItem = new Map(enumeratePoints(plan).map((p) => [p.item, p.label]));
   const [legsByItem, setLegsByItem] = useState<LegsByItem | null>(null);
+  const [mapItem, setMapItem] = useState<TravelItem | null>(null);
 
   return (
     <article className="space-y-6 rounded-xl border border-neutral-300 p-5 dark:border-neutral-700">
@@ -52,6 +53,7 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
                       item={item}
                       label={labelByItem.get(item)}
                       dayIndex={dayIdx}
+                      onShowMap={setMapItem}
                     />
                   </li>
                 </Fragment>
@@ -78,6 +80,8 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
           생성 모델: {model}
         </p>
       )}
+
+      <PlacePopup item={mapItem} onClose={() => setMapItem(null)} />
     </article>
   );
 }
@@ -127,15 +131,17 @@ function ItemCard({
   item,
   label,
   dayIndex,
+  onShowMap,
 }: {
   item: TravelItem;
   label: string | undefined;
   dayIndex: number;
+  onShowMap: (item: TravelItem) => void;
 }) {
   const addr = item.place?.address;
   const phone = item.place?.phone;
   const category = item.place?.category;
-  const kakaoUrl = item.place?.url ?? (item.place_query ? kakaoMapSearchUrl(item.place_query) : undefined);
+  const hasLocation = Boolean(item.place || item.place_query);
 
   const showCost = typeof item.cost_krw === "number" && item.cost_krw > 0;
   const hasDetail = Boolean(addr || phone || category || item.recommended_menu || showCost);
@@ -166,17 +172,21 @@ function ItemCard({
             <span className="text-neutral-500 dark:text-neutral-400"> · {item.place.name}</span>
           )}
         </span>
-        {kakaoUrl && (
-          <a
-            href={kakaoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="카카오맵에서 보기"
-            title="카카오맵에서 보기"
-            className="shrink-0 rounded border border-neutral-300 p-1 text-neutral-500 hover:text-neutral-900 dark:border-neutral-700 dark:hover:text-neutral-100"
+        {hasLocation && (
+          <button
+            type="button"
+            onClick={(e) => {
+              // <summary> 기본 toggle 동작 차단 — 상세 펼침과 별개 동작이어야 함
+              e.preventDefault();
+              e.stopPropagation();
+              onShowMap(item);
+            }}
+            aria-label="지도에서 위치 보기"
+            title="지도에서 위치 보기"
+            className="shrink-0 rounded border border-neutral-300 p-1 text-neutral-500 transition hover:text-neutral-900 dark:border-neutral-700 dark:hover:text-neutral-100"
           >
             <MapPinIcon />
-          </a>
+          </button>
         )}
         {hasDetail && (
           <span

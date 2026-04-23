@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { loadKakaoSdk, type KakaoLatLng } from "@/lib/common/kakao";
 import {
   enumeratePoints,
   type PointEntry,
@@ -11,82 +12,8 @@ import {
 export type OsrmLeg = { distanceM: number; durationS: number };
 export type LegsByItem = Map<TravelItem, OsrmLeg>;
 
-declare global {
-  interface Window {
-    // Kakao Maps 전역 — SDK 런타임 타입 (세부 타이핑은 작고 단순한 래퍼로 대체)
-    kakao?: KakaoGlobal;
-  }
-}
-
-type KakaoGlobal = {
-  maps: {
-    load: (cb: () => void) => void;
-    LatLng: new (lat: number, lng: number) => KakaoLatLng;
-    LatLngBounds: new () => KakaoLatLngBounds;
-    Map: new (container: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMap;
-    Marker: new (options: { position: KakaoLatLng; map?: KakaoMap; title?: string }) => KakaoMarker;
-    Polyline: new (options: {
-      path: KakaoLatLng[];
-      strokeWeight?: number;
-      strokeColor?: string;
-      strokeOpacity?: number;
-      strokeStyle?: string;
-      map?: KakaoMap;
-    }) => KakaoPolyline;
-    CustomOverlay: new (options: {
-      position: KakaoLatLng;
-      content: string;
-      yAnchor?: number;
-      xAnchor?: number;
-      map?: KakaoMap;
-    }) => KakaoCustomOverlay;
-  };
-};
-type KakaoLatLng = { __type: "LatLng" };
-type KakaoLatLngBounds = { extend: (ll: KakaoLatLng) => void; isEmpty: () => boolean };
-type KakaoMap = { setBounds: (b: KakaoLatLngBounds) => void; setCenter: (ll: KakaoLatLng) => void };
-type KakaoMarker = { setMap: (m: KakaoMap | null) => void };
-type KakaoPolyline = { setMap: (m: KakaoMap | null) => void };
-type KakaoCustomOverlay = { setMap: (m: KakaoMap | null) => void };
-
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
-
-function loadKakaoSdk(appKey: string): Promise<KakaoGlobal> {
-  if (typeof window === "undefined") return Promise.reject(new Error("server"));
-  if (window.kakao?.maps) return Promise.resolve(window.kakao);
-
-  const existing = document.querySelector<HTMLScriptElement>("script[data-kakao-maps-sdk]");
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => {
-        if (window.kakao?.maps) {
-          window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));
-        } else {
-          reject(new Error("kakao-not-available"));
-        }
-      }, { once: true });
-      existing.addEventListener("error", () => reject(new Error("sdk-load-failed")), { once: true });
-    });
-  }
-
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
-    s.dataset.kakaoMapsSdk = "true";
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false`;
-    s.onload = () => {
-      if (window.kakao?.maps) {
-        window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));
-      } else {
-        reject(new Error("kakao-not-available"));
-      }
-    };
-    s.onerror = () => reject(new Error("sdk-load-failed"));
-    document.head.appendChild(s);
-  });
-}
 
 type OsrmResult = {
   geometry: Array<[number, number]>;
