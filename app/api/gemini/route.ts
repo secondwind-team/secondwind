@@ -3,10 +3,8 @@ import { callLlm, type RateLimitHit } from "@/lib/common/llm";
 import {
   buildTravelPrompt,
   parseTravelPlan,
-  partyTotal,
   USER_PROMPT_MAX,
   type TravelInput,
-  type TravelParty,
 } from "@/lib/common/services/travel";
 import { enrichPlan } from "@/lib/common/services/travel-enrich";
 import { markBlocked, recordCall } from "@/lib/server/quota-store";
@@ -80,12 +78,6 @@ async function recordRateLimitHits(hits: RateLimitHit[]): Promise<void> {
   await Promise.allSettled(hits.map((h) => markBlocked(h.model, h.dim, h.retryMs)));
 }
 
-function normalizePartyCount(v: unknown): number {
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.floor(Math.min(n, 20));
-}
-
 function normalizeTravelInput(raw: unknown): TravelInput | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
@@ -94,20 +86,9 @@ function normalizeTravelInput(raw: unknown): TravelInput | null {
   const endDate = typeof r.endDate === "string" ? r.endDate : "";
   const prompt = typeof r.prompt === "string" ? r.prompt.trim().slice(0, USER_PROMPT_MAX) : "";
 
-  const partyRaw = (r.party ?? {}) as Record<string, unknown>;
-  const party: TravelParty = {
-    adults: normalizePartyCount(partyRaw.adults),
-    teens: normalizePartyCount(partyRaw.teens),
-    kids: normalizePartyCount(partyRaw.kids),
-    infants: normalizePartyCount(partyRaw.infants),
-  };
-
   if (!destination) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return null;
   if (new Date(endDate) < new Date(startDate)) return null;
-  const total = partyTotal(party);
-  if (total < 1 || total > 40) return null;
-  if (party.adults < 1 && (party.kids > 0 || party.infants > 0)) return null;
 
-  return { destination, startDate, endDate, party, prompt };
+  return { destination, startDate, endDate, prompt };
 }

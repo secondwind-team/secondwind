@@ -2,6 +2,19 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.1.0] - 2026-04-23
+
+### Changed
+- `/travel` 폼의 인원 입력 카운터 (성인/청소년/어린이/영유아) 를 제거. 인원·동행자 정보는 자유 요청사항 텍스트로 통합해 입력받음. 배경과 근거: `docs/decisions/0002-remove-party-counter.md`.
+- 자유 요청사항 입력 한도 `USER_PROMPT_MAX` 를 300 → 1000자 로 상향. 인원·숙소·이동수단 등 맥락을 자유 텍스트로 충분히 담을 수 있도록.
+- 시스템 프롬프트 보강 — 구조화된 "인원:" 줄 대신 자유 요청 텍스트에서 인원·동행자 정보를 해석하도록 명시.
+- 자유 요청사항 textarea 의 placeholder 를 인원 맥락이 포함된 예시로 교체 (`성인 2명과 6세 아이, 렌트카로, ...`).
+
+### Removed
+- `TravelInput.party`, `TravelParty` 타입, `PARTY_KEYS`, `PARTY_LABELS`, `formatParty`, `partyTotal` export 제거.
+- 백엔드 `normalizeTravelInput` 의 party 검증 로직 (`total ≥ 1`, `adults≥1 if kids>0`) 제거.
+- 프론트 `TravelForm` 의 `PartyRow` 컴포넌트·party state·`partyDetailed` 토글 제거.
+
 ## [0.1.0.0] - 2026-04-23
 
 ### Added
