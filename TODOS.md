@@ -96,6 +96,21 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 - (E) 서드파티 스크래퍼 (Apify 등) — Naver ToS 위반 리스크, 비추.
 **Trigger:** 사용자 신뢰 이슈로 불거지거나, hallucination 방어 (P1) 와 통합 설계 시 같이 결정.
 
+### 프롬프트 출력 구조 eval (골든셋)
+**Priority:** P2
+**Why:** PR #13 에서 `SYSTEM_PROMPT` 재서술 한 줄이 transit 필드 누락 회귀로 드러남 (v0.1.1.0 → v0.1.3.0 회귀). 시각적으로 드러나는 건 운 좋게 육안으로 catch 했지만, 조용한 회귀 (예: caveats 누락, `place_query` 비율 하락, budget 필드 누락) 는 eval 없이 놓치기 쉬움. Gemini 2.5 Flash Lite 가 프롬프트 구조에 특히 민감하다는 증거.
+**Design:**
+- `scripts/eval-travel.ts` — 5~10개 대표 입력 스냅샷 (당일·1박·2박·3박 × 혼자·커플·아이 동반·부모님 × 자차·대중교통·기차)
+- 각 입력당 `/api/gemini` 1회 호출 후 metric 계산:
+  - `transit_coverage`: day 당 첫 item 제외 모든 item 에 `transit` 존재 비율 (목표 100%)
+  - `rule3_violations`: 제목에 "도착/출발/체크인/조식/휴식/드라이브" 포함 item 수 (목표 0)
+  - `place_query_ratio`: `place_query` 있는 item / 전체 item (목표 ≥ 80%)
+  - `meal_completeness`: 각 day 에 점심·저녁 장소 존재 여부 (목표 100%)
+- CI 미포함 (API cost) — 프롬프트 수정 시 로컬 수동 실행
+- 결과를 `docs/eval/snapshots/` 에 커밋해 diff 로 회귀 추적
+**Trigger:** 같은 유형의 회귀가 한 번 더 발생 → P1 승격. 또는 Gemini 모델 업데이트 후 검증용.
+**관련:** PR #13, `docs/decisions/0001-v0-stack-and-accepted-risks.md` (v0 에서 의식적으로 skip 한 exit criteria 중 하나 재검토).
+
 ### LLM quota 모니터링 + 사용자 전달
 **Priority:** P2
 **Why:** 현재 429 시 "1~2분 뒤 다시 시도" 문구만. 언제 풀리는지 · 일일 quota 인지 분당 quota 인지 구분 없음. Google AI Studio Dashboard 링크 or 간단한 사용량 estimation 노출 고려.
