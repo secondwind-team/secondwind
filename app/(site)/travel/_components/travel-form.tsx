@@ -7,6 +7,7 @@ import {
   type TravelPlan,
 } from "@/lib/common/services/travel";
 import { PlanCard } from "./plan-card";
+import { PromptToolbar } from "./prompt-toolbar";
 import { QuotaDebug, type LastCall } from "./quota-debug";
 
 type FormState =
@@ -113,19 +114,21 @@ export function TravelForm() {
           </Field>
         </div>
 
-        <Field label="요청사항">
+        <div className="space-y-1.5">
+          <span className="block text-xs font-medium text-neutral-500">요청사항</span>
+          <PromptToolbar value={prompt} onChange={setPrompt} maxLength={USER_PROMPT_MAX} />
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value.slice(0, USER_PROMPT_MAX))}
             maxLength={USER_PROMPT_MAX}
             rows={6}
-            placeholder="인원·이동수단·숙소·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 예: 성인 2명과 6세 아이, 렌트카로, 첫날 저녁은 흑돼지, 아이 낮잠 시간 (13~15시) 피해서 계획"
+            placeholder="인원·이동수단·숙소·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 빈 상자가 막막하면 위의 '가이드 양식' 또는 '예시 보기' 를 눌러보세요."
             className="w-full resize-y rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
           />
           <div className="text-right text-xs text-neutral-400">
             {prompt.length} / {USER_PROMPT_MAX}
           </div>
-        </Field>
+        </div>
 
         <button
           type="submit"
