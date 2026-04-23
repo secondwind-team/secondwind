@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   }
 
   const { system, user } = buildTravelPrompt(input);
-  const result = await callLlm({ system, user, maxTokens: 4096 });
+  const result = await callLlm({ system, user, maxTokens: 6144 });
 
   // KV 에 rate-limit 소진 기록 (fire-and-forget).
   if ("rateLimitHits" in result && result.rateLimitHits) {

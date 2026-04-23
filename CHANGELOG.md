@@ -2,6 +2,16 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.5.0] - 2026-04-24
+
+### Changed
+- `/travel` 결과 상단의 한 줄 `summary_line` 을 제거하고, **2~4문장짜리 `rationale` 필드**로 교체. 일정 설계 근거(왜 이 구성인지·사용자 요청 반영 방식) + 달성 못한 요청의 사유(특히 예산 초과 시 "요청 X만원 · 예상 Y만원 (Z만원 초과)" 숫자 명시 + 대안 제시) 를 담음. 이전 `summary_line` ("맞춤형 일정입니다" 류 boilerplate) 이 정보량이 없다는 피드백 반영.
+- `TravelPlan.summary_line: string` → `TravelPlan.rationale: string` (schema 변경, 파서·UI·시스템 프롬프트 동기 수정).
+- `/api/gemini` 의 `maxTokens` 4096 → 6144 상향. rationale 추가로 응답 토큰 여유 확보 (특히 3박 이상 + 긴 gap 설명 시 truncation 방지).
+
+### UI
+- `PlanCard` 헤더 본문 스타일: `text-base font-medium` → `text-sm leading-relaxed` (2~4문장 가독성), `whitespace-pre-wrap` 추가로 LLM 이 문단 구분 시 정상 렌더.
+
 ## [0.1.4.0] - 2026-04-24
 
 ### Changed
