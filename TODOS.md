@@ -83,6 +83,19 @@ secondwind 의 열린 작업 · 리스크 · 후속 아이템.
 - 2-phase LLM: candidates 후보 뽑고 Naver 검증 후 LLM 이 pick.
 - Pre-fetch seed POI pool 로 선택지 제한.
 
+### 메뉴 · 가격 · 영업시간 등 세부 정보 검증
+**Priority:** P2
+**Why:** 현재 추천 메뉴·항목별 비용·영업시간은 Gemini 추정만. UI 엔 점선 밑줄 + "정보 출처" 패널로 "AI 추정" 을 명시해뒀지만 (PR #9), 가능하면 실측으로 덮어쓰고 싶은 영역.
+**제약 — Naver 지역검색 API 는 여기 정보 제공 안 함:**
+Naver Open API 공식 지역검색은 스키마상 `title / category / phone / address / coordinates / link` 만 반환. 메뉴 · 가격 · 영업시간 · 리뷰는 Naver Place 웹에만 보이고 API 미노출.
+**대안 경로 (검토만, 아직 선택 안 함):**
+- (A) Naver **블로그 검색 API** + LLM 추출 — 상호명으로 블로그 top N 가져와 본문에서 메뉴·가격 추출. 공식 · 합법. 단점: 장소당 호출 2배 (blog search + LLM 추출) → 쿼터 압박.
+- (B) Gemini **Google Search grounding** (`tools: [{ google_search: {} }]`) — 기존 단일 호출에 내장 검색. 코드 변경 최소, 응답 시간↑.
+- (C) Google **Places Details API** — 유료. `price_level` / `opening_hours` 는 얻지만 메뉴 텍스트는 거의 미제공 → 한계.
+- (D) Kakao Place API — 메뉴·영업시간 양호, **비즈 앱 전환 필수** (현재 개인 앱이라 블록 — Kakao 의존성 TODO 와 연결).
+- (E) 서드파티 스크래퍼 (Apify 등) — Naver ToS 위반 리스크, 비추.
+**Trigger:** 사용자 신뢰 이슈로 불거지거나, hallucination 방어 (P1) 와 통합 설계 시 같이 결정.
+
 ### LLM quota 모니터링 + 사용자 전달
 **Priority:** P2
 **Why:** 현재 429 시 "1~2분 뒤 다시 시도" 문구만. 언제 풀리는지 · 일일 quota 인지 분당 quota 인지 구분 없음. Google AI Studio Dashboard 링크 or 간단한 사용량 estimation 노출 고려.
