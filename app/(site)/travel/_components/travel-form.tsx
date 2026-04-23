@@ -11,6 +11,7 @@ import {
   type TravelPlan,
 } from "@/lib/common/services/travel";
 import { PlanCard } from "./plan-card";
+import { QuotaDebug, type LastCall } from "./quota-debug";
 
 type FormState =
   | { kind: "idle" }
@@ -32,6 +33,7 @@ export function TravelForm() {
   const [state, setState] = useState<FormState>({ kind: "idle" });
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [lastCall, setLastCall] = useState<LastCall | undefined>(undefined);
 
   useEffect(() => {
     if (cooldownUntil <= Date.now()) return;
@@ -75,11 +77,10 @@ export function TravelForm() {
         startCooldown();
         return;
       }
-      setState({
-        kind: "ok",
-        plan: json.plan as TravelPlan,
-        model: typeof json.model === "string" ? json.model : undefined,
-      });
+      const model = typeof json.model === "string" ? json.model : undefined;
+      const usage = extractUsage(json.usage);
+      if (model && usage) setLastCall({ model, ...usage });
+      setState({ kind: "ok", plan: json.plan as TravelPlan, model });
     } catch (err) {
       setState({
         kind: "error",
@@ -192,8 +193,21 @@ export function TravelForm() {
       )}
 
       {state.kind === "ok" && <PlanCard plan={state.plan} model={state.model} />}
+
+      <QuotaDebug lastCall={lastCall} />
     </div>
   );
+}
+
+function extractUsage(raw: unknown): Omit<LastCall, "model"> | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const prompt = typeof r.prompt === "number" ? r.prompt : undefined;
+  const output = typeof r.output === "number" ? r.output : undefined;
+  const total = typeof r.total === "number" ? r.total : undefined;
+  if (prompt === undefined || output === undefined || total === undefined) return undefined;
+  const thoughts = typeof r.thoughts === "number" ? r.thoughts : undefined;
+  return thoughts !== undefined ? { prompt, output, thoughts, total } : { prompt, output, total };
 }
 
 function PartyRow({
