@@ -2,12 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  PARTY_LABELS,
   USER_PROMPT_MAX,
-  partyTotal,
-  type PartyKey,
   type TravelInput,
-  type TravelParty,
   type TravelPlan,
 } from "@/lib/common/services/travel";
 import { PlanCard } from "./plan-card";
@@ -19,16 +15,12 @@ type FormState =
   | { kind: "ok"; plan: TravelPlan; model?: string }
   | { kind: "error"; message: string };
 
-const DEFAULT_PARTY: TravelParty = { adults: 2, teens: 0, kids: 0, infants: 0 };
-const EXTRA_KEYS: PartyKey[] = ["teens", "kids", "infants"];
 const ERROR_COOLDOWN_MS = 10_000;
 
 export function TravelForm() {
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [party, setParty] = useState<TravelParty>(DEFAULT_PARTY);
-  const [partyDetailed, setPartyDetailed] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [state, setState] = useState<FormState>({ kind: "idle" });
   const [cooldownUntil, setCooldownUntil] = useState(0);
@@ -48,20 +40,10 @@ export function TravelForm() {
   const cooldownRemainingSec = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
   const isCoolingDown = cooldownRemainingSec > 0;
 
-  const total = partyTotal(party);
-
-  function setPartyCount(k: PartyKey, n: number) {
-    setParty((p) => ({ ...p, [k]: Math.max(0, Math.min(20, n)) }));
-  }
-
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (isCoolingDown) return;
-    if (total < 1) {
-      setState({ kind: "error", message: "인원을 최소 1명 이상 입력해주세요." });
-      return;
-    }
-    const input: TravelInput = { destination, startDate, endDate, party, prompt };
+    const input: TravelInput = { destination, startDate, endDate, prompt };
     setState({ kind: "loading" });
 
     try {
@@ -131,41 +113,13 @@ export function TravelForm() {
           </Field>
         </div>
 
-        <Field label={`인원 (총 ${total}명)`}>
-          <div className="space-y-2">
-            <PartyRow
-              k="adults"
-              label={PARTY_LABELS.adults}
-              value={party.adults}
-              onChange={(n) => setPartyCount("adults", n)}
-            />
-            {partyDetailed &&
-              EXTRA_KEYS.map((k) => (
-                <PartyRow
-                  key={k}
-                  k={k}
-                  label={PARTY_LABELS[k]}
-                  value={party[k]}
-                  onChange={(n) => setPartyCount(k, n)}
-                />
-              ))}
-            <button
-              type="button"
-              onClick={() => setPartyDetailed((v) => !v)}
-              className="text-xs text-neutral-500 underline decoration-dotted underline-offset-4 hover:text-neutral-900 dark:hover:text-neutral-100"
-            >
-              {partyDetailed ? "− 단순화" : "+ 청소년·어린이·영유아 추가"}
-            </button>
-          </div>
-        </Field>
-
-        <Field label="요청사항 (선택)">
+        <Field label="요청사항">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value.slice(0, USER_PROMPT_MAX))}
             maxLength={USER_PROMPT_MAX}
-            rows={4}
-            placeholder="원하는 스타일·제약·꼭 하고 싶은 것을 자유롭게 써주세요. 예: 아이 둘과 함께, 디저트 카페 많이, 차 없이 대중교통만"
+            rows={6}
+            placeholder="인원·이동수단·숙소·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 예: 성인 2명과 6세 아이, 렌트카로, 첫날 저녁은 흑돼지, 아이 낮잠 시간 (13~15시) 피해서 계획"
             className="w-full resize-y rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
           />
           <div className="text-right text-xs text-neutral-400">
@@ -208,54 +162,6 @@ function extractUsage(raw: unknown): Omit<LastCall, "model"> | undefined {
   if (prompt === undefined || output === undefined || total === undefined) return undefined;
   const thoughts = typeof r.thoughts === "number" ? r.thoughts : undefined;
   return thoughts !== undefined ? { prompt, output, thoughts, total } : { prompt, output, total };
-}
-
-function PartyRow({
-  k,
-  label,
-  value,
-  onChange,
-}: {
-  k: PartyKey;
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-16 text-sm text-neutral-600 dark:text-neutral-300">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          aria-label={`${label} 감소`}
-          onClick={() => onChange(value - 1)}
-          disabled={value <= 0}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-neutral-300 text-sm disabled:opacity-40 dark:border-neutral-700"
-        >
-          −
-        </button>
-        <input
-          type="number"
-          min={0}
-          max={20}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          aria-label={`${label} 수`}
-          className="h-9 w-14 rounded-md border border-neutral-300 bg-white px-2 text-center text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
-          data-party-key={k}
-        />
-        <button
-          type="button"
-          aria-label={`${label} 증가`}
-          onClick={() => onChange(value + 1)}
-          disabled={value >= 20}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-neutral-300 text-sm disabled:opacity-40 dark:border-neutral-700"
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function friendlyErrorMessage(httpStatus: number, json: Record<string, unknown>): string {
