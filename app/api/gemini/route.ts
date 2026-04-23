@@ -58,7 +58,12 @@ export async function POST(req: Request) {
 
   await enrichPlan(plan, input.destination);
 
-  return NextResponse.json({ status: "ok", plan, promptVersion: result.promptVersion });
+  return NextResponse.json({
+    status: "ok",
+    plan,
+    promptVersion: result.promptVersion,
+    model: result.model,
+  });
 }
 
 function normalizePartyCount(v: unknown): number {

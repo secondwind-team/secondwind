@@ -11,7 +11,7 @@ import { MapView } from "./map-view";
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
 
-export function PlanCard({ plan }: { plan: TravelPlan }) {
+export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) {
   const budget = computeBudget(plan);
   const labelByItem = new Map(enumeratePoints(plan).map((p) => [p.item, p.label]));
 
@@ -54,6 +54,12 @@ export function PlanCard({ plan }: { plan: TravelPlan }) {
             <li key={i}>· {c}</li>
           ))}
         </ul>
+      )}
+
+      {model && (
+        <p className="text-right text-[10px] text-neutral-400 dark:text-neutral-500">
+          생성 모델: {model}
+        </p>
       )}
     </article>
   );

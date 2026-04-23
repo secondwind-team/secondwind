@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   PARTY_LABELS,
   USER_PROMPT_MAX,
@@ -15,11 +15,12 @@ import { PlanCard } from "./plan-card";
 type FormState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ok"; plan: TravelPlan }
+  | { kind: "ok"; plan: TravelPlan; model?: string }
   | { kind: "error"; message: string };
 
 const DEFAULT_PARTY: TravelParty = { adults: 2, teens: 0, kids: 0, infants: 0 };
 const EXTRA_KEYS: PartyKey[] = ["teens", "kids", "infants"];
+const ERROR_COOLDOWN_MS = 10_000;
 
 export function TravelForm() {
   const [destination, setDestination] = useState("");
@@ -29,6 +30,21 @@ export function TravelForm() {
   const [partyDetailed, setPartyDetailed] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [state, setState] = useState<FormState>({ kind: "idle" });
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (cooldownUntil <= Date.now()) return;
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= cooldownUntil) clearInterval(id);
+    }, 500);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
+
+  const cooldownRemainingSec = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
+  const isCoolingDown = cooldownRemainingSec > 0;
 
   const total = partyTotal(party);
 
@@ -38,6 +54,7 @@ export function TravelForm() {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isCoolingDown) return;
     if (total < 1) {
       setState({ kind: "error", message: "인원을 최소 1명 이상 입력해주세요." });
       return;
@@ -55,15 +72,27 @@ export function TravelForm() {
 
       if (!res.ok || json.status !== "ok") {
         setState({ kind: "error", message: friendlyErrorMessage(res.status, json) });
+        startCooldown();
         return;
       }
-      setState({ kind: "ok", plan: json.plan as TravelPlan });
+      setState({
+        kind: "ok",
+        plan: json.plan as TravelPlan,
+        model: typeof json.model === "string" ? json.model : undefined,
+      });
     } catch (err) {
       setState({
         kind: "error",
         message: `네트워크 오류: ${err instanceof Error ? err.message : "unknown"}`,
       });
+      startCooldown();
     }
+  }
+
+  function startCooldown() {
+    const until = Date.now() + ERROR_COOLDOWN_MS;
+    setCooldownUntil(until);
+    setNow(Date.now());
   }
 
   return (
@@ -145,10 +174,14 @@ export function TravelForm() {
 
         <button
           type="submit"
-          disabled={state.kind === "loading"}
+          disabled={state.kind === "loading" || isCoolingDown}
           className="w-full rounded-md bg-neutral-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
         >
-          {state.kind === "loading" ? "계획 맞추는 중…" : "계획 만들기"}
+          {state.kind === "loading"
+            ? "계획 맞추는 중…"
+            : isCoolingDown
+              ? `잠시만요 (${cooldownRemainingSec}초 뒤 다시 시도)`
+              : "계획 만들기"}
         </button>
       </form>
 
@@ -158,7 +191,7 @@ export function TravelForm() {
         </p>
       )}
 
-      {state.kind === "ok" && <PlanCard plan={state.plan} />}
+      {state.kind === "ok" && <PlanCard plan={state.plan} model={state.model} />}
     </div>
   );
 }
