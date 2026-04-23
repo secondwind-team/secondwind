@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { callLlm } from "@/lib/common/llm";
+import { callLlm, type RateLimitHit } from "@/lib/common/llm";
 import {
   buildTravelPrompt,
   parseTravelPlan,
@@ -9,6 +9,7 @@ import {
   type TravelParty,
 } from "@/lib/common/services/travel";
 import { enrichPlan } from "@/lib/common/services/travel-enrich";
+import { markBlocked, recordCall } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,11 @@ export async function POST(req: Request) {
   const { system, user } = buildTravelPrompt(input);
   const result = await callLlm({ system, user, maxTokens: 4096 });
 
+  // KV 에 rate-limit 소진 기록 (fire-and-forget).
+  if ("rateLimitHits" in result && result.rateLimitHits) {
+    void recordRateLimitHits(result.rateLimitHits);
+  }
+
   if (result.status === "not-configured") {
     return NextResponse.json(
       { status: "not-configured", reason: "GEMINI_API_KEY 가 설정되지 않았습니다." },
@@ -58,12 +64,20 @@ export async function POST(req: Request) {
 
   await enrichPlan(plan, input.destination);
 
+  // 성공한 호출의 토큰 소비를 KV 에 기록 (fire-and-forget).
+  void recordCall(result.model, result.usage.total).catch(() => {});
+
   return NextResponse.json({
     status: "ok",
     plan,
     promptVersion: result.promptVersion,
     model: result.model,
+    usage: result.usage,
   });
+}
+
+async function recordRateLimitHits(hits: RateLimitHit[]): Promise<void> {
+  await Promise.allSettled(hits.map((h) => markBlocked(h.model, h.dim, h.retryMs)));
 }
 
 function normalizePartyCount(v: unknown): number {
