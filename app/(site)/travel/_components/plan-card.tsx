@@ -150,7 +150,12 @@ function ItemCard({
             </span>
           )}
         </div>
-        <span className="flex-1 leading-korean">{item.text}</span>
+        <span className="flex-1 leading-korean">
+          {item.text}
+          {item.place?.name && !item.text.includes(item.place.name) && (
+            <span className="text-neutral-500 dark:text-neutral-400"> · {item.place.name}</span>
+          )}
+        </span>
         {kakaoUrl && (
           <a
             href={kakaoUrl}
