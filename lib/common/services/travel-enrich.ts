@@ -1,5 +1,5 @@
 import { env, assertServerEnv } from "@/lib/common/env";
-import type { PlaceInfo, TravelPlan } from "./travel";
+import { kakaoMapSearchUrl, type PlaceInfo, type TravelPlan } from "./travel";
 
 const NAVER_URL = "https://openapi.naver.com/v1/search/local.json";
 const PER_CALL_TIMEOUT_MS = 5_000;
@@ -18,10 +18,6 @@ type NaverLocalItem = {
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, "");
-}
-
-function naverMapSearchUrl(query: string): string {
-  return `https://map.naver.com/p/search/${encodeURIComponent(query)}`;
 }
 
 const MIN_SCORE = 0.25;
@@ -133,7 +129,7 @@ async function searchPlace(query: string, destHint?: string): Promise<PlaceInfo 
     info.lng = lng;
   }
 
-  info.url = naverMapSearchUrl(info.name ?? query);
+  info.url = kakaoMapSearchUrl(info.name ?? query);
   return info;
 }
 

@@ -105,29 +105,31 @@ function ItemCard({
   return (
     <details className="group rounded-lg border border-neutral-200 open:bg-neutral-50 dark:border-neutral-800 dark:open:bg-neutral-900/50">
       <summary className="flex cursor-pointer list-none items-start gap-3 px-3 py-2.5 text-sm">
-        {item.time ? (
-          <span className="w-12 shrink-0 pt-0.5 font-mono text-xs text-neutral-500">{item.time}</span>
-        ) : (
-          <span className="w-12 shrink-0" aria-hidden />
-        )}
-        {label && (
-          <span
-            aria-label={`지도 위치 ${label}`}
-            style={{ background: pinColor }}
-            className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
-          >
-            {label}
-          </span>
-        )}
+        <div className="flex w-12 shrink-0 flex-col items-start gap-1 pt-0.5">
+          {item.time && (
+            <span className="font-mono text-xs text-neutral-500">{item.time}</span>
+          )}
+          {label && (
+            <span
+              aria-label={`지도 위치 ${label}`}
+              style={{ background: pinColor }}
+              className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
+            >
+              {label}
+            </span>
+          )}
+        </div>
         <span className="flex-1 leading-korean">{item.text}</span>
         {kakaoUrl && (
           <a
             href={kakaoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-900 dark:border-neutral-700 dark:hover:text-neutral-100"
+            aria-label="카카오맵에서 보기"
+            title="카카오맵에서 보기"
+            className="shrink-0 rounded border border-neutral-300 p-1 text-neutral-500 hover:text-neutral-900 dark:border-neutral-700 dark:hover:text-neutral-100"
           >
-            지도
+            <MapPinIcon />
           </a>
         )}
         {hasDetail && (
@@ -276,5 +278,23 @@ function BudgetRow({ left, amount }: { left: string; amount: number }) {
       <span className="flex-1 truncate">{left}</span>
       <span className="shrink-0 tabular-nums">₩{amount.toLocaleString("ko-KR")}</span>
     </li>
+  );
+}
+
+function MapPinIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden
+      className="h-3.5 w-3.5"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.05 4.05a7 7 0 1 1 9.9 9.9L10 18.9l-4.95-4.95a7 7 0 0 1 0-9.9zM10 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }

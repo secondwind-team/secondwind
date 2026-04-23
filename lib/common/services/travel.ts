@@ -146,8 +146,10 @@ export function parseTravelPlan(raw: string): TravelPlan | null {
   return parsed;
 }
 
+// `/link/` 포맷은 모바일에서 카카오맵 앱 deep link 가 걸려 네이버/카카오 앱이 섞여 뜨는 원인이 됨.
+// `?q=` 는 브라우저에서 항상 카카오맵 웹이 열림.
 export function kakaoMapSearchUrl(query: string): string {
-  return `https://map.kakao.com/link/search/${encodeURIComponent(query)}`;
+  return `https://map.kakao.com/?q=${encodeURIComponent(query)}`;
 }
 
 export type PointEntry = {
