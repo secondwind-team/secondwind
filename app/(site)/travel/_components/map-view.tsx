@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { enumeratePoints, type PointEntry, type TravelPlan } from "@/lib/common/services/travel";
+import {
+  enumeratePoints,
+  type PointEntry,
+  type TravelItem,
+  type TravelPlan,
+} from "@/lib/common/services/travel";
+
+export type OsrmLeg = { distanceM: number; durationS: number };
+export type LegsByItem = Map<TravelItem, OsrmLeg>;
 
 declare global {
   interface Window {
@@ -80,12 +88,17 @@ function loadKakaoSdk(appKey: string): Promise<KakaoGlobal> {
   });
 }
 
+type OsrmResult = {
+  geometry: Array<[number, number]>;
+  legs: OsrmLeg[]; // 길이 = points.length - 1, legs[j] = points[j]→points[j+1]
+};
+
 // OSRM public demo 로 day 내 구간 실제 도로 경로 받기.
-// 실패 시 undefined 반환 — 호출자가 직선 fallback 처리.
+// 실패 시 undefined — 호출자가 직선 fallback 처리.
 async function fetchRouteGeometry(
   points: PointEntry[],
   signal: AbortSignal,
-): Promise<Array<[number, number]> | undefined> {
+): Promise<OsrmResult | undefined> {
   if (points.length < 2) return undefined;
   const coordStr = points.map((p) => `${p.lng},${p.lat}`).join(";");
   const url = `${OSRM_URL}/${coordStr}?overview=full&geometries=geojson`;
@@ -93,17 +106,31 @@ async function fetchRouteGeometry(
     const res = await fetch(url, { signal });
     if (!res.ok) return undefined;
     const data = (await res.json()) as {
-      routes?: Array<{ geometry?: { coordinates?: Array<[number, number]> } }>;
+      routes?: Array<{
+        geometry?: { coordinates?: Array<[number, number]> };
+        legs?: Array<{ distance?: number; duration?: number }>;
+      }>;
     };
-    const geo = data.routes?.[0]?.geometry?.coordinates;
+    const route = data.routes?.[0];
+    const geo = route?.geometry?.coordinates;
     if (!Array.isArray(geo) || geo.length === 0) return undefined;
-    return geo;
+    const legs: OsrmLeg[] = (route?.legs ?? []).map((l) => ({
+      distanceM: typeof l.distance === "number" ? l.distance : 0,
+      durationS: typeof l.duration === "number" ? l.duration : 0,
+    }));
+    return { geometry: geo, legs };
   } catch {
     return undefined;
   }
 }
 
-export function MapView({ plan }: { plan: TravelPlan }) {
+export function MapView({
+  plan,
+  onLegsLoaded,
+}: {
+  plan: TravelPlan;
+  onLegsLoaded?: (legs: LegsByItem) => void;
+}) {
   const appKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? "";
   const points = enumeratePoints(plan);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -157,23 +184,35 @@ export function MapView({ plan }: { plan: TravelPlan }) {
 
         if (cancelled) return;
 
+        const legsByItem: LegsByItem = new Map();
+
         dayEntries.forEach(([dayIdx, path], i) => {
           if (path.length < 2) return;
-          const routeGeo = routeResults[i];
-          const latLngs: KakaoLatLng[] = routeGeo
-            ? routeGeo.map(([lng, lat]) => new kakao.maps.LatLng(lat, lng))
+          const result = routeResults[i];
+          const latLngs: KakaoLatLng[] = result
+            ? result.geometry.map(([lng, lat]) => new kakao.maps.LatLng(lat, lng))
             : path.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
-          if (routeGeo) hadRoad++;
-          else hadStraight++;
+          if (result) {
+            hadRoad++;
+            // legs[j] = path[j] → path[j+1] 구간 — 도착 item 에 귀속
+            result.legs.forEach((leg, j) => {
+              const arrival = path[j + 1];
+              if (arrival) legsByItem.set(arrival.item, leg);
+            });
+          } else {
+            hadStraight++;
+          }
           new kakao.maps.Polyline({
             path: latLngs,
             strokeWeight: 3,
             strokeColor: DAY_COLORS[dayIdx % DAY_COLORS.length] ?? "#2563eb",
             strokeOpacity: 0.7,
-            strokeStyle: routeGeo ? "solid" : "shortdash",
+            strokeStyle: result ? "solid" : "shortdash",
             map,
           });
         });
+
+        if (onLegsLoaded && legsByItem.size > 0) onLegsLoaded(legsByItem);
 
         if (hadRoad > 0 && hadStraight === 0) setRouteMode("road");
         else if (hadRoad === 0 && hadStraight > 0) setRouteMode("straight");

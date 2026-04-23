@@ -1,4 +1,6 @@
-import { Fragment } from "react";
+"use client";
+
+import { Fragment, useState } from "react";
 import {
   computeBudget,
   enumeratePoints,
@@ -7,13 +9,14 @@ import {
   type TravelItem,
   type TravelPlan,
 } from "@/lib/common/services/travel";
-import { MapView } from "./map-view";
+import { MapView, type LegsByItem, type OsrmLeg } from "./map-view";
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
 
 export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) {
   const budget = computeBudget(plan);
   const labelByItem = new Map(enumeratePoints(plan).map((p) => [p.item, p.label]));
+  const [legsByItem, setLegsByItem] = useState<LegsByItem | null>(null);
 
   return (
     <article className="space-y-6 rounded-xl border border-neutral-300 p-5 dark:border-neutral-700">
@@ -22,7 +25,7 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
         <p className="text-base font-medium leading-korean">{plan.summary_line}</p>
       </header>
 
-      <MapView plan={plan} />
+      <MapView plan={plan} onLegsLoaded={setLegsByItem} />
 
       <ol className="space-y-6">
         {plan.days.map((day, dayIdx) => (
@@ -31,7 +34,9 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
             <ol className="space-y-1.5">
               {day.items.map((item, j) => (
                 <Fragment key={j}>
-                  {j > 0 && item.transit && <TransitRow transit={item.transit} />}
+                  {j > 0 && item.transit && (
+                    <TransitRow transit={item.transit} osrmLeg={legsByItem?.get(item)} />
+                  )}
                   <li>
                     <ItemCard
                       item={item}
@@ -56,6 +61,8 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
         </ul>
       )}
 
+      <SourcesLegend />
+
       {model && (
         <p className="text-right text-[10px] text-neutral-400 dark:text-neutral-500">
           생성 모델: {model}
@@ -65,8 +72,16 @@ export function PlanCard({ plan, model }: { plan: TravelPlan; model?: string }) 
   );
 }
 
-function TransitRow({ transit }: { transit: TransitInfo }) {
+// mode 에 "차량"·"택시"·"자동차"·"렌터" 중 하나라도 포함되면 OSRM driving 결과로 덮어쓰기 가능.
+function isCarMode(mode: string): boolean {
+  return /차량|택시|자동차|렌터/.test(mode);
+}
+
+function TransitRow({ transit, osrmLeg }: { transit: TransitInfo; osrmLeg?: OsrmLeg }) {
+  const useOsrm = osrmLeg != null && isCarMode(transit.mode);
+  const durationMin = useOsrm ? Math.max(1, Math.round(osrmLeg!.durationS / 60)) : transit.duration_min;
   const hasCost = typeof transit.cost_krw === "number" && transit.cost_krw > 0;
+
   return (
     <li
       aria-label="이동"
@@ -74,9 +89,25 @@ function TransitRow({ transit }: { transit: TransitInfo }) {
     >
       <span aria-hidden className="block h-3 w-px bg-neutral-300 dark:bg-neutral-700" />
       <span>
-        {transit.mode} {transit.duration_min}분
-        {hasCost && ` · ₩${(transit.cost_krw ?? 0).toLocaleString("ko-KR")}`}
-        {transit.note && ` · ${transit.note}`}
+        <Estimated>{transit.mode}</Estimated>{" "}
+        {useOsrm ? (
+          <span>{durationMin}분</span>
+        ) : (
+          <Estimated>{durationMin}분</Estimated>
+        )}
+        {useOsrm && ` · ${(osrmLeg!.distanceM / 1000).toFixed(1)}km`}
+        {hasCost && (
+          <>
+            {" · "}
+            <Estimated>₩{(transit.cost_krw ?? 0).toLocaleString("ko-KR")}</Estimated>
+          </>
+        )}
+        {transit.note && (
+          <>
+            {" · "}
+            <Estimated>{transit.note}</Estimated>
+          </>
+        )}
       </span>
     </li>
   );
@@ -151,7 +182,7 @@ function ItemCard({
           )}
           {phone && (
             <Row label="전화">
-              <a href={`tel:${phone}`} className="underline decoration-dotted">
+              <a href={`tel:${phone}`} className="underline underline-offset-2">
                 {phone}
               </a>
             </Row>
@@ -163,15 +194,12 @@ function ItemCard({
           )}
           {item.recommended_menu && (
             <Row label="추천 메뉴">
-              <span>
-                {item.recommended_menu}
-                <span className="ml-1 text-neutral-400">(제안, 확인 필요)</span>
-              </span>
+              <Estimated>{item.recommended_menu}</Estimated>
             </Row>
           )}
           {showCost && (
             <Row label={costLabel}>
-              <span>₩{(item.cost_krw ?? 0).toLocaleString("ko-KR")}</span>
+              <Estimated>₩{(item.cost_krw ?? 0).toLocaleString("ko-KR")}</Estimated>
             </Row>
           )}
         </dl>
@@ -278,6 +306,50 @@ function BudgetRow({ left, amount }: { left: string; amount: number }) {
       <span className="flex-1 truncate">{left}</span>
       <span className="shrink-0 tabular-nums">₩{amount.toLocaleString("ko-KR")}</span>
     </li>
+  );
+}
+
+// AI 추정값 마킹. 점선 밑줄 + 옅은 색 + hover tooltip.
+// 전화번호 링크의 솔리드 underline 과 시각적으로 구분.
+function Estimated({
+  children,
+  hint = "AI 추정 — 실제와 다를 수 있어요",
+}: {
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <span
+      title={hint}
+      className="underline decoration-dotted decoration-neutral-400 underline-offset-2 text-neutral-500 dark:text-neutral-400"
+    >
+      {children}
+    </span>
+  );
+}
+
+function SourcesLegend() {
+  return (
+    <details className="text-[11px] text-neutral-500 dark:text-neutral-400">
+      <summary className="cursor-pointer select-none underline decoration-dotted underline-offset-4">
+        정보 출처 · 정확도
+      </summary>
+      <div className="mt-2 space-y-1.5 rounded-md bg-neutral-50 p-3 dark:bg-neutral-900/50">
+        <p>
+          <span className="underline decoration-dotted decoration-neutral-400 underline-offset-2">
+            점선 밑줄
+          </span>{" "}
+          이 있는 값은 AI 가 추정한 값이에요. 실제와 다를 수 있으니 참고용으로만 보세요.
+        </p>
+        <ul className="space-y-0.5">
+          <li>· 주소·전화·분류: Naver 지역검색 검증</li>
+          <li>· 이동 거리 (자동차): OSRM 계산</li>
+          <li>· 이동 시간 (자동차): OSRM 계산 (교통상황 미반영)</li>
+          <li>· 이동 시간 (지하철·버스·도보): AI 추정</li>
+          <li>· 이동 수단·비용·추천 메뉴·영업 정보: AI 추정</li>
+        </ul>
+      </div>
+    </details>
   );
 }
 

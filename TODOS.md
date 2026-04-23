@@ -57,27 +57,15 @@ secondwind 의 열린 작업 · 리스크 · 후속 아이템.
 **Why:** OSRM public demo 는 ToS 상 heavy use 금지. Rate limit 맞으면 지도 경로가 직선으로 fallback 돼 UX 저하.
 **Options:** 자체 OSRM 인스턴스, Kakao Mobility (비즈 전환 필요), Mapbox Directions.
 
-### 이동수단별 경로 렌더링 분기
+### 이동수단별 경로 렌더링 분기 (polyline)
 **Priority:** P2
-**Why:** 현재 지도 polyline 은 Gemini 가 알려준 mode 와 무관하게 **항상 OSRM driving (자동차)** 로만 그려짐. 플랜이 "지하철 15분" 이어도 도로 위에 선이 그어져 UX 불일치.
+**Why:** 현재 OSRM `/driving` 고정이라 지하철·도보·버스 등 mode 와 무관하게 자동차 도로 위에 선이 그어짐. 거리·시간 덮어쓰기 (PR #9) 는 이미 mode 감지로 car-only 로 제한 돼 있지만, 지도 polyline 은 여전히 driving 경로.
 **Design:**
-- `transit.mode` 를 읽어 구간별 분기
-  - `차량` / `택시` → OSRM `/route/v1/driving`
-  - `도보` → OSRM `/route/v1/walking` (public demo 서버는 profile 지원 상이, 확인 필요)
-  - `자전거` → OSRM `/route/v1/cycling` (동일)
-  - `지하철` / `버스` → OSRM 불가 (도로망 그래프 기반). **직선 점선 + "대중교통 경로 미지원" 주석** 으로 fallback, 또는 Kakao Mobility 대중교통 API (비즈 전환 필요) 도입
-  - `비행기` → 직선 (항공 경로)
+- `차량`/`택시` → `/driving` 유지
+- `도보` → `/walking`, `자전거` → `/cycling` (public demo 지원 서버 확인 필요)
+- `지하철`/`버스` → OSRM 불가 (도로망 그래프 기반). 직선 점선 + "대중교통 경로 미지원" 주석, 또는 Kakao Mobility 대중교통 API 도입 (비즈 전환 필요)
+- `비행기` → 직선 (항공 경로)
 - `map-view.tsx:fetchRouteGeometry` 가 mode 인자를 받아 URL 의 profile 세그먼트 분기
-
-### 이동경로 거리 표시 (OSRM)
-**Priority:** P2
-**Why:** OSRM 응답엔 이미 `routes[0].legs[i].distance` (m) / `duration` (s) 가 포함되는데 현재는 geometry 만 꺼내고 버림. 카드 transit 행에 "차량 25분 · **12.3km**" 처럼 거리 붙이면 정보성↑.
-**Design:**
-- 전략은 "보완" — LLM 의 duration_min 유지 (교통상황 반영 불가 이유), **거리만 OSRM 에서 추가**.
-- `fetchRouteGeometry` 를 확장해 `{ geometry, legs: Array<{ distanceM, durationS }> }` 반환.
-- 클라이언트에서 leg[i] 를 해당 구간의 `transit` 에 주입하거나, 별도 prop 으로 PlanCard 에 전달.
-- 대중교통 · 도보 등 OSRM 이 못 하는 mode 는 거리 미표시.
-**Depends on:** 이동수단별 경로 렌더링 분기 (같이 설계하면 자연스러움).
 
 ### Chat 기반 부분 수정
 **Priority:** P2
@@ -138,3 +126,4 @@ secondwind 의 열린 작업 · 리스크 · 후속 아이템.
 - **travel v0 스캐폴딩 (플랫폼 + 여행 서비스)** — PR #1, v0.1.0.0 (2026-04-22)
 - **지도 경로 시각화 (Kakao Maps JS SDK)** — PR #2 (2026-04-22)
 - **지도-카드 번호 매칭 + OSRM 실제 도로 경로** — PR #3 (2026-04-23)
+- **OSRM 거리·시간 덮어쓰기 + 정확도 UI (점선 밑줄 + 정보 출처 패널)** — PR #9 (2026-04-23)
