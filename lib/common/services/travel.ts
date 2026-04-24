@@ -26,6 +26,7 @@ export type TravelItem = {
   text: string;
   time?: string;
   place_query?: string;
+  place_warning?: string;
   cost_krw?: number;
   cost_label?: string;
   recommended_menu?: string;
@@ -246,6 +247,7 @@ function isTravelItem(v: unknown): v is TravelItem {
   if (typeof i.text !== "string") return false;
   if (!isOptString(i.time)) return false;
   if (!isOptString(i.place_query)) return false;
+  if (!isOptString(i.place_warning)) return false;
   if (!isOptFinite(i.cost_krw)) return false;
   if (!isOptString(i.cost_label)) return false;
   if (!isOptString(i.recommended_menu)) return false;

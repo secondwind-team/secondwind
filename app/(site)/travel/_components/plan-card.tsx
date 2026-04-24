@@ -294,10 +294,11 @@ function ItemCard({
   const addr = item.place?.address;
   const phone = item.place?.phone;
   const category = item.place?.category;
+  const placeWarning = item.place_warning;
   const hasLocation = Boolean(item.place || item.place_query);
 
   const showCost = typeof item.cost_krw === "number" && item.cost_krw > 0;
-  const hasDetail = Boolean(addr || phone || category || item.recommended_menu || showCost);
+  const hasDetail = Boolean(addr || phone || category || placeWarning || item.recommended_menu || showCost);
 
   const costLabel = item.cost_label ?? "비용";
   const pinColor = DAY_COLORS[dayIndex % DAY_COLORS.length];
@@ -324,6 +325,11 @@ function ItemCard({
           {item.place?.name && !item.text.includes(item.place.name) && (
             <span className="text-[var(--muted)]"> · {item.place.name}</span>
           )}
+          {placeWarning && (
+            <span className="ml-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+              위치 확인 필요
+            </span>
+          )}
         </span>
         {hasLocation && (
           <button
@@ -334,8 +340,8 @@ function ItemCard({
               e.stopPropagation();
               onShowMap(item);
             }}
-            aria-label="지도에서 위치 보기"
-            title="지도에서 위치 보기"
+            aria-label={item.place ? "지도에서 위치 보기" : "지도 검색 결과 보기"}
+            title={item.place ? "지도에서 위치 보기" : "지도 검색 결과 보기"}
             className="shrink-0 rounded-lg border border-[var(--line)] bg-white p-1.5 text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
           >
             <MapPinIcon />
@@ -353,6 +359,11 @@ function ItemCard({
 
       {hasDetail && (
         <dl className="space-y-1 border-t border-[var(--line)] px-3 py-3 pl-16 text-xs text-[var(--muted)]">
+          {placeWarning && (
+            <Row label="지도">
+              <span className="text-amber-800">{placeWarning}</span>
+            </Row>
+          )}
           {addr && (
             <Row label="주소">
               <span>{addr}</span>
