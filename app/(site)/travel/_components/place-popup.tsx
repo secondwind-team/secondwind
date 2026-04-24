@@ -100,7 +100,7 @@ export function PlacePopup({ item, onClose }: Props) {
           />
         ) : (
           <div className="bg-slate-50 p-4 text-xs leading-relaxed text-[var(--muted)]">
-            정확한 위치를 확인하지 못했어요. 아래 카카오맵 링크에서 <b>&quot;{item.place_query ?? item.text}&quot;</b> 검색 결과를 확인해보세요.
+            {item.place_warning ?? "정확한 위치를 확인하지 못했어요."} 아래 카카오맵 링크에서 <b>&quot;{item.place_query ?? item.text}&quot;</b> 검색 결과를 확인해보세요.
           </div>
         )}
 
