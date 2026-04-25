@@ -118,10 +118,19 @@ PR merge 전 Vercel preview 확인 필수. 운영 환경변수·도메인 정보
 
 ## 강제 메커니즘
 
-| 레이어 | 도구 | 효과 |
+| 레이어 | 도구 | 차단 항목 |
 |---|---|---|
 | 문서 | `GIT.md` (이 파일) | AI 에이전트가 읽고 따름 |
-| 로컬 hook | `scripts/setup-git-hooks.sh` 가 설치하는 `pre-commit` | 회사 도메인 자동 차단 (현재) · main 직접 commit 차단 (예정) |
-| 서버 | GitHub branch protection on `main` | direct push 금지, PR 필수, 우회 불가 (별도 설정 필요) |
+| 로컬 hook | `scripts/setup-git-hooks.sh` 가 설치하는 `pre-commit` | 회사 도메인 / main·master 직접 commit / 에이전트 prefix(`codex-*`, `claude-*` 등) |
+| 서버 | GitHub branch protection on `main` | direct push 금지, PR 필수, 우회 불가 |
 
 clone 후 반드시 `bash scripts/setup-git-hooks.sh` 한 번 실행.
+
+### Hook 우회
+
+`--no-verify` 로 hook 을 건너뛸 수 있습니다 (`git commit --no-verify`). 하지만 이는 **의식적인 결정** 으로만 사용:
+
+- ✅ **정당한 케이스**: hook 자체에 버그가 있어 정상 commit 이 막히는 경우
+- ❌ **금지**: main 에 commit 이 안 된다고 우회 / 회사 도메인이 떠서 우회
+
+서버 측 branch protection 은 우회 불가 — 그래서 hook + protection 양쪽이 다 필요합니다.
