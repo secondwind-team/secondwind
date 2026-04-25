@@ -331,7 +331,23 @@ function sanitizeGeneratedPlan(plan: TravelPlan): void {
 
 function shouldSuppressPlaceQuery(item: TravelItem): boolean {
   const text = `${item.text} ${item.place_query ?? ""}`;
-  return /공항\s*(도착|출발)|렌터카\s*(수령|반납)|렌트카\s*(수령|반납)|체크인|체크아웃|조식|낮잠|숙소.*(복귀|휴식)|호텔.*휴식/.test(text);
+  return (
+    /공항\s*(도착|출발)|렌터카\s*(수령|반납)|렌트카\s*(수령|반납)|체크인|체크아웃|조식|낮잠|숙소.*(복귀|휴식)|호텔.*휴식/.test(text) ||
+    isGenericPlaceQuery(item.place_query)
+  );
+}
+
+function isGenericPlaceQuery(query: string | undefined): boolean {
+  if (!query) return false;
+  const normalized = query.replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  if (/(근처|주변|인근).*(식당|맛집|카페|횟집)|맛집|시내\s*(식당|카페)|지역\s*(식당|카페)/.test(normalized)) {
+    return true;
+  }
+  if (/^(제주|부산|강릉|서귀포|애월|성산|중문|광안리|남포동|해운대|기장|강릉역)\s*(식당|맛집|카페|횟집|해산물|돈까스|흑돼지|고기국수)$/.test(normalized)) {
+    return true;
+  }
+  return false;
 }
 
 // `/link/` 포맷은 모바일에서 카카오맵 앱 deep link 가 걸려 네이버/카카오 앱이 섞여 뜨는 원인이 됨.
