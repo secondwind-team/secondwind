@@ -28,7 +28,7 @@ cd secondwind
 ./scripts/bootstrap.sh          # Claude Code + Codex 둘 다 설치
 ```
 
-스크립트는 idempotent — 다시 실행해도 안전합니다.
+스크립트는 idempotent — 다시 실행해도 안전합니다. gstack 설치와 함께 **repo-local git hook 도 같이 설치** 합니다 (회사 도메인 / main 직접 commit / 에이전트 prefix 차단 — 상세는 `GIT.md`).
 
 | 상황 | 명령 |
 |---|---|

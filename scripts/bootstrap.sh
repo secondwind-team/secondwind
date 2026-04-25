@@ -55,6 +55,18 @@ case "$HOST" in
     ;;
 esac
 
+# ── 4. Install repo-local git hooks ───────────────────────────
+# Returns to the repo root since the gstack setup above changed cwd.
+REPO_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+cd "$REPO_ROOT"
+if [ -x "scripts/setup-git-hooks.sh" ]; then
+  echo ""
+  echo "Installing git hooks…"
+  bash scripts/setup-git-hooks.sh
+else
+  echo "⚠️  scripts/setup-git-hooks.sh not found or not executable — git hooks not installed." >&2
+fi
+
 echo ""
 echo "Done. Next session, try these in your AI coding tool:"
 echo "  /office-hours        — start an ideation session"

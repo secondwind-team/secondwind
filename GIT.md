@@ -124,7 +124,7 @@ PR merge 전 Vercel preview 확인 필수. 운영 환경변수·도메인 정보
 | 로컬 hook | `scripts/setup-git-hooks.sh` 가 설치하는 `pre-commit` | 회사 도메인 / main·master 직접 commit / 에이전트 prefix(`codex-*`, `claude-*` 등) |
 | 서버 | GitHub branch protection on `main` | direct push 금지, PR 필수, 우회 불가 |
 
-clone 후 반드시 `bash scripts/setup-git-hooks.sh` 한 번 실행.
+**hook 설치는 자동입니다** — clone 후 `./scripts/bootstrap.sh` 를 한 번만 실행하면 gstack 과 함께 같이 깔립니다 (GSTACK.md 설치 섹션 참조). hook 만 따로 다시 설치하고 싶을 땐 `bash scripts/setup-git-hooks.sh` 직접 실행 가능 (idempotent).
 
 ### Hook 우회
 
