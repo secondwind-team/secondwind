@@ -93,6 +93,74 @@ AI 가 `git commit` 을 생성할 때:
 4. Merge 직전           → "Update branch" 한 번 더 → CI 통과 확인 → merge
 ```
 
+### 간소 Ship 체크리스트 (기본)
+
+AI 에이전트가 "push 해줘", "PR 만들어줘", "올려줘" 같은 요청을 받으면 기본은 이 간소 체크리스트를 따른다. `/ship` 또는 `/gstack-ship` 은 사용자가 명시적으로 요청했거나, 큰 PR·복합 릴리스·강한 release audit 이 필요할 때만 사용한다.
+
+1. **현재 위치 확인**
+   ```bash
+   git branch --show-current
+   git status --short
+   ```
+   - `main` / `master` 에 있으면 중단하고 새 브랜치를 만든다.
+   - 사용자 handoff·scratch 파일처럼 PR 과 무관한 untracked 파일은 포함하지 않는다.
+
+2. **Git identity 확인**
+   ```bash
+   git config user.email
+   git remote get-url origin
+   ```
+   - 이메일은 개인 계정이어야 한다.
+   - 원격은 `github.com/akushig/secondwind` 여야 한다.
+   - 회사 도메인·GitLab·사내 호스트 흔적이 있으면 즉시 중단한다.
+
+3. **base 최신화**
+   ```bash
+   git fetch origin main
+   git merge origin/main --no-edit
+   ```
+   - 충돌이 나면 임의로 밀어붙이지 말고, 충돌 파일과 선택지를 사용자에게 알린다.
+   - 이 팀은 rebase/force-push 보다 merge commit 을 선호한다.
+
+4. **검증 실행**
+   - 코드 변경이면 순서대로 실행:
+     ```bash
+     npm run typecheck
+     npm run lint
+     npm run build
+     ```
+   - 문서만 변경이면 `git diff` 로 내용 검토. 코드 테스트는 생략 가능.
+   - 브라우저 UI 변경이면 PR 전 실제 브라우저 QA 결과를 남긴다.
+
+5. **릴리스 문서 판단**
+   - 사용자에게 보이는 기능 변화면 `VERSION`, `package.json`, `CHANGELOG.md`, 필요 시 `TODOS.md` 를 업데이트한다.
+   - 문서·규칙·메타 작업만이면 버전 bump 는 하지 않는다. 필요한 경우 `CHANGELOG.md` 도 생략 가능하다.
+
+6. **commit**
+   ```bash
+   git add <의도한 파일만>
+   git commit -m "<한글 제목>"
+   ```
+   - `git add -A` 는 피하고, PR 에 넣을 파일만 stage 한다.
+   - `Co-Authored-By:` trailer 는 넣지 않는다.
+
+7. **push + PR**
+   ```bash
+   git push -u origin <branch>
+   gh pr create --base main --head <branch> --title "<제목>" --body "<본문>"
+   ```
+   PR 본문에는 최소한 다음을 포함한다:
+   - 사용자가 보게 될 변화
+   - 검증 결과
+   - 의도적으로 제외한 파일이나 후속 작업
+
+8. **PR 확인**
+   ```bash
+   gh pr checks <번호>
+   ```
+   - Vercel preview 와 GitHub checks 가 통과했는지 확인한다.
+   - merge 전에는 GitHub "Update branch" 또는 base merge 로 main 최신 상태를 한 번 더 반영한다.
+
 ### Merge 직전 main sync 는 필수
 
 Vercel preview 가 "**진짜 main + 내 변경**" 으로 한 번 더 검증되도록.
