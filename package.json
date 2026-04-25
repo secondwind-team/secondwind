@@ -1,11 +1,12 @@
 {
   "name": "secondwind",
-  "version": "0.1.9.2",
+  "version": "0.1.9.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "eval:travel": "node scripts/eval-travel.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
