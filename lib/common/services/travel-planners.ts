@@ -31,12 +31,13 @@ type PlannerConfig = {
   temperature: number;
   repairPass: boolean;
   candidatePass: boolean;
+  clearUnverifiedPlaces: boolean;
 };
 
 const PLANNER_CONFIG: Record<PlanningModel, PlannerConfig> = {
-  classic: { temperature: 0.6, repairPass: false, candidatePass: false },
-  balanced: { temperature: 0.35, repairPass: true, candidatePass: false },
-  verified: { temperature: 0.2, repairPass: false, candidatePass: true },
+  classic: { temperature: 0.7, repairPass: false, candidatePass: false, clearUnverifiedPlaces: false },
+  balanced: { temperature: 0.35, repairPass: true, candidatePass: false, clearUnverifiedPlaces: false },
+  verified: { temperature: 0.1, repairPass: false, candidatePass: true, clearUnverifiedPlaces: true },
 };
 
 const REPAIR_LIMIT = 6;
@@ -76,20 +77,36 @@ const REPAIR_SCHEMA = {
   required: ["replacements"],
 } as const;
 
-export async function runTravelPlanner(input: TravelInput): Promise<TravelPlannerResult> {
+export type RunPlannerOptions = {
+  skipModels?: ReadonlyArray<GeminiModel>;
+};
+
+export async function runTravelPlanner(
+  input: TravelInput,
+  opts: RunPlannerOptions = {},
+): Promise<TravelPlannerResult> {
   const config = PLANNER_CONFIG[input.planningModel];
   const { system, user } = buildTravelPrompt(input);
-  const result = await callLlm({
-    system,
-    user,
-    // 3박+많은 item+긴 rationale 케이스에서 6144 가 빡빡해 truncation 이 났던 정황이 있어 8192 로 상향.
-    maxTokens: 8192,
-    responseSchema: TRAVEL_PLAN_SCHEMA,
-    temperature: config.temperature,
-  });
+  const skippedModels = new Set(opts.skipModels ?? []);
+  const llmOpts = () => ({ skipModels: Array.from(skippedModels) });
+  const rememberBlockedModels = (hits: readonly RateLimitHit[] = []) => {
+    hits.forEach((hit) => skippedModels.add(hit.model));
+  };
+  const result = await callLlm(
+    {
+      system,
+      user,
+      // 3박+많은 item+긴 rationale 케이스에서 6144 가 빡빡해 truncation 이 났던 정황이 있어 8192 로 상향.
+      maxTokens: 8192,
+      responseSchema: TRAVEL_PLAN_SCHEMA,
+      temperature: config.temperature,
+    },
+    llmOpts(),
+  );
 
   if (result.status === "not-configured" || result.status === "disabled") return result;
   if (result.status === "error") return { status: "error", reason: result.reason, model: result.model };
+  rememberBlockedModels(result.rateLimitHits);
 
   const plan = parseTravelPlan(result.text);
   if (!plan) return { status: "invalid-response", raw: result.text.slice(0, 500) };
@@ -99,23 +116,31 @@ export async function runTravelPlanner(input: TravelInput): Promise<TravelPlanne
   let repairedPlaces = 0;
   let candidateChangedItems: TravelItem[] = [];
 
-  if (config.candidatePass) {
-    const candidatePass = await selectVerifiedCandidates(plan, input);
-    usage = addUsage(usage, candidatePass.usage);
-    rateLimitHits.push(...candidatePass.rateLimitHits);
-    candidateChangedItems = candidatePass.changedItems;
-  }
-
   await enrichPlan(plan, input.destination);
 
+  if (config.candidatePass) {
+    const candidatePass = await selectVerifiedCandidates(plan, input, llmOpts());
+    usage = addUsage(usage, candidatePass.usage);
+    rateLimitHits.push(...candidatePass.rateLimitHits);
+    rememberBlockedModels(candidatePass.rateLimitHits);
+    candidateChangedItems = candidatePass.changedItems;
+    if (candidateChangedItems.length > 0) {
+      await enrichPlan(plan, input.destination);
+    }
+  }
+
   if (config.repairPass) {
-    const repair = await repairPlaceQueries(plan, input);
+    const repair = await repairPlaceQueries(plan, input, llmOpts());
     usage = addUsage(usage, repair.usage);
     rateLimitHits.push(...repair.rateLimitHits);
+    rememberBlockedModels(repair.rateLimitHits);
     repairedPlaces = repair.repairedPlaces;
   }
   if (candidateChangedItems.length > 0) {
     repairedPlaces += candidateChangedItems.filter((item) => item.place).length;
+  }
+  if (config.clearUnverifiedPlaces) {
+    clearUnverifiedPlaceQueries(plan);
   }
 
   return {
@@ -133,8 +158,11 @@ export async function runTravelPlanner(input: TravelInput): Promise<TravelPlanne
 async function selectVerifiedCandidates(
   plan: TravelPlan,
   input: TravelInput,
+  llmOpts: { skipModels?: ReadonlyArray<GeminiModel> } = {},
 ): Promise<{ changedItems: TravelItem[]; usage: GeminiUsage; rateLimitHits: RateLimitHit[] }> {
-  const targets = collectRepairTargets(plan).slice(0, CANDIDATE_PASS_LIMIT);
+  const targets = collectRepairTargets(plan)
+    .filter((target) => !target.item.place || target.item.place_warning)
+    .slice(0, CANDIDATE_PASS_LIMIT);
   if (targets.length === 0) {
     return { changedItems: [], usage: emptyUsage(), rateLimitHits: [] };
   }
@@ -158,20 +186,23 @@ async function selectVerifiedCandidates(
     return { changedItems: [], usage: emptyUsage(), rateLimitHits: [] };
   }
 
-  const result = await callLlm({
-    system: [
-      "당신은 한국 여행 일정의 장소 정확도를 검수하는 보조자입니다.",
-      "각 활동의 place_query 를 제공된 후보 중 하나의 name 과 정확히 같은 문자열로 교체하세요.",
-      "후보가 활동과 다르거나 확신이 없으면 빈 문자열로 두세요.",
-      "후보 목록 밖의 장소명, 지역+카테고리 조합, 새 장소 창작은 금지입니다.",
-      "활동 설명, 시간, 비용, 이동 정보는 수정하지 마세요.",
-      "응답은 반드시 JSON 입니다.",
-    ].join("\n"),
-    user: buildCandidatePrompt(input, withCandidates),
-    maxTokens: 1536,
-    responseSchema: REPAIR_SCHEMA,
-    temperature: 0,
-  });
+  const result = await callLlm(
+    {
+      system: [
+        "당신은 한국 여행 일정의 장소 정확도를 검수하는 보조자입니다.",
+        "지도 확인에 실패한 각 활동의 place_query 를 제공된 후보 중 하나의 name 과 정확히 같은 문자열로 교체하세요.",
+        "후보가 활동과 다르거나 확신이 없으면 빈 문자열로 두세요.",
+        "후보 목록 밖의 장소명, 지역+카테고리 조합, 새 장소 창작은 금지입니다.",
+        "활동 설명, 시간, 비용, 이동 정보는 수정하지 마세요.",
+        "응답은 반드시 JSON 입니다.",
+      ].join("\n"),
+      user: buildCandidatePrompt(input, withCandidates),
+      maxTokens: 1536,
+      responseSchema: REPAIR_SCHEMA,
+      temperature: 0,
+    },
+    llmOpts,
+  );
 
   if (result.status !== "ok") {
     return {
@@ -229,25 +260,29 @@ function buildCandidatePrompt(input: TravelInput, targets: CandidateTarget[]): s
 async function repairPlaceQueries(
   plan: TravelPlan,
   input: TravelInput,
+  llmOpts: { skipModels?: ReadonlyArray<GeminiModel> } = {},
 ): Promise<{ repairedPlaces: number; usage: GeminiUsage; rateLimitHits: RateLimitHit[] }> {
   const targets = collectRepairTargets(plan).slice(0, REPAIR_LIMIT);
   if (targets.length === 0) {
     return { repairedPlaces: 0, usage: emptyUsage(), rateLimitHits: [] };
   }
 
-  const result = await callLlm({
-    system: [
-      "당신은 한국 여행 일정의 지도 검색어를 고치는 보조자입니다.",
-      "실패한 place_query 를 같은 활동을 대표하는 실제 단일 POI 고유명사로만 교체하세요.",
-      "지역+카테고리 조합, 불확실한 상호명, 여러 업체가 섞인 시설명은 빈 문자열로 두세요.",
-      "활동 자체를 바꾸거나 일정 순서, 시간, 설명을 수정하지 마세요.",
-      "응답은 반드시 JSON 입니다.",
-    ].join("\n"),
-    user: buildRepairPrompt(input, targets),
-    maxTokens: 1024,
-    responseSchema: REPAIR_SCHEMA,
-    temperature: 0.1,
-  });
+  const result = await callLlm(
+    {
+      system: [
+        "당신은 한국 여행 일정의 지도 검색어를 고치는 보조자입니다.",
+        "실패한 place_query 를 같은 활동을 대표하는 실제 단일 POI 고유명사로만 교체하세요.",
+        "지역+카테고리 조합, 불확실한 상호명, 여러 업체가 섞인 시설명은 빈 문자열로 두세요.",
+        "활동 자체를 바꾸거나 일정 순서, 시간, 설명을 수정하지 마세요.",
+        "응답은 반드시 JSON 입니다.",
+      ].join("\n"),
+      user: buildRepairPrompt(input, targets),
+      maxTokens: 1024,
+      responseSchema: REPAIR_SCHEMA,
+      temperature: 0.1,
+    },
+    llmOpts,
+  );
 
   if (result.status !== "ok") {
     return {
@@ -289,6 +324,18 @@ function collectRepairTargets(plan: TravelPlan): RepairTarget[] {
     });
   });
   return targets;
+}
+
+function clearUnverifiedPlaceQueries(plan: TravelPlan): void {
+  for (const day of plan.days) {
+    for (const item of day.items) {
+      if (!item.place_query) continue;
+      if (item.place && !item.place_warning) continue;
+      item.place_query = "";
+      item.place = undefined;
+      item.place_warning = undefined;
+    }
+  }
 }
 
 function buildRepairPrompt(input: TravelInput, targets: RepairTarget[]): string {

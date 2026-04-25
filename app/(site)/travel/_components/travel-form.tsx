@@ -315,8 +315,11 @@ function friendlyErrorMessage(httpStatus: number, json: Record<string, unknown>)
   if (status === "disabled") {
     return "점검 중입니다. 잠시 후 다시 시도해주세요.";
   }
+  if (reason === "all-models-blocked") {
+    return rateLimitMessage(json) ?? "현재 모든 모델이 한도 초과 상태예요. 잠시 후 다시 시도해주세요.";
+  }
   if (reason.includes("429")) {
-    return "지금 많이 이용되고 있어요. 1~2분 뒤 다시 시도해주세요.";
+    return rateLimitMessage(json) ?? "지금 많이 이용되고 있어요. 1~2분 뒤 다시 시도해주세요.";
   }
   if (reason.includes("timeout")) {
     return "응답이 늦어 중단됐어요. 다시 시도해주세요.";
@@ -333,6 +336,51 @@ function friendlyErrorMessage(httpStatus: number, json: Record<string, unknown>)
     return "입력값을 다시 확인해주세요.";
   }
   return `계획 생성 실패 (${reason || httpStatus || "unknown"})`;
+}
+
+type ParsedRateLimitHit = { dim: "rpm" | "tpm" | "rpd"; retryMs: number };
+
+function parseRateLimitHits(raw: unknown): ParsedRateLimitHit[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ParsedRateLimitHit[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    const dim = r.dim;
+    const retryMs = r.retryMs;
+    if (
+      (dim === "rpm" || dim === "tpm" || dim === "rpd") &&
+      typeof retryMs === "number" &&
+      Number.isFinite(retryMs)
+    ) {
+      out.push({ dim, retryMs });
+    }
+  }
+  return out;
+}
+
+// dim 별로 사용자에게 다른 안내. RPD 는 retryMs 가 부정확할 수 있어 (Google ↔ Pacific 자정 차이)
+// 한국시간 16-17시 복구로 안내한다.
+function rateLimitMessage(json: Record<string, unknown>): string | undefined {
+  const hits = parseRateLimitHits(json.rateLimitHits);
+  if (hits.length === 0) return undefined;
+  // 가장 영향이 큰 dim 우선: rpd > tpm > rpm
+  const priority = { rpd: 3, tpm: 2, rpm: 1 } as const;
+  const worst = hits.reduce((a, b) => (priority[a.dim] >= priority[b.dim] ? a : b));
+  if (worst.dim === "rpd") {
+    return "오늘 무료 한도가 모두 소진되었어요. 한국시간 16~17시 이후 자동 복구됩니다.";
+  }
+  if (worst.dim === "tpm") {
+    return `토큰 한도를 일시 초과했어요. ${formatRetryWindow(worst.retryMs)} 뒤 다시 시도해주세요.`;
+  }
+  return `호출 빈도가 일시 초과됐어요. ${formatRetryWindow(worst.retryMs)} 뒤 다시 시도해주세요.`;
+}
+
+function formatRetryWindow(ms: number): string {
+  if (ms < 60_000) return `${Math.max(1, Math.ceil(ms / 1000))}초`;
+  if (ms < 60 * 60_000) return `${Math.ceil(ms / 60_000)}분`;
+  const hours = Math.floor(ms / (60 * 60_000));
+  return `${hours}시간`;
 }
 
 function travelInputErrorMessage(reason: unknown): string | undefined {

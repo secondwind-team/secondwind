@@ -5,7 +5,7 @@ import {
   type TravelInput,
 } from "@/lib/common/services/travel";
 import { runTravelPlanner } from "@/lib/common/services/travel-planners";
-import { markBlocked, recordCall } from "@/lib/server/quota-store";
+import { getBlockedModels, markBlocked, recordCall } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
@@ -30,11 +30,18 @@ export async function POST(req: Request) {
   }
   const input = validation.input;
 
-  const result = await runTravelPlanner(input);
+  // 차단된 모델은 건너뛰어 429 round-trip 절약.
+  const skipModels = await getBlockedModels();
+  const result = await runTravelPlanner(input, { skipModels });
 
-  // KV 에 rate-limit 소진 기록 (fire-and-forget).
-  if (result.status === "ok" && result.rateLimitHits) {
-    void recordRateLimitHits(result.rateLimitHits);
+  // 호출 시도(성공·실패 무관)는 모두 KV 에 기록 — Google 의 RPD 카운터와 align.
+  // 성공 호출은 토큰 수를, 429 등 실패는 0 토큰으로 기록한다.
+  const hits = "rateLimitHits" in result ? result.rateLimitHits ?? [] : [];
+  if (hits.length > 0) {
+    await recordRateLimitHits(hits);
+    for (const hit of hits) {
+      void recordCall(hit.model, 0).catch(() => {});
+    }
   }
 
   if (result.status === "not-configured") {

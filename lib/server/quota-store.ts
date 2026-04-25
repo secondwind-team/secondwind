@@ -106,6 +106,34 @@ export async function markBlocked(
   }
 }
 
+// 호출 전 사전 skip 용 — 어떤 dim 이라도 차단된 모델 목록.
+// 이미 막힌 모델에 또 호출 보내서 429 받는 round-trip 을 줄인다.
+export async function getBlockedModels(): Promise<GeminiModel[]> {
+  const redis = getClient();
+  if (!redis) return [];
+  try {
+    const now = Date.now();
+    const blocked: GeminiModel[] = [];
+    for (const model of GEMINI_MODELS) {
+      const [rpm, tpm, rpd] = await Promise.all([
+        redis.get(blockedKey(model, "rpm")),
+        redis.get(blockedKey(model, "tpm")),
+        redis.get(blockedKey(model, "rpd")),
+      ]);
+      const isLive = (raw: unknown) => {
+        const v = parseBlocked(raw);
+        return v !== null && v.until > now;
+      };
+      if (isLive(rpm) || isLive(tpm) || isLive(rpd)) {
+        blocked.push(model);
+      }
+    }
+    return blocked;
+  } catch {
+    return [];
+  }
+}
+
 export async function getSnapshot(): Promise<QuotaSnapshot | QuotaUnavailable> {
   const redis = getClient();
   if (!redis) return { configured: false };

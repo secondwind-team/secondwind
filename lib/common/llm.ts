@@ -53,7 +53,16 @@ export type LlmResult =
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-export async function callLlm(input: LlmCallInput, signal?: AbortSignal): Promise<LlmResult> {
+export type CallLlmOptions = {
+  signal?: AbortSignal;
+  // 이미 차단(rpm/tpm/rpd)된 것이 확실한 모델은 건너뛰어 429 round-trip 을 아낀다.
+  skipModels?: ReadonlyArray<GeminiModel>;
+};
+
+export async function callLlm(
+  input: LlmCallInput,
+  opts: CallLlmOptions = {},
+): Promise<LlmResult> {
   assertServerEnv();
 
   if (env.geminiDisabled) {
@@ -63,13 +72,15 @@ export async function callLlm(input: LlmCallInput, signal?: AbortSignal): Promis
     return { status: "not-configured" };
   }
 
+  const skipSet = new Set(opts.skipModels ?? []);
   const hits: RateLimitHit[] = [];
   let lastError: LlmResult = { status: "error", reason: "no-attempt" };
   for (const model of GEMINI_MODELS) {
-    if (signal?.aborted) {
+    if (skipSet.has(model)) continue;
+    if (opts.signal?.aborted) {
       return attachHits({ status: "error", reason: "aborted", model }, hits);
     }
-    const outcome = await callGemini(model, input, signal);
+    const outcome = await callGemini(model, input, opts.signal);
     if (outcome.status === "error" && outcome._rateLimit) {
       hits.push({ model, dim: outcome._rateLimit.dim, retryMs: outcome._rateLimit.retryMs });
     }
@@ -77,6 +88,9 @@ export async function callLlm(input: LlmCallInput, signal?: AbortSignal): Promis
     if (publicResult.status === "ok") return attachHits(publicResult as LlmResult, hits);
     lastError = publicResult as LlmResult;
     if (!isTransientUpstream(publicResult as LlmResult)) break;
+  }
+  if (lastError.status === "error" && lastError.reason === "no-attempt") {
+    return attachHits({ status: "error", reason: "all-models-blocked" }, hits);
   }
   return attachHits(lastError, hits);
 }
