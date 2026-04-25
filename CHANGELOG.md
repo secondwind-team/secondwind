@@ -2,6 +2,19 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.8.0] - 2026-04-25
+
+### Added
+- `/travel` 결과 상단에 **결정 패널** 추가. 긴 일정 전체를 다시 읽기 전에 `좋은 점` · `확인 필요` · `확정 후 할 일` 을 먼저 보여줘서 사용자가 "이 일정으로 가도 되는지" 판단할 수 있게 함.
+- `TravelPlan.decision?: { good_reasons, check_before_confirming, todo_after_confirming }` 필드 추가. Gemini 프롬프트와 런타임 파서가 모두 optional 필드로 인식하므로 기존 공유 링크와 오래된 응답은 fallback 문구로 계속 렌더.
+- `이 일정으로 확정` 버튼과 브라우저별 `localStorage` 확정 상태 저장. 확정 후에는 `확정됨` 배지와 `확정 완료` 버튼 상태를 표시하고, `확정 후 할 일` 을 체크리스트로 보여줌.
+
+### Changed
+- `.gstack/` 로컬 QA 산출물을 git ignore 대상에 추가.
+
+### Docs
+- `docs/plans/2026-04-25-travel-decision-panel-v0.md` 에 결정 패널 v0 목표, UX, 데이터 설계, 비목표, 리스크를 기록.
+
 ## [0.1.7.0] - 2026-04-24
 
 ### Changed
