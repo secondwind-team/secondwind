@@ -100,6 +100,25 @@ function pickBest(query: string, items: NaverLocalItem[]): NaverLocalItem | unde
   return best;
 }
 
+function toPlaceInfo(item: NaverLocalItem, fallbackQuery: string): PlaceInfo {
+  const info: PlaceInfo = {};
+  if (item.title) info.name = stripHtml(item.title);
+  const address = item.roadAddress || item.address;
+  if (address) info.address = address;
+  if (item.telephone) info.phone = item.telephone;
+  if (item.category) info.category = item.category;
+
+  const lng = item.mapx ? Number(item.mapx) / 1e7 : NaN;
+  const lat = item.mapy ? Number(item.mapy) / 1e7 : NaN;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    info.lat = lat;
+    info.lng = lng;
+  }
+
+  info.url = kakaoMapSearchUrl(info.name ?? fallbackQuery);
+  return info;
+}
+
 function buildSearchQuery(query: string, destHint?: string): string {
   if (!destHint) return query;
   const lower = query.toLowerCase();
@@ -176,8 +195,7 @@ async function searchPlace(query: string, destHint?: string): Promise<PlaceLooku
   const best = pickBest(scoreQuery, items);
   if (!best) return undefined;
 
-  const info: PlaceInfo = {};
-  if (best.title) info.name = stripHtml(best.title);
+  const info = toPlaceInfo(best, query);
   const address = best.roadAddress || best.address;
   if (!addressMatchesDestination(address, destHint)) {
     const name = info.name ?? query;
@@ -187,19 +205,42 @@ async function searchPlace(query: string, destHint?: string): Promise<PlaceLooku
     };
   }
 
-  if (address) info.address = address;
-  if (best.telephone) info.phone = best.telephone;
-  if (best.category) info.category = best.category;
-
-  const lng = best.mapx ? Number(best.mapx) / 1e7 : NaN;
-  const lat = best.mapy ? Number(best.mapy) / 1e7 : NaN;
-  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-    info.lat = lat;
-    info.lng = lng;
-  }
-
-  info.url = kakaoMapSearchUrl(info.name ?? query);
   return { status: "ok", place: info };
+}
+
+export async function searchPlaceCandidates(
+  query: string,
+  destHint?: string,
+  limit = 3,
+): Promise<PlaceInfo[]> {
+  assertServerEnv();
+  if (!env.naverClientId || !env.naverClientSecret || !query.trim()) return [];
+
+  const searchQuery = buildSearchQuery(query, destHint);
+  let items = await fetchNaverOnce(searchQuery);
+  if (items === null) {
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    items = await fetchNaverOnce(searchQuery);
+  }
+  if (!items || items.length === 0) return [];
+
+  const scoreQuery = buildScoreQuery(query, destHint);
+  const seen = new Set<string>();
+  return items
+    .map((item) => ({
+      item,
+      title: stripHtml(item.title ?? ""),
+      score: overlapScore(scoreQuery, stripHtml(item.title ?? "")),
+    }))
+    .filter(({ item, score }) => score >= MIN_SCORE && addressMatchesDestination(item.roadAddress || item.address, destHint))
+    .flatMap(({ item }) => {
+      const place = toPlaceInfo(item, query);
+      const key = `${place.name ?? ""}|${place.address ?? ""}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [place];
+    })
+    .slice(0, limit);
 }
 
 function distanceKm(a: PlaceInfo, b: PlaceInfo): number {

@@ -34,7 +34,7 @@ export const PLANNING_MODELS: PlanningModelInfo[] = [
     id: "verified",
     label: "장소 정확도 우선",
     shortLabel: "정확도 우선",
-    description: "확실한 장소명을 더 보수적으로 고릅니다. 빈 장소가 조금 늘 수 있어요.",
+    description: "지도 후보를 한 번 더 확인해 확실한 장소명만 고릅니다. 빈 장소가 조금 늘 수 있어요.",
   },
 ];
 
@@ -213,6 +213,7 @@ function planningModelInstruction(model: PlanningModel): string {
       "추천 모델: 장소 정확도 우선.",
       "- 장소 수를 억지로 늘리지 말고, 지도 검색에서 단일 POI 로 확인될 가능성이 높은 고유명사만 사용.",
       "- 지역+카테고리 조합, 기억이 불확실한 식당/카페명, 분점 불명확한 체인명은 피한다.",
+      "- 이 초안의 장소명은 지도 후보 검수 패스에서 다시 확인된다. 후보로 확인되지 않을 수 있는 장소는 빈 place_query 로 두는 편을 우선한다.",
       '- 확실한 고유명사를 모르면 place_query 는 빈 문자열 "" 로 두고 text 에도 단정적인 상호명을 쓰지 않는다.',
     ].join("\n");
   }
