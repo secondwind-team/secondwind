@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { TravelForm } from "../_components/travel-form";
+import { TravelHero } from "../_components/travel-hero";
 import { getTravelShare, isShareId } from "@/lib/server/travel-share-store";
 
 type Props = {
@@ -19,15 +20,15 @@ export default async function SharedTravelPage({ params }: Props) {
   if (!snapshot) {
     return (
       <div className="space-y-6">
-        <header className="space-y-3">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">travel</h1>
-          <p className="text-neutral-600 dark:text-neutral-300">
-            공유 링크가 만료되었거나 찾을 수 없습니다.
-          </p>
-        </header>
+        <TravelHero
+          eyebrow="shared travel"
+          title="공유 링크를 찾지 못했어요."
+          description="공유 링크가 만료되었거나 잘못된 주소입니다. 새 여행 계획을 다시 만들 수 있어요."
+          badge="공유 링크는 생성 후 7일 동안 열 수 있습니다."
+        />
         <Link
           href="/travel"
-          className="inline-flex rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="inline-flex rounded-xl border border-[var(--line)] bg-white px-4 py-2 text-sm font-medium text-[var(--ink)] shadow-[var(--shadow-soft)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
         >
           새 여행 계획 만들기
         </Link>
@@ -37,15 +38,18 @@ export default async function SharedTravelPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">travel</h1>
-        <p className="text-neutral-600 dark:text-neutral-300">
-          공유받은 입력값과 여행 계획입니다. 필요한 부분을 고쳐서 다시 만들 수 있어요.
-        </p>
-        <p className="inline-block rounded-md border border-neutral-300 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-          {formatSharedDate(snapshot.expiresAt)}까지 열 수 있습니다.
-        </p>
-      </header>
+      <TravelHero
+        eyebrow="shared travel"
+        title={
+          <>
+            받은 여행,
+            <br />
+            다시 고르면 되게.
+          </>
+        }
+        description="공유받은 입력값과 여행 계획입니다. 필요한 부분을 고쳐서 다시 만들 수 있어요."
+        badge={`${formatSharedDate(snapshot.expiresAt)}까지 열 수 있습니다.`}
+      />
 
       <TravelForm
         initialInput={snapshot.input}
