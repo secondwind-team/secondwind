@@ -32,6 +32,7 @@ const GOLDEN_CASES = [
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const DEFAULT_OUT_DIR = ".gstack/evals/travel";
 const REQUEST_TIMEOUT_MS = 120_000;
+const DEFAULT_RETRY_429_MS = 60_000;
 
 function printUsage() {
   console.log(`Usage: npm run eval:travel -- [options]
@@ -46,6 +47,8 @@ Options:
   --models <list>      Comma-separated models. Default: ${PLANNING_MODELS.join(",")}
   --out <dir>          Snapshot output dir. Default: ${DEFAULT_OUT_DIR}
   --no-write           Print summary without writing a snapshot.
+  --retry-429 <n>      Retry each run on upstream 429. Default: 0
+  --retry-429-ms <ms>  Wait between 429 retries. Default: ${DEFAULT_RETRY_429_MS}
   --strict             Exit non-zero when any run fails. Default: write snapshot and continue.
   --help               Show this help.
 
@@ -63,6 +66,8 @@ function parseArgs(argv) {
     outDir: DEFAULT_OUT_DIR,
     write: true,
     strict: false,
+    retry429: 0,
+    retry429Ms: DEFAULT_RETRY_429_MS,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -98,6 +103,14 @@ function parseArgs(argv) {
       args.write = false;
       continue;
     }
+    if (arg === "--retry-429") {
+      args.retry429 = Number(readValue(argv, ++i, arg));
+      continue;
+    }
+    if (arg === "--retry-429-ms") {
+      args.retry429Ms = Number(readValue(argv, ++i, arg));
+      continue;
+    }
     if (arg === "--strict") {
       args.strict = true;
       continue;
@@ -107,6 +120,12 @@ function parseArgs(argv) {
 
   if (!Number.isInteger(args.runs) || args.runs < 1 || args.runs > 10) {
     throw new Error("--runs must be an integer from 1 to 10");
+  }
+  if (!Number.isInteger(args.retry429) || args.retry429 < 0 || args.retry429 > 5) {
+    throw new Error("--retry-429 must be an integer from 0 to 5");
+  }
+  if (!Number.isInteger(args.retry429Ms) || args.retry429Ms < 1_000) {
+    throw new Error("--retry-429-ms must be an integer >= 1000");
   }
   for (const model of args.models) {
     if (!PLANNING_MODELS.includes(model)) {
@@ -164,6 +183,31 @@ async function postTravel(baseUrl, input) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function runTravelWithRetries(baseUrl, input, retry429, retry429Ms) {
+  const attempts = [];
+  for (let attempt = 0; attempt <= retry429; attempt++) {
+    const started = Date.now();
+    const response = await postTravel(baseUrl, input);
+    attempts.push({
+      attempt: attempt + 1,
+      durationMs: Date.now() - started,
+      status: response.status,
+      httpStatus: response.httpStatus,
+      reason: response.status === "error" ? response.reason : undefined,
+    });
+    if (response.status !== "error" || response.reason !== "upstream 429" || attempt === retry429) {
+      return { response, attempts };
+    }
+    console.log(`429 retry ${attempt + 1}/${retry429}: waiting ${retry429Ms}ms`);
+    await sleep(retry429Ms);
+  }
+  return { response: attempts.at(-1), attempts };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function planMetrics(plan, placeStats) {
@@ -296,7 +340,12 @@ async function main() {
         const input = { ...goldenCase, planningModel: model };
         delete input.id;
         const started = Date.now();
-        const response = await postTravel(args.baseUrl, input);
+        const { response, attempts } = await runTravelWithRetries(
+          args.baseUrl,
+          input,
+          args.retry429,
+          args.retry429Ms,
+        );
         const durationMs = Date.now() - started;
         const result = {
           caseId: goldenCase.id,
@@ -308,6 +357,7 @@ async function main() {
           model: response.model,
           promptVersion: response.promptVersion,
           usage: response.usage,
+          attempts,
           placeStats: response.placeStats,
           metrics: response.status === "ok" ? planMetrics(response.plan, response.placeStats) : undefined,
           placeAudit: response.status === "ok" ? placeAudit(response.plan) : undefined,

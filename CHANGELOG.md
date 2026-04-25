@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.9.6] - 2026-04-26
+
+### Added
+- `npm run eval:travel` 에 `--retry-429` / `--retry-429-ms` 옵션 추가. Gemini quota 429 가 섞일 때 일정 시간 기다렸다가 같은 run 을 재시도하고, snapshot 에 attempt 이력을 남김.
+
 ## [0.1.9.5] - 2026-04-26
 
 ### Changed
