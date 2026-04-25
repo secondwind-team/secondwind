@@ -26,6 +26,7 @@ Thumbs.db
 .idea/
 *.swp
 
-# Claude Code / Codex per-user state (skill links, local settings)
+# Claude Code / Codex / gstack per-user state (skill links, local settings, QA reports)
 .claude/settings.local.json
 .codex/
+.gstack/
