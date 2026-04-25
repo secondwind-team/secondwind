@@ -2,6 +2,12 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.9.3] - 2026-04-25
+
+### Added
+- `npm run eval:travel` 추가. 실행 중인 로컬 앱의 `/api/gemini` 를 호출해 `빠른 추천` · `균형형` · `장소 정확도 우선` 을 같은 골든셋 입력으로 비교하고, 장소 확인율·warning·outlier·repair 수·토큰·소요 시간을 요약.
+- eval snapshot 을 `.gstack/evals/travel/*.json` 에 저장해 반복 실험 결과를 로컬에서 비교할 수 있게 함.
+
 ## [0.1.9.2] - 2026-04-25
 
 ### Changed
