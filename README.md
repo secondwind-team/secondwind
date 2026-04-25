@@ -172,6 +172,8 @@ cd secondwind
 
 이 상태에서 **첫 프롬프트로 무엇을 입력해 gstack 을 설치하는지** 는 [GSTACK.md](./GSTACK.md) 의 "설치" 섹션에 있습니다. 거기로 이동하세요.
 
+> 안내된 `./scripts/bootstrap.sh` 한 번으로 **gstack + 로컬 git hook 까지 같이 깔립니다** (회사 도메인·main 직접 commit·에이전트 prefix 차단 — 자세한 규칙은 [GIT.md](./GIT.md)).
+
 ---
 
 ## 시작하기 (gstack 설치 이후)
@@ -188,10 +190,16 @@ cd secondwind
 
 ## 팀 원칙 (짧게)
 
-AI 에이전트도 함께 지키는 기본 규칙입니다. 전체 내용은 `CLAUDE.md` (Claude Code 용) 또는 `AGENTS.md` (Codex/기타 용) 에 있습니다.
+AI 에이전트도 함께 지키는 기본 규칙입니다. 전체 내용:
+
+- 프로젝트 현황 · 팀 원칙 · 가드레일 → [`PROJECT.md`](./PROJECT.md)
+- Git 워크플로 (브랜치 · commit · PR · main 보호) → [`GIT.md`](./GIT.md)
+- 도구별 차이 → [`CLAUDE.md`](./CLAUDE.md) (Claude Code) / [`AGENTS.md`](./AGENTS.md) (Codex 등)
+
+핵심만:
 
 - 패치 전에 **재현·원인 파악** 먼저
-- **작은 단위** 의 리뷰 가능한 변경 선호
+- **작은 단위** 의 리뷰 가능한 변경 선호 — `main` 직접 push 금지, 모든 변경은 새 브랜치 → PR
 - 비개발자 팀원을 배려한 설명 — diff 대신 "사용자가 보게 될 것" 을 먼저
 - **스키마 / CI / secrets / 의존성 변경** 은 반드시 개발자 확인 후 진행
 
@@ -202,12 +210,14 @@ AI 에이전트도 함께 지키는 기본 규칙입니다. 전체 내용은 `CL
 | 위치 | 내용 | 주 독자 |
 |---|---|---|
 | `README.md` | 프로젝트 개요 (이 파일) | 사람 |
-| `CLAUDE.md` | 팀 원칙 — Claude Code 관점 | AI 에이전트 |
-| `AGENTS.md` | 팀 원칙 — Codex / 기타 에이전트 관점 | AI 에이전트 |
+| `PROJECT.md` | 현재 단계 · 팀 원칙 · 가드레일 (도구 무관) | 사람 + AI |
+| `GIT.md` | Git 워크플로 — 브랜치 · commit · PR · main 보호 | 사람 + AI |
+| `CLAUDE.md` | Claude Code 전용 라우터 | AI 에이전트 |
+| `AGENTS.md` | Codex / 기타 에이전트 전용 라우터 | AI 에이전트 |
 | `GSTACK.md` | gstack 도구 설치·사용·트러블슈팅 | 사람 + AI |
 | `docs/` | 팀 공유 문서 (회의록·아이데이션·기획·결정·에셋) | 사람 + AI |
-| `app/` | 서비스 개발 코드 (프레임워크 확정 후 채워짐) | 사람 + AI |
-| `scripts/` | 팀 공용 스크립트 (`bootstrap.sh` 등) | 사람 + AI |
+| `app/` | 서비스 개발 코드 (Next.js App Router) | 사람 + AI |
+| `scripts/` | 팀 공용 스크립트 (`bootstrap.sh`, `setup-git-hooks.sh`) | 사람 + AI |
 
 문서 하위 폴더 구조와 파일명 규칙은 [`docs/README.md`](./docs/README.md) 참고.
 
