@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import {
+  DEFAULT_PLANNING_MODEL,
+  PLANNING_MODELS,
   USER_PROMPT_MAX,
+  parsePlanningModel,
+  type PlaceStats,
+  type PlanningModel,
   type TravelInput,
   type TravelPlan,
 } from "@/lib/common/services/travel";
@@ -13,7 +18,7 @@ import { QuotaDebug, type LastCall } from "./quota-debug";
 type FormState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ok"; plan: TravelPlan; model?: string }
+  | { kind: "ok"; plan: TravelPlan; model?: string; planningModel: PlanningModel; placeStats?: PlaceStats }
   | { kind: "error"; message: string };
 
 const ERROR_COOLDOWN_MS = 10_000;
@@ -31,8 +36,18 @@ export function TravelForm({
   const [startDate, setStartDate] = useState(initialInput?.startDate ?? "");
   const [endDate, setEndDate] = useState(initialInput?.endDate ?? "");
   const [prompt, setPrompt] = useState(initialInput?.prompt ?? "");
+  const [planningModel, setPlanningModel] = useState<PlanningModel>(
+    initialInput?.planningModel ?? DEFAULT_PLANNING_MODEL,
+  );
   const [state, setState] = useState<FormState>(
-    initialPlan ? { kind: "ok", plan: initialPlan, model: initialModel } : { kind: "idle" },
+    initialPlan
+      ? {
+          kind: "ok",
+          plan: initialPlan,
+          model: initialModel,
+          planningModel: initialInput?.planningModel ?? DEFAULT_PLANNING_MODEL,
+        }
+      : { kind: "idle" },
   );
   const [planInput, setPlanInput] = useState<TravelInput | undefined>(
     initialPlan && initialInput ? initialInput : undefined,
@@ -57,7 +72,7 @@ export function TravelForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (isCoolingDown) return;
-    const input: TravelInput = { destination, startDate, endDate, prompt };
+    const input: TravelInput = { destination, startDate, endDate, prompt, planningModel };
     setState({ kind: "loading" });
 
     try {
@@ -74,10 +89,18 @@ export function TravelForm({
         return;
       }
       const model = typeof json.model === "string" ? json.model : undefined;
+      const responsePlanningModel = parsePlanningModel(json.planningModel);
+      const placeStats = extractPlaceStats(json.placeStats);
       const usage = extractUsage(json.usage);
       if (model && usage) setLastCall({ model, ...usage });
       setPlanInput(input);
-      setState({ kind: "ok", plan: json.plan as TravelPlan, model });
+      setState({
+        kind: "ok",
+        plan: json.plan as TravelPlan,
+        model,
+        planningModel: responsePlanningModel,
+        placeStats,
+      });
     } catch (err) {
       setState({
         kind: "error",
@@ -143,6 +166,42 @@ export function TravelForm({
           </Field>
         </div>
 
+        <section className="space-y-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold text-[var(--muted)]">추천 방식</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                속도와 장소 검증 강도를 골라 여행 계획을 만듭니다.
+              </p>
+            </div>
+          </div>
+          <div className="grid overflow-hidden rounded-xl border border-[var(--line)] bg-white md:grid-cols-3">
+            {PLANNING_MODELS.map((option) => (
+              <label
+                key={option.id}
+                className={`block cursor-pointer border-b border-[var(--line)] p-3 transition last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0 ${
+                  planningModel === option.id
+                    ? "bg-[var(--accent-soft)]"
+                    : "hover:bg-slate-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="planningModel"
+                  value={option.id}
+                  checked={planningModel === option.id}
+                  onChange={() => setPlanningModel(option.id)}
+                  className="sr-only"
+                />
+                <span className="block text-sm font-semibold text-[var(--ink)]">{option.label}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">
+                  {option.description}
+                </span>
+              </label>
+            ))}
+          </div>
+        </section>
+
         <div className="rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -191,6 +250,8 @@ export function TravelForm({
         <PlanCard
           plan={state.plan}
           model={state.model}
+          planningModel={state.planningModel}
+          placeStats={state.placeStats}
           shareInput={planInput}
         />
       )}
@@ -198,6 +259,28 @@ export function TravelForm({
       <QuotaDebug lastCall={lastCall} />
     </div>
   );
+}
+
+function extractPlaceStats(raw: unknown): PlaceStats | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const totalPlaceQueries = typeof r.totalPlaceQueries === "number" ? r.totalPlaceQueries : undefined;
+  const verifiedPlaces = typeof r.verifiedPlaces === "number" ? r.verifiedPlaces : undefined;
+  const warnings = typeof r.warnings === "number" ? r.warnings : undefined;
+  const destinationMismatches = typeof r.destinationMismatches === "number" ? r.destinationMismatches : undefined;
+  const outlierRejects = typeof r.outlierRejects === "number" ? r.outlierRejects : undefined;
+  const repairedPlaces = typeof r.repairedPlaces === "number" ? r.repairedPlaces : undefined;
+  if (
+    totalPlaceQueries === undefined ||
+    verifiedPlaces === undefined ||
+    warnings === undefined ||
+    destinationMismatches === undefined ||
+    outlierRejects === undefined ||
+    repairedPlaces === undefined
+  ) {
+    return undefined;
+  }
+  return { totalPlaceQueries, verifiedPlaces, warnings, destinationMismatches, outlierRejects, repairedPlaces };
 }
 
 function extractUsage(raw: unknown): Omit<LastCall, "model"> | undefined {

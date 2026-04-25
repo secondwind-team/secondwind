@@ -5,6 +5,9 @@ import { CheckCircle2 } from "lucide-react";
 import {
   computeBudget,
   enumeratePoints,
+  getPlanningModelInfo,
+  type PlaceStats,
+  type PlanningModel,
   type TravelInput,
   type TransitInfo,
   type TravelItem,
@@ -18,10 +21,14 @@ const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9
 export function PlanCard({
   plan,
   model,
+  planningModel,
+  placeStats,
   shareInput,
 }: {
   plan: TravelPlan;
   model?: string;
+  planningModel?: PlanningModel;
+  placeStats?: PlaceStats;
   shareInput?: TravelInput;
 }) {
   const budget = computeBudget(plan);
@@ -60,6 +67,21 @@ export function PlanCard({
           <SummaryPill label="장소" value={`${enumeratePoints(plan).length}곳`} />
           <SummaryPill label="예상 경비" value={`₩${budget.total.toLocaleString("ko-KR")}`} />
         </div>
+        {(planningModel || placeStats) && (
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[var(--muted)]">
+            {planningModel && (
+              <span className="rounded-full border border-[var(--line)] bg-white px-2 py-1">
+                추천 방식: {getPlanningModelInfo(planningModel).shortLabel}
+              </span>
+            )}
+            {placeStats && (
+              <span className="rounded-full border border-[var(--line)] bg-white px-2 py-1">
+                장소 확인: {placeStats.verifiedPlaces}/{placeStats.totalPlaceQueries}
+                {placeStats.warnings > 0 ? ` · 확인 필요 ${placeStats.warnings}` : ""}
+              </span>
+            )}
+          </div>
+        )}
         {plan.stay && (
           <p className="mt-4 text-sm text-[var(--muted)]">
             <span className="font-medium text-[var(--ink)]">숙소 기준점</span> · {plan.stay.name}
@@ -130,7 +152,7 @@ export function PlanCard({
 
       {model && (
         <p className="text-right text-[10px] text-[var(--muted)]">
-          생성 모델: {model}
+          LLM 모델: {model}
         </p>
       )}
 

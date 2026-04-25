@@ -2,6 +2,14 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.9.0] - 2026-04-25
+
+### Added
+- `/travel` 폼에 추천 방식 선택 추가: `빠른 추천`, `균형형`, `장소 정확도 우선`. 기본값은 속도와 장소 검증 사이의 균형을 잡는 `균형형`.
+- 여행 계획 생성 흐름을 `planningModel` 기반 planner 전략으로 분리. 현재는 모델별 temperature 와 장소명 규칙을 달리 적용하고, 이후 repair pass 와 후보 기반 2-pass 검증을 붙일 수 있는 구조로 열어둠.
+- API 응답에 `planningModel` 과 `placeStats` 를 추가. 결과 상단에서 사용한 추천 방식과 장소 확인 비율을 작게 표시.
+- `docs/plans/2026-04-25-travel-planning-models.md` 에 추천 모델 설계, 측정 지표, 다음 단계를 기록.
+
 ## [0.1.8.2] - 2026-04-25
 
 ### Fixed

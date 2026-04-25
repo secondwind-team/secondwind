@@ -4,6 +4,7 @@ export type LlmCallInput = {
   system: string;
   user: string;
   maxTokens?: number;
+  temperature?: number;
   // OpenAPI 3.0 subset (Gemini responseSchema). 지정 시 constrained decoding 으로
   // 출력이 schema 에 맞춰지므로 JSON.parse 실패 · 필드 누락 · 타입 불일치가 거의 사라진다.
   // 단, maxOutputTokens 에 닿아 출력이 잘리는 truncation 은 schema 로 못 막는다.
@@ -164,7 +165,7 @@ async function callGemini(
         systemInstruction: { parts: [{ text: input.system }] },
         contents: [{ role: "user", parts: [{ text: input.user }] }],
         generationConfig: {
-          temperature: 0.6,
+          temperature: input.temperature ?? 0.6,
           maxOutputTokens: input.maxTokens ?? 2048,
           responseMimeType: "application/json",
           ...(input.responseSchema ? { responseSchema: input.responseSchema } : {}),

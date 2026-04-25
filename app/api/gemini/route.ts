@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { callLlm, type RateLimitHit } from "@/lib/common/llm";
+import type { RateLimitHit } from "@/lib/common/llm";
 import {
-  buildTravelPrompt,
   normalizeTravelInput,
-  parseTravelPlan,
-  TRAVEL_PLAN_SCHEMA,
   type TravelInput,
 } from "@/lib/common/services/travel";
-import { enrichPlan } from "@/lib/common/services/travel-enrich";
+import { runTravelPlanner } from "@/lib/common/services/travel-planners";
 import { markBlocked, recordCall } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
@@ -32,17 +29,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: "error", reason: "invalid-input" }, { status: 400 });
   }
 
-  const { system, user } = buildTravelPrompt(input);
-  const result = await callLlm({
-    system,
-    user,
-    // 3박+많은 item+긴 rationale 케이스에서 6144 가 빡빡해 truncation 이 났던 정황이 있어 8192 로 상향.
-    maxTokens: 8192,
-    responseSchema: TRAVEL_PLAN_SCHEMA,
-  });
+  const result = await runTravelPlanner(input);
 
   // KV 에 rate-limit 소진 기록 (fire-and-forget).
-  if ("rateLimitHits" in result && result.rateLimitHits) {
+  if (result.status === "ok" && result.rateLimitHits) {
     void recordRateLimitHits(result.rateLimitHits);
   }
 
@@ -58,25 +48,23 @@ export async function POST(req: Request) {
   if (result.status === "error") {
     return NextResponse.json(result, { status: 502 });
   }
-
-  const plan = parseTravelPlan(result.text);
-  if (!plan) {
+  if (result.status === "invalid-response") {
     return NextResponse.json(
-      { status: "invalid-response", reason: "LLM 출력 파싱 실패", raw: result.text.slice(0, 500) },
+      { status: "invalid-response", reason: "LLM 출력 파싱 실패", raw: result.raw },
       { status: 502 },
     );
   }
 
-  await enrichPlan(plan, input.destination);
-
   // 성공한 호출의 토큰 소비를 KV 에 기록 (fire-and-forget).
-  void recordCall(result.model, result.usage.total).catch(() => {});
+  void recordCall(result.llmModel, result.usage.total).catch(() => {});
 
   return NextResponse.json({
     status: "ok",
-    plan,
+    plan: result.plan,
+    planningModel: result.planningModel,
+    placeStats: result.placeStats,
     promptVersion: result.promptVersion,
-    model: result.model,
+    model: result.llmModel,
     usage: result.usage,
   });
 }

@@ -3,6 +3,48 @@ export type TravelInput = {
   startDate: string;
   endDate: string;
   prompt: string;
+  planningModel: PlanningModel;
+};
+
+export type PlanningModel = "classic" | "balanced" | "verified";
+
+export type PlanningModelInfo = {
+  id: PlanningModel;
+  label: string;
+  shortLabel: string;
+  description: string;
+};
+
+export const DEFAULT_PLANNING_MODEL: PlanningModel = "balanced";
+
+export const PLANNING_MODELS: PlanningModelInfo[] = [
+  {
+    id: "classic",
+    label: "빠른 추천",
+    shortLabel: "빠른 추천",
+    description: "현재 방식에 가깝게 빠르게 하나의 일정을 만듭니다. 일부 장소는 확인이 필요할 수 있어요.",
+  },
+  {
+    id: "balanced",
+    label: "균형형",
+    shortLabel: "균형형",
+    description: "일정 완성도와 장소 정확도를 함께 봅니다. 기본 추천 방식입니다.",
+  },
+  {
+    id: "verified",
+    label: "장소 정확도 우선",
+    shortLabel: "정확도 우선",
+    description: "확실한 장소명을 더 보수적으로 고릅니다. 빈 장소가 조금 늘 수 있어요.",
+  },
+];
+
+export type PlaceStats = {
+  totalPlaceQueries: number;
+  verifiedPlaces: number;
+  warnings: number;
+  destinationMismatches: number;
+  outlierRejects: number;
+  repairedPlaces: number;
 };
 
 export type TransitInfo = {
@@ -65,12 +107,23 @@ export function normalizeTravelInput(raw: unknown): TravelInput | null {
   const startDate = typeof r.startDate === "string" ? r.startDate : "";
   const endDate = typeof r.endDate === "string" ? r.endDate : "";
   const prompt = typeof r.prompt === "string" ? r.prompt.trim().slice(0, USER_PROMPT_MAX) : "";
+  const planningModel = parsePlanningModel(r.planningModel);
 
   if (!destination) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return null;
   if (new Date(endDate) < new Date(startDate)) return null;
 
-  return { destination, startDate, endDate, prompt };
+  return { destination, startDate, endDate, prompt, planningModel };
+}
+
+export function parsePlanningModel(raw: unknown): PlanningModel {
+  return raw === "classic" || raw === "balanced" || raw === "verified"
+    ? raw
+    : DEFAULT_PLANNING_MODEL;
+}
+
+export function getPlanningModelInfo(model: PlanningModel): PlanningModelInfo {
+  return PLANNING_MODELS.find((m) => m.id === model) ?? PLANNING_MODELS[0]!;
 }
 
 const SYSTEM_PROMPT = `당신은 J 강박이 있는 한국인 여행자를 돕는 계획자입니다.
@@ -144,7 +197,31 @@ export function buildTravelPrompt(input: TravelInput): { system: string; user: s
     '  "caveats": string[]',
     "}",
   ].join("\n");
-  return { system: SYSTEM_PROMPT, user: userPrompt };
+  return { system: `${SYSTEM_PROMPT}\n\n${planningModelInstruction(input.planningModel)}`, user: userPrompt };
+}
+
+function planningModelInstruction(model: PlanningModel): string {
+  if (model === "classic") {
+    return [
+      "추천 모델: 빠른 추천.",
+      "- 일정 완성도를 우선하고, 장소명은 이미 알고 있는 실제 고유명사만 사용.",
+      '- 구체 장소가 불확실하면 place_query 는 빈 문자열 "" 로 둔다.',
+    ].join("\n");
+  }
+  if (model === "verified") {
+    return [
+      "추천 모델: 장소 정확도 우선.",
+      "- 장소 수를 억지로 늘리지 말고, 지도 검색에서 단일 POI 로 확인될 가능성이 높은 고유명사만 사용.",
+      "- 지역+카테고리 조합, 기억이 불확실한 식당/카페명, 분점 불명확한 체인명은 피한다.",
+      '- 확실한 고유명사를 모르면 place_query 는 빈 문자열 "" 로 두고 text 에도 단정적인 상호명을 쓰지 않는다.',
+    ].join("\n");
+  }
+  return [
+    "추천 모델: 균형형.",
+    "- 일정 완성도와 장소 정확도를 함께 고려한다.",
+    "- 식사 장소는 가능한 한 실제 고유명사를 쓰되, 확실하지 않으면 빈 place_query 로 둔다.",
+    "- 동선상 핵심 장소는 단일 POI 로 검색될 가능성이 높은 이름을 우선한다.",
+  ].join("\n");
 }
 
 // Gemini responseSchema (OpenAPI 3.0 subset). 생성 품질을 위해 place_query 는 필수로 강제한다.

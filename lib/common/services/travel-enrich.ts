@@ -1,5 +1,11 @@
 import { env, assertServerEnv } from "@/lib/common/env";
-import { kakaoMapSearchUrl, type PlaceInfo, type TravelItem, type TravelPlan } from "./travel";
+import {
+  kakaoMapSearchUrl,
+  type PlaceInfo,
+  type PlaceStats,
+  type TravelItem,
+  type TravelPlan,
+} from "./travel";
 
 const NAVER_URL = "https://openapi.naver.com/v1/search/local.json";
 const PER_CALL_TIMEOUT_MS = 5_000;
@@ -272,4 +278,17 @@ export async function enrichPlan(plan: TravelPlan, destHint?: string): Promise<v
   }
   await Promise.all(tasks);
   rejectDayOutliers(plan);
+}
+
+export function computePlaceStats(plan: TravelPlan, repairedPlaces = 0): PlaceStats {
+  const items = plan.days.flatMap((day) => day.items);
+  const warnings = items.filter((item) => item.place_warning).length;
+  return {
+    totalPlaceQueries: items.filter((item) => Boolean(item.place_query)).length,
+    verifiedPlaces: items.filter((item) => item.place).length,
+    warnings,
+    destinationMismatches: items.filter((item) => item.place_warning?.includes("주소가 목적지와 달라")).length,
+    outlierRejects: items.filter((item) => item.place_warning?.includes("너무 멀어")).length,
+    repairedPlaces,
+  };
 }
