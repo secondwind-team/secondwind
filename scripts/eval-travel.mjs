@@ -182,6 +182,23 @@ function planMetrics(plan, placeStats) {
   };
 }
 
+function placeAudit(plan) {
+  const days = Array.isArray(plan?.days) ? plan.days : [];
+  return days.flatMap((day) =>
+    (day.items ?? [])
+      .filter((item) => item.place_query || item.place || item.place_warning)
+      .map((item) => ({
+        day: day.label,
+        text: item.text,
+        placeQuery: item.place_query ?? "",
+        placeName: item.place?.name ?? "",
+        category: item.place?.category ?? "",
+        address: item.place?.address ?? "",
+        warning: item.place_warning ?? "",
+      })),
+  );
+}
+
 function round(n) {
   return Math.round(n * 1000) / 1000;
 }
@@ -287,6 +304,7 @@ async function main() {
           usage: response.usage,
           placeStats: response.placeStats,
           metrics: response.status === "ok" ? planMetrics(response.plan, response.placeStats) : undefined,
+          placeAudit: response.status === "ok" ? placeAudit(response.plan) : undefined,
           error: response.status === "error" ? { reason: response.reason, raw: response.raw } : undefined,
         };
         results.push(result);

@@ -157,6 +157,19 @@ function addressMatchesDestination(address: string | undefined, destHint?: strin
   return aliases.some((alias) => normalizedAddress.includes(normalizeText(alias)));
 }
 
+function isLikelyLandmarkQuery(query: string): boolean {
+  return /(해변|해수욕장|오름|폭포|공원|수목원|정원|박물관|미술관|전망대|성산|일출봉|시장|거리|마을|숲길|둘레길)/.test(
+    query,
+  );
+}
+
+function categoryMatchesQuery(query: string, category: string | undefined): boolean {
+  if (!category || !isLikelyLandmarkQuery(query)) return true;
+  if (/여행|명소|문화|예술|레저|테마/.test(category)) return true;
+  if (/시장/.test(query) && /쇼핑|유통|시장/.test(category)) return true;
+  return false;
+}
+
 async function fetchNaverOnce(query: string): Promise<NaverLocalItem[] | null> {
   const url = `${NAVER_URL}?query=${encodeURIComponent(query)}&display=5`;
   const controller = new AbortController();
@@ -197,6 +210,13 @@ async function searchPlace(query: string, destHint?: string): Promise<PlaceLooku
 
   const info = toPlaceInfo(best, query);
   const address = best.roadAddress || best.address;
+  if (!categoryMatchesQuery(query, best.category)) {
+    const name = info.name ?? query;
+    return {
+      status: "rejected",
+      warning: `지도 후보 "${name}"의 업종이 활동 장소와 달라 위치를 확정하지 않았습니다.`,
+    };
+  }
   if (!addressMatchesDestination(address, destHint)) {
     const name = info.name ?? query;
     return {
@@ -232,7 +252,12 @@ export async function searchPlaceCandidates(
       title: stripHtml(item.title ?? ""),
       score: overlapScore(scoreQuery, stripHtml(item.title ?? "")),
     }))
-    .filter(({ item, score }) => score >= MIN_SCORE && addressMatchesDestination(item.roadAddress || item.address, destHint))
+    .filter(
+      ({ item, score }) =>
+        score >= MIN_SCORE &&
+        categoryMatchesQuery(query, item.category) &&
+        addressMatchesDestination(item.roadAddress || item.address, destHint),
+    )
     .flatMap(({ item }) => {
       const place = toPlaceInfo(item, query);
       const key = `${place.name ?? ""}|${place.address ?? ""}`;
@@ -299,9 +324,13 @@ export async function enrichPlan(plan: TravelPlan, destHint?: string): Promise<v
       if (!item.place_query) continue;
       tasks.push(
         searchPlace(item.place_query, destHint).then((result) => {
-          if (!result) return;
+          if (!result) {
+            item.place_warning = `"${item.place_query}" 장소를 지도에서 확인하지 못했습니다.`;
+            return;
+          }
           if (result.status === "ok") {
             item.place = result.place;
+            item.place_warning = undefined;
           } else {
             item.place_warning = result.warning;
           }

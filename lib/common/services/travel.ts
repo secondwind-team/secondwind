@@ -331,7 +331,7 @@ function sanitizeGeneratedPlan(plan: TravelPlan): void {
 
 function shouldSuppressPlaceQuery(item: TravelItem): boolean {
   const text = `${item.text} ${item.place_query ?? ""}`;
-  return /공항\s*(도착|출발)|렌터카\s*(수령|반납)|렌트카\s*(수령|반납)|숙소\s*(체크인|체크아웃)|호텔\s*(체크인|체크아웃)|조식/.test(text);
+  return /공항\s*(도착|출발)|렌터카\s*(수령|반납)|렌트카\s*(수령|반납)|체크인|체크아웃|조식|낮잠|숙소.*(복귀|휴식)|호텔.*휴식/.test(text);
 }
 
 // `/link/` 포맷은 모바일에서 카카오맵 앱 deep link 가 걸려 네이버/카카오 앱이 섞여 뜨는 원인이 됨.
