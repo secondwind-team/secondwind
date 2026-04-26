@@ -31,7 +31,15 @@ Codex 에서 gstack 스킬은 **`/gstack-` 접두사** 가 붙음:
 
 (Claude Code 환경에선 prefix 없음 — `CLAUDE.md` 참조)
 
+### 프로젝트 공용 스킬
+
+`./scripts/bootstrap.sh` 실행 후 repo-local 스킬이 Codex 로 설치됨.
+
+- **`/feature`**: `docs/plans/2026-04-26-feature-inventory.md` 를 기준으로 feature 목록 조회, 상세 보기, 추가, 수정, 삭제/폐기 표시, 구현 시작을 돕는다.
+- 도움말: `/feature help`
+
 ### 도구별 quirk
 
 - gstack skill 본체는 `~/.codex/skills/gstack/<skill>/AGENTS.md` 또는 `SKILL.md`.
+- 프로젝트 공용 `/feature` skill 원본은 `.agents/skills/feature/SKILL.md`, 설치본은 `~/.codex/skills/feature/SKILL.md`.
 - Codex 는 conversation 시작 시 `AGENTS.md` 만 자동 로드 — 다른 .md 파일은 명시적으로 읽어야 함.

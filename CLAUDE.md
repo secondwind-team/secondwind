@@ -31,7 +31,15 @@ Claude Code 에서 gstack 스킬은 **prefix 없이** 호출:
 
 (Codex 환경에선 `/gstack-` 접두사가 붙음 — `AGENTS.md` 참조)
 
+### 프로젝트 공용 스킬
+
+`./scripts/bootstrap.sh` 실행 후 repo-local 스킬이 Claude Code 로 설치됨.
+
+- **`/feature`**: `docs/plans/2026-04-26-feature-inventory.md` 를 기준으로 feature 목록 조회, 상세 보기, 추가, 수정, 삭제/폐기 표시, 구현 시작을 돕는다.
+- 도움말: `/feature help`
+
 ### 도구별 quirk
 
 - gstack skill 본체는 `~/.claude/skills/gstack/<skill>/SKILL.md`.
+- 프로젝트 공용 `/feature` skill 원본은 `.agents/skills/feature/SKILL.md`, 설치본은 `~/.claude/skills/feature/SKILL.md`.
 - Claude Code 는 conversation 시작 시 `CLAUDE.md` 만 자동 로드 — 다른 .md 파일은 명시적 Read 필요.

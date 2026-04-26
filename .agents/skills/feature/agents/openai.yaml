@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feature"
+  short_description: "Manage secondwind feature inventory"
+  default_prompt: "/feature help"

@@ -11,6 +11,36 @@ set -e
 
 HOST="${1:-both}"
 GSTACK_HOME="$HOME/.claude/skills/gstack"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+install_project_skill() {
+  local host="$1"
+  local source_dir="$2"
+  local target_root
+
+  case "$host" in
+    claude)
+      target_root="$HOME/.claude/skills"
+      ;;
+    codex)
+      target_root="$HOME/.codex/skills"
+      ;;
+    *)
+      echo "Unknown project skill host: $host" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ ! -d "$source_dir" ]; then
+    return
+  fi
+
+  mkdir -p "$target_root"
+  rm -rf "$target_root/feature"
+  cp -R "$source_dir" "$target_root/feature"
+  echo "Installed /feature skill for $host -> $target_root/feature"
+}
 
 # ── 1. Ensure Bun is installed ────────────────────────────────
 if ! command -v bun >/dev/null 2>&1; then
@@ -57,7 +87,6 @@ esac
 
 # ── 4. Install repo-local git hooks ───────────────────────────
 # Returns to the repo root since the gstack setup above changed cwd.
-REPO_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 cd "$REPO_ROOT"
 if [ -x "scripts/setup-git-hooks.sh" ]; then
   echo ""
@@ -67,8 +96,28 @@ else
   echo "⚠️  scripts/setup-git-hooks.sh not found or not executable — git hooks not installed." >&2
 fi
 
+# ── 5. Install project-local team skills ──────────────────────
+PROJECT_FEATURE_SKILL="$REPO_ROOT/.agents/skills/feature"
+if [ -d "$PROJECT_FEATURE_SKILL" ]; then
+  echo ""
+  echo "Installing project skills…"
+  case "$HOST" in
+    claude)
+      install_project_skill claude "$PROJECT_FEATURE_SKILL"
+      ;;
+    codex)
+      install_project_skill codex "$PROJECT_FEATURE_SKILL"
+      ;;
+    both|"")
+      install_project_skill claude "$PROJECT_FEATURE_SKILL"
+      install_project_skill codex "$PROJECT_FEATURE_SKILL"
+      ;;
+  esac
+fi
+
 echo ""
 echo "Done. Next session, try these in your AI coding tool:"
+echo "  /feature help       — manage the shared feature inventory"
 echo "  /office-hours        — start an ideation session"
 echo "  /autoplan            — plan + design + engineering review"
 echo "  /qa                  — browser-based QA with auto-fix"
