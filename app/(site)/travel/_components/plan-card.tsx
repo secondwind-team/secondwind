@@ -1,12 +1,12 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Bug, CheckCircle2, MessageSquare, Send } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import {
   computeBudget,
+  describeBudgetIncludes,
   enumeratePoints,
   evaluateBudget,
-  getBudgetScopeInfo,
   getPlanningModelInfo,
   type BudgetCheck,
   type PlaceStats,
@@ -35,7 +35,12 @@ export function PlanCard({
   shareInput?: TravelInput;
 }) {
   const budget = computeBudget(plan);
-  const budgetCheck = evaluateBudget(budget, shareInput?.budgetKrw, shareInput?.budgetScope);
+  const budgetCheck = evaluateBudget(
+    budget,
+    shareInput?.budgetKrw,
+    shareInput?.budgetIncludes ?? shareInput?.budgetScope,
+    plan,
+  );
   const labelByItem = new Map(enumeratePoints(plan).map((p) => [p.item, p.label]));
   const [legsByItem, setLegsByItem] = useState<LegsByItem | null>(null);
   const [mapItem, setMapItem] = useState<TravelItem | null>(null);
@@ -155,20 +160,7 @@ export function PlanCard({
 
       <SourcesLegend />
 
-      {shareInput && (
-        <section className="space-y-3">
-          <ShareSection input={shareInput} plan={plan} model={model} />
-          <details>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-slate-50 px-4 py-3 text-sm font-medium text-[var(--ink)]">
-              <span>피드백 · 버그리포트</span>
-              <span className="text-xs font-normal text-[var(--muted)]">문제가 있을 때 열기</span>
-            </summary>
-            <div className="mt-3">
-              <FeedbackSection input={shareInput} plan={plan} model={model} />
-            </div>
-          </details>
-        </section>
-      )}
+      {shareInput && <ShareSection input={shareInput} plan={plan} model={model} />}
 
       {model && (
         <p className="text-right text-[10px] text-[var(--muted)]">
@@ -206,7 +198,7 @@ function BudgetOverageBanner({ check }: { check: BudgetCheck }) {
   const requested = check.requested.toLocaleString("ko-KR");
   const scoped = check.scopedTotal.toLocaleString("ko-KR");
   const over = check.overage.toLocaleString("ko-KR");
-  const scopeInfo = getBudgetScopeInfo(check.scope);
+  const includes = describeBudgetIncludes(check.includes);
   return (
     <section
       role="status"
@@ -219,8 +211,7 @@ function BudgetOverageBanner({ check }: { check: BudgetCheck }) {
         요청 ₩{requested} · 예상 ₩{scoped} <span className="text-amber-700">(₩{over} 초과)</span>
       </p>
       <p className="mt-1 text-xs leading-relaxed text-amber-800">
-        예산 기준: <span className="font-medium">{scopeInfo.label}</span>{" "}
-        <span className="text-amber-700">({scopeInfo.hint})</span>
+        예산 기준: <span className="font-medium">{includes}</span>
       </p>
       <p className="mt-2 text-xs leading-relaxed text-amber-800">
         아래 일정과 비용 항목을 확인하고, 줄일 항목을 직접 골라주세요. 가격은 AI 추정값이라 실제와 다를 수 있어요.
@@ -535,173 +526,6 @@ function formatExpiresAt(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-type FeedbackCategory = "bug" | "quality" | "other";
-
-type FeedbackState =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "ok"; id: string }
-  | { kind: "error"; message: string };
-
-const FEEDBACK_OPTIONS: Array<{
-  id: FeedbackCategory;
-  label: string;
-  description: string;
-}> = [
-  { id: "quality", label: "품질", description: "일정이 별로예요" },
-  { id: "bug", label: "버그", description: "화면이나 데이터가 이상해요" },
-  { id: "other", label: "기타", description: "다른 의견이에요" },
-];
-
-export type FeedbackDraftInput = {
-  destination: string;
-  startDate: string;
-  endDate: string;
-  prompt: string;
-  planningModel: PlanningModel;
-  budgetKrw?: number;
-  budgetScope?: string;
-};
-
-export function FeedbackSection({
-  input,
-  draftInput,
-  plan,
-  model,
-  context,
-}: {
-  input?: TravelInput;
-  draftInput?: FeedbackDraftInput;
-  plan?: TravelPlan;
-  model?: string;
-  context?: string;
-}) {
-  const [category, setCategory] = useState<FeedbackCategory>("quality");
-  const [message, setMessage] = useState("");
-  const [state, setState] = useState<FeedbackState>({ kind: "idle" });
-  const trimmed = message.trim();
-  const canSubmit = trimmed.length >= 3 && state.kind !== "saving";
-
-  async function submitFeedback() {
-    if (!canSubmit) return;
-    setState({ kind: "saving" });
-    try {
-      const res = await fetch("/api/travel/feedback", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          category,
-          message: trimmed,
-          input,
-          draftInput,
-          plan,
-          model,
-          context,
-          pagePath: window.location.pathname,
-        }),
-      });
-      const json = (await res.json()) as Record<string, unknown>;
-      if (!res.ok || json.status !== "ok" || typeof json.id !== "string") {
-        setState({ kind: "error", message: friendlyFeedbackError(json) });
-        return;
-      }
-      setMessage("");
-      setState({ kind: "ok", id: json.id });
-    } catch {
-      setState({ kind: "error", message: "피드백을 보내지 못했습니다. 잠시 후 다시 시도해주세요." });
-    }
-  }
-
-  return (
-    <section className="space-y-3 rounded-2xl border border-[var(--line)] bg-slate-50 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]">
-            <MessageSquare aria-hidden className="h-4 w-4 text-[var(--accent)]" />
-            피드백 · 버그리포트
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-            현재 입력값{plan ? "과 결과 화면 맥락" : "과 오류 상태"}을 함께 보내 개선에 사용합니다. 전화번호와 이메일은 자동으로 가립니다.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-3">
-        {FEEDBACK_OPTIONS.map((option) => (
-          <label
-            key={option.id}
-            className={`cursor-pointer rounded-xl border bg-white p-3 text-xs transition ${
-              category === option.id
-                ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]"
-                : "border-[var(--line)] hover:border-[var(--accent)]"
-            }`}
-          >
-            <input
-              type="radio"
-              name="travel-feedback-category"
-              value={option.id}
-              checked={category === option.id}
-              onChange={() => setCategory(option.id)}
-              className="sr-only"
-            />
-            <span className="flex items-center gap-1.5 font-semibold text-[var(--ink)]">
-              {option.id === "bug" && <Bug aria-hidden className="h-3.5 w-3.5" />}
-              {option.label}
-            </span>
-            <span className="mt-1 block text-[var(--muted)]">{option.description}</span>
-          </label>
-        ))}
-      </div>
-
-      <textarea
-        value={message}
-        onChange={(e) => {
-          setMessage(e.target.value.slice(0, 1000));
-          if (state.kind !== "saving") setState({ kind: "idle" });
-        }}
-        rows={3}
-        maxLength={1000}
-        placeholder="무엇이 이상했는지, 기대와 실제가 어떻게 달랐는지 적어주세요."
-        className="w-full resize-y rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm leading-relaxed outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
-      />
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[11px] text-[var(--muted)]">{message.length} / 1000</p>
-        <button
-          type="button"
-          onClick={submitFeedback}
-          disabled={!canSubmit}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] transition hover:border-[var(--accent)] disabled:opacity-60"
-        >
-          <Send aria-hidden className="h-3.5 w-3.5" />
-          {state.kind === "saving" ? "보내는 중..." : "보내기"}
-        </button>
-      </div>
-
-      {state.kind === "ok" && (
-        <p role="status" className="text-xs text-emerald-700">
-          피드백을 받았습니다. 기록 ID: {state.id}
-        </p>
-      )}
-      {state.kind === "error" && (
-        <p role="status" className="text-xs text-amber-800">
-          {state.message}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function friendlyFeedbackError(json: Record<string, unknown>): string {
-  if (json.status === "not-configured") {
-    return "피드백 저장소가 아직 연결되지 않았습니다.";
-  }
-  if (json.reason === "invalid-message") {
-    return "피드백을 세 글자 이상 적어주세요.";
-  }
-  return "피드백을 보내지 못했습니다. 잠시 후 다시 시도해주세요.";
 }
 
 // mode 에 "차량"·"택시"·"자동차"·"렌터" 중 하나라도 포함되면 OSRM driving 결과로 덮어쓰기 가능.

@@ -338,7 +338,10 @@ export async function enrichPlan(plan: TravelPlan, destHint?: string): Promise<v
       );
     }
   }
-  if (plan.stay) {
+  if (
+    plan.stay &&
+    (typeof plan.stay.place?.lat !== "number" || typeof plan.stay.place?.lng !== "number")
+  ) {
     const stay = plan.stay;
     tasks.push(
       searchPlace(stay.name, destHint).then((result) => {

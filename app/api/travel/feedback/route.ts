@@ -54,10 +54,6 @@ export async function POST(req: Request) {
 
   const input = validation?.ok ? validation.input : (normalizeTravelInput(body.draftInput) ?? undefined);
   const draftInput = normalizeFeedbackDraftInput(body.draftInput);
-  if (!input && !draftInput) {
-    return NextResponse.json({ status: "error", reason: "missing-snapshot" }, { status: 400 });
-  }
-
   const model = typeof body.model === "string" ? body.model : undefined;
   const pagePath = typeof body.pagePath === "string" ? body.pagePath.slice(0, 300) : undefined;
   const context = typeof body.context === "string" ? body.context.slice(0, 1000) : undefined;

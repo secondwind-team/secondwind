@@ -110,6 +110,9 @@ export async function runTravelPlanner(
 
   const plan = parseTravelPlan(result.text);
   if (!plan) return { status: "invalid-response", raw: result.text.slice(0, 500) };
+  if (input.stay?.name) {
+    plan.stay = input.stay;
+  }
 
   let usage = result.usage;
   const rateLimitHits = [...(result.rateLimitHits ?? [])];

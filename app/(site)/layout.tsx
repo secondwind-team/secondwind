@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GlobalFeedback } from "./_components/global-feedback";
 
 export default function SiteLayout({
   children,
@@ -21,6 +22,7 @@ export default function SiteLayout({
       <footer className="pt-16 text-xs text-[var(--muted)]">
         secondwind · 3인 바이브 코딩 스튜디오
       </footer>
+      <GlobalFeedback />
     </div>
   );
 }

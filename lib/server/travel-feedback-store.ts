@@ -40,6 +40,8 @@ export type TravelFeedbackDraftInput = {
   planningModel?: string;
   budgetKrw?: number;
   budgetScope?: string;
+  budgetIncludes?: string[];
+  stayName?: string;
 };
 
 export type TravelFeedbackRecord = {
@@ -95,6 +97,15 @@ export function normalizeFeedbackDraftInput(raw: unknown): TravelFeedbackDraftIn
     out.budgetKrw = Math.round(r.budgetKrw);
   }
   if (typeof r.budgetScope === "string") out.budgetScope = r.budgetScope.slice(0, 30);
+  if (Array.isArray(r.budgetIncludes)) {
+    const budgetIncludes = r.budgetIncludes
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.slice(0, 30))
+      .slice(0, 10);
+    if (budgetIncludes.length > 0) out.budgetIncludes = budgetIncludes;
+  }
+  const stay = typeof r.stay === "object" && r.stay !== null ? (r.stay as Record<string, unknown>) : undefined;
+  if (typeof stay?.name === "string") out.stayName = maskSensitiveText(stay.name.trim().slice(0, 120));
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -113,7 +124,6 @@ export async function createTravelFeedback(feedback: TravelFeedbackInput): Promi
     throw new Error("invalid-feedback-snapshot");
   }
   const draftInput = feedback.draftInput ? normalizeFeedbackDraftInput(feedback.draftInput) : undefined;
-  if (!input && !draftInput) throw new Error("missing-feedback-snapshot");
 
   const now = Date.now();
   const record: TravelFeedbackRecord = {

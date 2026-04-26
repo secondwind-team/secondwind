@@ -1,24 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BedDouble, Bus, Car, ShoppingBag, Soup, Ticket } from "lucide-react";
 import {
-  BUDGET_SCOPES,
-  DEFAULT_BUDGET_SCOPE,
+  BUDGET_CATEGORIES,
+  DEFAULT_BUDGET_INCLUDES,
   DEFAULT_PLANNING_MODEL,
   PLANNING_MODELS,
   USER_PROMPT_MAX,
   parsePlanningModel,
   validateTravelInput,
-  type BudgetScope,
+  type BudgetCategory,
   type PlaceStats,
   type PlanningModel,
+  type Stay,
   type TravelInput,
   type TravelInputValidationReason,
   type TravelPlan,
 } from "@/lib/common/services/travel";
-import { FeedbackSection, PlanCard, type FeedbackDraftInput } from "./plan-card";
+import { PlanCard } from "./plan-card";
 import { PromptToolbar } from "./prompt-toolbar";
 import { QuotaDebug, type LastCall } from "./quota-debug";
+import { StayPicker } from "./stay-picker";
 
 type FormState =
   | { kind: "idle" }
@@ -47,9 +50,10 @@ export function TravelForm({
   const [budgetInput, setBudgetInput] = useState(
     initialInput?.budgetKrw ? String(initialInput.budgetKrw) : "",
   );
-  const [budgetScope, setBudgetScope] = useState<BudgetScope>(
-    initialInput?.budgetScope ?? DEFAULT_BUDGET_SCOPE,
+  const [budgetIncludes, setBudgetIncludes] = useState<BudgetCategory[]>(
+    initialInput?.budgetIncludes ?? DEFAULT_BUDGET_INCLUDES,
   );
+  const [stay, setStay] = useState<Stay | undefined>(initialInput?.stay);
   const [state, setState] = useState<FormState>(
     initialPlan
       ? {
@@ -79,17 +83,6 @@ export function TravelForm({
 
   const cooldownRemainingSec = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
   const isCoolingDown = cooldownRemainingSec > 0;
-  const currentBudgetKrw = parseBudgetField(budgetInput);
-  const currentDraftInput: FeedbackDraftInput = {
-    destination,
-    startDate,
-    endDate,
-    prompt,
-    planningModel,
-    ...(currentBudgetKrw !== undefined ? { budgetKrw: currentBudgetKrw, budgetScope } : {}),
-  };
-  const currentValidInput = validateTravelInput(currentDraftInput);
-  const feedbackInput = currentValidInput.ok ? currentValidInput.input : undefined;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -101,7 +94,8 @@ export function TravelForm({
       endDate,
       prompt,
       planningModel,
-      ...(budgetKrw !== undefined ? { budgetKrw, budgetScope } : {}),
+      ...(stay ? { stay } : {}),
+      ...(budgetKrw !== undefined ? { budgetKrw, budgetIncludes } : {}),
     };
     const validation = validateTravelInput(input);
     if (!validation.ok) {
@@ -205,38 +199,14 @@ export function TravelForm({
             </Field>
           </div>
 
-          <div className="rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-                  context
-                </span>
-                <p className="mt-1 text-sm font-medium text-[var(--ink)]">요청사항</p>
-              </div>
-              <p className="text-xs text-[var(--muted)]">숙소 · 구성원 · 이동수단 · 피하고 싶은 것</p>
-            </div>
-            <PromptToolbar value={prompt} onChange={setPrompt} maxLength={USER_PROMPT_MAX} />
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value.slice(0, USER_PROMPT_MAX))}
-              maxLength={USER_PROMPT_MAX}
-              rows={6}
-              placeholder="인원·이동수단·숙소·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 빈 상자가 막막하면 위의 '가이드 양식' 또는 '예시 보기' 를 눌러보세요."
-              className="mt-3 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm leading-relaxed outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
-            />
-            <div className="mt-1 text-right text-xs text-[var(--muted)]">
-              {prompt.length} / {USER_PROMPT_MAX}
-            </div>
-          </div>
-
           <details
-            open={Boolean(budgetInput) || planningModel !== DEFAULT_PLANNING_MODEL}
+            open={Boolean(budgetInput) || planningModel !== DEFAULT_PLANNING_MODEL || Boolean(stay)}
             className="rounded-2xl border border-[var(--line)] bg-white"
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-[var(--ink)]">
               <span>선택 옵션</span>
               <span className="text-xs font-normal text-[var(--muted)]">
-                예산 · 추천 방식
+                예산 · 숙소 · 추천 방식
               </span>
             </summary>
             <div className="space-y-5 border-t border-[var(--line)] p-4">
@@ -265,31 +235,34 @@ export function TravelForm({
                 </div>
                 <fieldset className="space-y-2">
                   <legend className="text-xs font-semibold text-[var(--muted)]">이 예산에 포함되는 것</legend>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    {BUDGET_SCOPES.map((opt) => (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    {BUDGET_CATEGORIES.map((opt) => (
                       <label
                         key={opt.id}
-                        className={`block cursor-pointer rounded-xl border p-2.5 text-xs transition ${
-                          budgetScope === opt.id
-                            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                            : "border-[var(--line)] bg-white hover:border-[var(--accent)]"
+                        className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border p-2.5 text-center text-xs transition ${
+                          budgetIncludes.includes(opt.id)
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                            : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--accent)]"
                         }`}
                       >
                         <input
-                          type="radio"
-                          name="budgetScope"
+                          type="checkbox"
+                          name="budgetIncludes"
                           value={opt.id}
-                          checked={budgetScope === opt.id}
-                          onChange={() => setBudgetScope(opt.id)}
+                          checked={budgetIncludes.includes(opt.id)}
+                          onChange={() => setBudgetIncludes((current) => toggleBudgetInclude(current, opt.id))}
                           className="sr-only"
                         />
-                        <span className="block text-sm font-semibold text-[var(--ink)]">{opt.label}</span>
-                        <span className="mt-0.5 block text-[var(--muted)]">{opt.hint}</span>
+                        <BudgetIcon id={opt.id} />
+                        <span className="font-semibold">{opt.label}</span>
+                        <span className="text-[10px]">{opt.hint}</span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
               </section>
+
+              <StayPicker destination={destination} value={stay} onChange={setStay} />
 
               <section className="space-y-3">
                 <div>
@@ -327,6 +300,30 @@ export function TravelForm({
             </div>
           </details>
 
+          <div className="rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+                  context
+                </span>
+                <p className="mt-1 text-sm font-medium text-[var(--ink)]">요청사항</p>
+              </div>
+              <p className="text-xs text-[var(--muted)]">구성원 · 이동수단 · 피하고 싶은 것</p>
+            </div>
+            <PromptToolbar value={prompt} onChange={setPrompt} maxLength={USER_PROMPT_MAX} />
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value.slice(0, USER_PROMPT_MAX))}
+              maxLength={USER_PROMPT_MAX}
+              rows={6}
+              placeholder="인원·이동수단·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 숙소는 위 선택 옵션에서 고를 수 있어요."
+              className="mt-3 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm leading-relaxed outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
+            />
+            <div className="mt-1 text-right text-xs text-[var(--muted)]">
+              {prompt.length} / {USER_PROMPT_MAX}
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={state.kind === "loading" || isCoolingDown}
@@ -347,14 +344,6 @@ export function TravelForm({
         </p>
       )}
 
-      {state.kind !== "ok" && state.kind !== "loading" && (
-        <FeedbackSection
-          input={feedbackInput}
-          draftInput={currentDraftInput}
-          context={state.kind === "error" ? state.message : "no-plan-yet"}
-        />
-      )}
-
       {state.kind === "ok" && (
         <PlanCard
           plan={state.plan}
@@ -368,6 +357,22 @@ export function TravelForm({
       <QuotaDebug lastCall={lastCall} />
     </div>
   );
+}
+
+function toggleBudgetInclude(current: BudgetCategory[], id: BudgetCategory): BudgetCategory[] {
+  return current.includes(id)
+    ? current.filter((item) => item !== id)
+    : [...current, id];
+}
+
+function BudgetIcon({ id }: { id: BudgetCategory }) {
+  const className = "h-4 w-4";
+  if (id === "lodging") return <BedDouble className={className} aria-hidden />;
+  if (id === "rental") return <Car className={className} aria-hidden />;
+  if (id === "transport") return <Bus className={className} aria-hidden />;
+  if (id === "admission") return <Ticket className={className} aria-hidden />;
+  if (id === "food") return <Soup className={className} aria-hidden />;
+  return <ShoppingBag className={className} aria-hidden />;
 }
 
 function extractPlaceStats(raw: unknown): PlaceStats | undefined {

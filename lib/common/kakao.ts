@@ -29,6 +29,10 @@ export type KakaoGlobal = {
       xAnchor?: number;
       map?: KakaoMap;
     }) => KakaoCustomOverlay;
+    services?: {
+      Places: new () => KakaoPlaces;
+      Status: { OK: string; ZERO_RESULT: string; ERROR: string };
+    };
   };
 };
 export type KakaoLatLng = { __type: "LatLng" };
@@ -37,6 +41,24 @@ export type KakaoMap = { setBounds: (b: KakaoLatLngBounds) => void; setCenter: (
 export type KakaoMarker = { setMap: (m: KakaoMap | null) => void };
 export type KakaoPolyline = { setMap: (m: KakaoMap | null) => void };
 export type KakaoCustomOverlay = { setMap: (m: KakaoMap | null) => void };
+export type KakaoPlaceSearchResult = {
+  id: string;
+  place_name: string;
+  category_name?: string;
+  phone?: string;
+  address_name?: string;
+  road_address_name?: string;
+  place_url?: string;
+  x: string;
+  y: string;
+};
+export type KakaoPlaces = {
+  keywordSearch: (
+    keyword: string,
+    callback: (result: KakaoPlaceSearchResult[], status: string) => void,
+    options?: { size?: number },
+  ) => void;
+};
 
 export function loadKakaoSdk(appKey: string): Promise<KakaoGlobal> {
   if (typeof window === "undefined") return Promise.reject(new Error("server"));
@@ -65,7 +87,7 @@ export function loadKakaoSdk(appKey: string): Promise<KakaoGlobal> {
     s.async = true;
     s.defer = true;
     s.dataset.kakaoMapsSdk = "true";
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false`;
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
     s.onload = () => {
       if (window.kakao?.maps) {
         window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));

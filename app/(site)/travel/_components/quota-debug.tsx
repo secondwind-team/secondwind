@@ -3,6 +3,7 @@
 // TODO: 429 안정화되면 이 파일 + lib/server/quota-store.ts + /api/quota 제거
 
 import { useEffect, useState } from "react";
+import { Activity, X } from "lucide-react";
 
 export type LastCall = {
   model: string;
@@ -33,6 +34,7 @@ const REFRESH_MS = 15_000;
 export function QuotaDebug({ lastCall }: { lastCall?: LastCall }) {
   const [snapshot, setSnapshot] = useState<QuotaResponse | null>(null);
   const [tick, setTick] = useState(0);
+  const [open, setOpen] = useState(false);
 
   async function fetchSnapshot() {
     try {
@@ -59,54 +61,78 @@ export function QuotaDebug({ lastCall }: { lastCall?: LastCall }) {
   if (!lastCall && !snapshot) return null;
 
   return (
-    <aside className="mt-8 space-y-3 rounded-xl border border-dashed border-[var(--line)] bg-white/70 p-3 text-xs text-[var(--muted)]">
-      <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">디버그 (임시)</p>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="fixed bottom-5 left-5 z-40 inline-flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--line)] bg-white/90 text-[var(--muted)] shadow-lg shadow-slate-900/10 transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+        aria-label="디버그 정보 열기"
+        title="디버그"
+      >
+        <Activity className="h-4 w-4" aria-hidden />
+      </button>
 
-      {lastCall && (
-        <section>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">이번 요청 토큰</p>
-          <p className="mt-1 font-mono">
-            <span className="text-[var(--muted)]">{lastCall.model}</span>
-            {" · "}
-            입력 {lastCall.prompt.toLocaleString()} + 출력 {lastCall.output.toLocaleString()}
-            {typeof lastCall.thoughts === "number" &&
-              ` (thinking ${lastCall.thoughts.toLocaleString()})`}
-            {" = "}
-            <span className="font-semibold text-[var(--ink)]">
-              {lastCall.total.toLocaleString()}
-            </span>{" "}
-            토큰
-          </p>
-        </section>
-      )}
-
-      {snapshot?.configured === true && (
-        <section className="space-y-1" key={tick}>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            서버 쿼터 (Upstash 누적 · free tier)
-          </p>
-          <div className="space-y-1 font-mono">
-            {snapshot.byModel.map((m) => (
-              <ModelLine key={m.model} m={m} />
-            ))}
-            <div>
-              <span className="text-[var(--muted)]">TPM 합계</span>
-              {" · "}
-              <Bar used={snapshot.tpmUsed} limit={snapshot.tpmLimit} />
-            </div>
+      {open && (
+        <aside className="fixed bottom-16 left-5 z-40 max-h-[70vh] w-[calc(100vw-2.5rem)] max-w-lg overflow-y-auto rounded-xl border border-dashed border-[var(--line)] bg-white p-3 text-xs text-[var(--muted)] shadow-2xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">디버그 (임시)</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg p-1 text-[var(--muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
+              aria-label="디버그 닫기"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
           </div>
-          <p className="pt-0.5 text-[10px] text-[var(--muted)]">
-            RPM/TPM = 최근 60초 · RPD = 마지막 Pacific 자정 이후 (한국시간 오후 리셋, DST 에 따라 16-17시)
-          </p>
-        </section>
-      )}
 
-      {snapshot?.configured === false && (
-        <p className="text-[10px] text-[var(--muted)]">
-          서버 쿼터 추적 미설정 (Upstash Redis 미연결). 이번 요청 토큰만 표시됨.
-        </p>
+          {lastCall && (
+            <section>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">이번 요청 토큰</p>
+              <p className="mt-1 font-mono">
+                <span className="text-[var(--muted)]">{lastCall.model}</span>
+                {" · "}
+                입력 {lastCall.prompt.toLocaleString()} + 출력 {lastCall.output.toLocaleString()}
+                {typeof lastCall.thoughts === "number" &&
+                  ` (thinking ${lastCall.thoughts.toLocaleString()})`}
+                {" = "}
+                <span className="font-semibold text-[var(--ink)]">
+                  {lastCall.total.toLocaleString()}
+                </span>{" "}
+                토큰
+              </p>
+            </section>
+          )}
+
+          {snapshot?.configured === true && (
+            <section className="mt-3 space-y-1" key={tick}>
+              <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                서버 쿼터 (Upstash 누적 · free tier)
+              </p>
+              <div className="space-y-1 font-mono">
+                {snapshot.byModel.map((m) => (
+                  <ModelLine key={m.model} m={m} />
+                ))}
+                <div>
+                  <span className="text-[var(--muted)]">TPM 합계</span>
+                  {" · "}
+                  <Bar used={snapshot.tpmUsed} limit={snapshot.tpmLimit} />
+                </div>
+              </div>
+              <p className="pt-0.5 text-[10px] text-[var(--muted)]">
+                RPM/TPM = 최근 60초 · RPD = 마지막 Pacific 자정 이후 (한국시간 오후 리셋, DST 에 따라 16-17시)
+              </p>
+            </section>
+          )}
+
+          {snapshot?.configured === false && (
+            <p className="mt-3 text-[10px] text-[var(--muted)]">
+              서버 쿼터 추적 미설정 (Upstash Redis 미연결). 이번 요청 토큰만 표시됨.
+            </p>
+          )}
+        </aside>
       )}
-    </aside>
+    </>
   );
 }
 

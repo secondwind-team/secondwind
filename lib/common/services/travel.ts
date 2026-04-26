@@ -5,14 +5,25 @@ export type TravelInput = {
   prompt: string;
   planningModel: PlanningModel;
   budgetKrw?: number;
+  budgetIncludes?: BudgetCategory[];
+  stay?: Stay;
+  /** @deprecated Use budgetIncludes. Kept for old shared links. */
   budgetScope?: BudgetScope;
 };
 
 export type PlanningModel = "classic" | "balanced" | "verified";
 
 export type BudgetScope = "activity" | "with_transit" | "all";
+export type BudgetCategory = "lodging" | "rental" | "transport" | "admission" | "food" | "shopping";
 
 export const DEFAULT_BUDGET_SCOPE: BudgetScope = "activity";
+export const DEFAULT_BUDGET_INCLUDES: BudgetCategory[] = [
+  "lodging",
+  "rental",
+  "transport",
+  "admission",
+  "food",
+];
 
 export type BudgetScopeInfo = {
   id: BudgetScope;
@@ -24,6 +35,21 @@ export const BUDGET_SCOPES: BudgetScopeInfo[] = [
   { id: "activity", label: "활동·식사·입장만", hint: "이동·숙박 별도" },
   { id: "with_transit", label: "+ 이동 비용", hint: "교통비까지 포함" },
   { id: "all", label: "전부", hint: "숙박·렌트카까지" },
+];
+
+export type BudgetCategoryInfo = {
+  id: BudgetCategory;
+  label: string;
+  hint: string;
+};
+
+export const BUDGET_CATEGORIES: BudgetCategoryInfo[] = [
+  { id: "lodging", label: "숙박", hint: "호텔·숙소" },
+  { id: "rental", label: "렌트", hint: "렌터카" },
+  { id: "transport", label: "교통", hint: "대중교통·택시" },
+  { id: "admission", label: "입장", hint: "입장료·체험" },
+  { id: "food", label: "식비", hint: "식사·카페" },
+  { id: "shopping", label: "쇼핑", hint: "기념품·구매" },
 ];
 
 export type PlanningModelInfo = {
@@ -145,6 +171,8 @@ export function validateTravelInput(raw: unknown): TravelInputValidationResult {
   const prompt = typeof r.prompt === "string" ? r.prompt.trim().slice(0, USER_PROMPT_MAX) : "";
   const planningModel = parsePlanningModel(r.planningModel);
   const budgetKrw = parseBudgetKrw(r.budgetKrw);
+  const budgetIncludes = parseBudgetIncludes(r.budgetIncludes, r.budgetScope);
+  const stay = parseStayInput(r.stay);
 
   if (!destination) return { ok: false, reason: "missing-destination" };
   if (!startDate) return { ok: false, reason: "missing-start-date" };
@@ -154,9 +182,12 @@ export function validateTravelInput(raw: unknown): TravelInputValidationResult {
   if (endDate < startDate) return { ok: false, reason: "end-before-start" };
 
   const base: TravelInput = { destination, startDate, endDate, prompt, planningModel };
+  if (stay) base.stay = stay;
   if (budgetKrw !== undefined) {
     base.budgetKrw = budgetKrw;
-    base.budgetScope = parseBudgetScope(r.budgetScope) ?? DEFAULT_BUDGET_SCOPE;
+    base.budgetIncludes = budgetIncludes;
+    const oldScope = parseBudgetScope(r.budgetScope);
+    if (oldScope) base.budgetScope = oldScope;
   }
   return { ok: true, input: base };
 }
@@ -170,6 +201,55 @@ function parseBudgetKrw(raw: unknown): number | undefined {
 
 export function parseBudgetScope(raw: unknown): BudgetScope | undefined {
   return raw === "activity" || raw === "with_transit" || raw === "all" ? raw : undefined;
+}
+
+export function parseBudgetCategory(raw: unknown): BudgetCategory | undefined {
+  return raw === "lodging" ||
+    raw === "rental" ||
+    raw === "transport" ||
+    raw === "admission" ||
+    raw === "food" ||
+    raw === "shopping"
+    ? raw
+    : undefined;
+}
+
+export function parseBudgetIncludes(raw: unknown, legacyScope?: unknown): BudgetCategory[] {
+  if (Array.isArray(raw)) {
+    const out = raw.map(parseBudgetCategory).filter((v): v is BudgetCategory => Boolean(v));
+    const unique = Array.from(new Set(out));
+    return unique.length > 0 ? unique : DEFAULT_BUDGET_INCLUDES;
+  }
+  switch (parseBudgetScope(legacyScope)) {
+    case "all":
+      return ["lodging", "rental", "transport", "admission", "food", "shopping"];
+    case "with_transit":
+      return ["transport", "admission", "food"];
+    case "activity":
+      return ["admission", "food", "shopping"];
+    default:
+      return DEFAULT_BUDGET_INCLUDES;
+  }
+}
+
+function parseStayInput(raw: unknown): Stay | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const name = typeof r.name === "string" ? r.name.trim().slice(0, 120) : "";
+  if (!name) return undefined;
+  const placeRaw = typeof r.place === "object" && r.place !== null ? (r.place as Record<string, unknown>) : undefined;
+  const place: PlaceInfo | undefined = placeRaw
+    ? {
+        name: typeof placeRaw.name === "string" ? placeRaw.name.slice(0, 120) : undefined,
+        address: typeof placeRaw.address === "string" ? placeRaw.address.slice(0, 200) : undefined,
+        phone: typeof placeRaw.phone === "string" ? placeRaw.phone.slice(0, 40) : undefined,
+        category: typeof placeRaw.category === "string" ? placeRaw.category.slice(0, 120) : undefined,
+        url: typeof placeRaw.url === "string" ? placeRaw.url.slice(0, 500) : undefined,
+        lat: typeof placeRaw.lat === "number" && Number.isFinite(placeRaw.lat) ? placeRaw.lat : undefined,
+        lng: typeof placeRaw.lng === "number" && Number.isFinite(placeRaw.lng) ? placeRaw.lng : undefined,
+      }
+    : undefined;
+  return place ? { name, place } : { name };
 }
 
 export function getBudgetScopeInfo(scope: BudgetScope): BudgetScopeInfo {
@@ -243,10 +323,15 @@ export function buildTravelPrompt(input: TravelInput): { system: string; user: s
     `기간: ${input.startDate} ~ ${input.endDate}`,
     requestLine,
   ];
-  if (typeof input.budgetKrw === "number" && input.budgetKrw > 0) {
-    const scope = input.budgetScope ?? DEFAULT_BUDGET_SCOPE;
+  if (input.stay?.name) {
     lines.push(
-      `요청 예산: ${input.budgetKrw.toLocaleString("ko-KR")}원 (포함 범위: ${describeBudgetScope(scope)})`,
+      `선택 숙소: ${input.stay.name}${input.stay.place?.address ? ` (${input.stay.place.address})` : ""}`,
+      "숙소 지시: 요청사항에 다른 기준점이 명시되지 않았다면 이 숙소를 거점으로 동선을 설계하고 stay 필드에 같은 숙소명을 포함.",
+    );
+  }
+  if (typeof input.budgetKrw === "number" && input.budgetKrw > 0) {
+    lines.push(
+      `요청 예산: ${input.budgetKrw.toLocaleString("ko-KR")}원 (포함 항목: ${describeBudgetIncludes(input.budgetIncludes ?? DEFAULT_BUDGET_INCLUDES)})`,
     );
   }
 
@@ -288,6 +373,12 @@ function describeBudgetScope(scope: BudgetScope): string {
     default:
       return "활동·식사·입장 항목만 (이동·숙박 별도)";
   }
+}
+
+export function describeBudgetIncludes(includes: BudgetCategory[]): string {
+  const set = new Set(includes);
+  const labels = BUDGET_CATEGORIES.filter((item) => set.has(item.id)).map((item) => item.label);
+  return labels.length > 0 ? labels.join(", ") : "지정 없음";
 }
 
 function planningModelInstruction(model: PlanningModel): string {
@@ -541,6 +632,37 @@ export function computeBudget(plan: TravelPlan): {
 
 export type BudgetTotals = ReturnType<typeof computeBudget>;
 
+export type BudgetBreakdown = Record<BudgetCategory, number>;
+
+export function computeBudgetBreakdown(budget: BudgetTotals, plan?: TravelPlan): BudgetBreakdown {
+  const breakdown: BudgetBreakdown = {
+    lodging: 0,
+    rental: 0,
+    transport: budget.transit,
+    admission: 0,
+    food: 0,
+    shopping: 0,
+  };
+  for (const item of budget.activityItems) {
+    const category = classifyBudgetItem(`${item.label ?? ""} ${item.text}`);
+    breakdown[category] += item.krw;
+  }
+  for (const extra of plan?.budget.extras ?? []) {
+    const category = classifyBudgetItem(extra.label);
+    breakdown[category] += extra.krw;
+  }
+  return breakdown;
+}
+
+function classifyBudgetItem(text: string): BudgetCategory {
+  if (/숙박|숙소|호텔|리조트|스테이|게스트하우스|펜션/.test(text)) return "lodging";
+  if (/렌트|렌터|렌트카|렌터카|차량/.test(text)) return "rental";
+  if (/이동|교통|택시|버스|지하철|기차|KTX|항공|비행|주차/.test(text)) return "transport";
+  if (/쇼핑|기념품|구매|시장/.test(text)) return "shopping";
+  if (/식사|점심|저녁|아침|카페|브런치|메뉴|맛집|식비|음식|디저트|커피/.test(text)) return "food";
+  return "admission";
+}
+
 export function scopedBudgetTotal(scope: BudgetScope, budget: BudgetTotals): number {
   switch (scope) {
     case "all":
@@ -553,12 +675,23 @@ export function scopedBudgetTotal(scope: BudgetScope, budget: BudgetTotals): num
   }
 }
 
+export function includedBudgetTotal(
+  includes: BudgetCategory[],
+  budget: BudgetTotals,
+  plan?: TravelPlan,
+): number {
+  const breakdown = computeBudgetBreakdown(budget, plan);
+  const set = new Set(includes);
+  return BUDGET_CATEGORIES.reduce((sum, item) => (set.has(item.id) ? sum + breakdown[item.id] : sum), 0);
+}
+
 // 5% 여유: 활동비는 AI 추정이라 작은 오차로 매번 배너가 뜨지 않게.
 const BUDGET_TOLERANCE_RATIO = 0.05;
 
 export type BudgetCheck = {
   requested: number;
-  scope: BudgetScope;
+  scope?: BudgetScope;
+  includes: BudgetCategory[];
   scopedTotal: number;
   overage: number;
 };
@@ -566,13 +699,23 @@ export type BudgetCheck = {
 export function evaluateBudget(
   budget: BudgetTotals,
   requested: number | undefined,
-  scope: BudgetScope = DEFAULT_BUDGET_SCOPE,
+  scopeOrIncludes: BudgetScope | BudgetCategory[] = DEFAULT_BUDGET_INCLUDES,
+  plan?: TravelPlan,
 ): BudgetCheck | null {
   if (!requested || requested <= 0) return null;
-  const scopedTotal = scopedBudgetTotal(scope, budget);
+  const includes = Array.isArray(scopeOrIncludes)
+    ? parseBudgetIncludes(scopeOrIncludes)
+    : parseBudgetIncludes(undefined, scopeOrIncludes);
+  const scopedTotal = includedBudgetTotal(includes, budget, plan);
   const overage = scopedTotal - requested;
   if (overage <= requested * BUDGET_TOLERANCE_RATIO) return null;
-  return { requested, scope, scopedTotal, overage };
+  return {
+    requested,
+    scope: Array.isArray(scopeOrIncludes) ? undefined : scopeOrIncludes,
+    includes,
+    scopedTotal,
+    overage,
+  };
 }
 
 // --- type guards ---
