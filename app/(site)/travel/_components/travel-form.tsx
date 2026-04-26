@@ -16,7 +16,7 @@ import {
   type TravelInputValidationReason,
   type TravelPlan,
 } from "@/lib/common/services/travel";
-import { PlanCard } from "./plan-card";
+import { FeedbackSection, PlanCard, type FeedbackDraftInput } from "./plan-card";
 import { PromptToolbar } from "./prompt-toolbar";
 import { QuotaDebug, type LastCall } from "./quota-debug";
 
@@ -79,6 +79,17 @@ export function TravelForm({
 
   const cooldownRemainingSec = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
   const isCoolingDown = cooldownRemainingSec > 0;
+  const currentBudgetKrw = parseBudgetField(budgetInput);
+  const currentDraftInput: FeedbackDraftInput = {
+    destination,
+    startDate,
+    endDate,
+    prompt,
+    planningModel,
+    ...(currentBudgetKrw !== undefined ? { budgetKrw: currentBudgetKrw, budgetScope } : {}),
+  };
+  const currentValidInput = validateTravelInput(currentDraftInput);
+  const feedbackInput = currentValidInput.ok ? currentValidInput.input : undefined;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -323,6 +334,14 @@ export function TravelForm({
         <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
           {state.message}
         </p>
+      )}
+
+      {state.kind !== "ok" && state.kind !== "loading" && (
+        <FeedbackSection
+          input={feedbackInput}
+          draftInput={currentDraftInput}
+          context={state.kind === "error" ? state.message : "no-plan-yet"}
+        />
       )}
 
       {state.kind === "ok" && (

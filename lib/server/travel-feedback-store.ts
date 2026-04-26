@@ -23,21 +23,35 @@ export type TravelFeedbackCategory = "bug" | "quality" | "other";
 export type TravelFeedbackInput = {
   category: TravelFeedbackCategory;
   message: string;
-  input: TravelInput;
-  plan: TravelPlan;
+  input?: TravelInput;
+  draftInput?: TravelFeedbackDraftInput;
+  plan?: TravelPlan;
   model?: string;
   pagePath?: string;
+  context?: string;
   userAgent?: string;
+};
+
+export type TravelFeedbackDraftInput = {
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  prompt?: string;
+  planningModel?: string;
+  budgetKrw?: number;
+  budgetScope?: string;
 };
 
 export type TravelFeedbackRecord = {
   schemaVersion: typeof TRAVEL_FEEDBACK_SCHEMA_VERSION;
   category: TravelFeedbackCategory;
   message: string;
-  input: TravelInput;
-  plan: TravelPlan;
+  input?: TravelInput;
+  draftInput?: TravelFeedbackDraftInput;
+  plan?: TravelPlan;
   model?: string;
   pagePath?: string;
+  context?: string;
   userAgent?: string;
   createdAt: string;
   expiresAt: string;
@@ -68,6 +82,22 @@ export function normalizeFeedbackMessage(raw: unknown): string | null {
   return message.length >= 3 ? maskSensitiveText(message) : null;
 }
 
+export function normalizeFeedbackDraftInput(raw: unknown): TravelFeedbackDraftInput | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: TravelFeedbackDraftInput = {};
+  if (typeof r.destination === "string") out.destination = maskSensitiveText(r.destination.trim().slice(0, 80));
+  if (typeof r.startDate === "string") out.startDate = r.startDate.slice(0, 20);
+  if (typeof r.endDate === "string") out.endDate = r.endDate.slice(0, 20);
+  if (typeof r.prompt === "string") out.prompt = maskSensitiveText(r.prompt.trim().slice(0, 1000));
+  if (typeof r.planningModel === "string") out.planningModel = r.planningModel.slice(0, 30);
+  if (typeof r.budgetKrw === "number" && Number.isFinite(r.budgetKrw) && r.budgetKrw > 0) {
+    out.budgetKrw = Math.round(r.budgetKrw);
+  }
+  if (typeof r.budgetScope === "string") out.budgetScope = r.budgetScope.slice(0, 30);
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export async function createTravelFeedback(feedback: TravelFeedbackInput): Promise<{
   id: string;
   record: TravelFeedbackRecord;
@@ -75,23 +105,32 @@ export async function createTravelFeedback(feedback: TravelFeedbackInput): Promi
   const redis = getClient();
   if (!redis) return null;
 
-  const input = normalizeTravelInput(feedback.input);
-  if (!input || !isTravelPlan(feedback.plan)) {
+  const input = feedback.input ? normalizeTravelInput(feedback.input) : null;
+  if (feedback.input && !input) {
     throw new Error("invalid-feedback-snapshot");
   }
+  if (feedback.plan !== undefined && !isTravelPlan(feedback.plan)) {
+    throw new Error("invalid-feedback-snapshot");
+  }
+  const draftInput = feedback.draftInput ? normalizeFeedbackDraftInput(feedback.draftInput) : undefined;
+  if (!input && !draftInput) throw new Error("missing-feedback-snapshot");
 
   const now = Date.now();
   const record: TravelFeedbackRecord = {
     schemaVersion: TRAVEL_FEEDBACK_SCHEMA_VERSION,
     category: feedback.category,
     message: feedback.message,
-    input: {
-      ...input,
-      prompt: maskSensitiveText(input.prompt),
-    },
+    input: input
+      ? {
+          ...input,
+          prompt: maskSensitiveText(input.prompt),
+        }
+      : undefined,
+    draftInput,
     plan: feedback.plan,
     model: feedback.model,
     pagePath: feedback.pagePath,
+    context: feedback.context ? maskSensitiveText(feedback.context) : undefined,
     userAgent: feedback.userAgent,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TRAVEL_FEEDBACK_TTL_SECONDS * 1000).toISOString(),

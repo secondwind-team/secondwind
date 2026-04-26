@@ -547,14 +547,28 @@ const FEEDBACK_OPTIONS: Array<{
   { id: "other", label: "기타", description: "다른 의견이에요" },
 ];
 
-function FeedbackSection({
+export type FeedbackDraftInput = {
+  destination: string;
+  startDate: string;
+  endDate: string;
+  prompt: string;
+  planningModel: PlanningModel;
+  budgetKrw?: number;
+  budgetScope?: string;
+};
+
+export function FeedbackSection({
   input,
+  draftInput,
   plan,
   model,
+  context,
 }: {
-  input: TravelInput;
-  plan: TravelPlan;
+  input?: TravelInput;
+  draftInput?: FeedbackDraftInput;
+  plan?: TravelPlan;
   model?: string;
+  context?: string;
 }) {
   const [category, setCategory] = useState<FeedbackCategory>("quality");
   const [message, setMessage] = useState("");
@@ -573,8 +587,10 @@ function FeedbackSection({
           category,
           message: trimmed,
           input,
+          draftInput,
           plan,
           model,
+          context,
           pagePath: window.location.pathname,
         }),
       });
@@ -599,7 +615,7 @@ function FeedbackSection({
             피드백 · 버그리포트
           </p>
           <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-            현재 입력값과 결과 화면 맥락을 함께 보내 개선에 사용합니다. 전화번호와 이메일은 자동으로 가립니다.
+            현재 입력값{plan ? "과 결과 화면 맥락" : "과 오류 상태"}을 함께 보내 개선에 사용합니다. 전화번호와 이메일은 자동으로 가립니다.
           </p>
         </div>
       </div>
