@@ -5,7 +5,10 @@ import { CheckCircle2 } from "lucide-react";
 import {
   computeBudget,
   enumeratePoints,
+  evaluateBudget,
+  getBudgetScopeInfo,
   getPlanningModelInfo,
+  type BudgetCheck,
   type PlaceStats,
   type PlanningModel,
   type TravelInput,
@@ -32,6 +35,7 @@ export function PlanCard({
   shareInput?: TravelInput;
 }) {
   const budget = computeBudget(plan);
+  const budgetCheck = evaluateBudget(budget, shareInput?.budgetKrw, shareInput?.budgetScope);
   const labelByItem = new Map(enumeratePoints(plan).map((p) => [p.item, p.label]));
   const [legsByItem, setLegsByItem] = useState<LegsByItem | null>(null);
   const [mapItem, setMapItem] = useState<TravelItem | null>(null);
@@ -58,9 +62,11 @@ export function PlanCard({
 
   return (
     <article className="space-y-7 rounded-3xl border border-[var(--line)] bg-white p-5 shadow-[var(--shadow-soft)] sm:p-7">
+      {budgetCheck && <BudgetOverageBanner check={budgetCheck} />}
+
       <header className="rounded-2xl border border-[var(--line)] bg-slate-50 p-5">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-          이 정도면 됩니다
+          {budgetCheck ? "확인이 필요합니다" : "이 정도면 됩니다"}
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <SummaryPill label="일정" value={`${firstDay}부터 ${plan.days.length}일`} />
@@ -98,6 +104,7 @@ export function PlanCard({
       <DecisionPanel
         plan={plan}
         budget={budget}
+        budgetCheck={budgetCheck}
         confirmed={confirmed}
         onConfirm={confirmPlan}
       />
@@ -182,18 +189,47 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
+function BudgetOverageBanner({ check }: { check: BudgetCheck }) {
+  const requested = check.requested.toLocaleString("ko-KR");
+  const scoped = check.scopedTotal.toLocaleString("ko-KR");
+  const over = check.overage.toLocaleString("ko-KR");
+  const scopeInfo = getBudgetScopeInfo(check.scope);
+  return (
+    <section
+      role="status"
+      className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 sm:p-5"
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+        예산 초과
+      </p>
+      <p className="mt-1.5 text-base font-semibold leading-snug text-amber-900">
+        요청 ₩{requested} · 예상 ₩{scoped} <span className="text-amber-700">(₩{over} 초과)</span>
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-amber-800">
+        예산 기준: <span className="font-medium">{scopeInfo.label}</span>{" "}
+        <span className="text-amber-700">({scopeInfo.hint})</span>
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-amber-800">
+        아래 일정과 비용 항목을 확인하고, 줄일 항목을 직접 골라주세요. 가격은 AI 추정값이라 실제와 다를 수 있어요.
+      </p>
+    </section>
+  );
+}
+
 function DecisionPanel({
   plan,
   budget,
+  budgetCheck,
   confirmed,
   onConfirm,
 }: {
   plan: TravelPlan;
   budget: ReturnType<typeof computeBudget>;
+  budgetCheck: BudgetCheck | null;
   confirmed: boolean;
   onConfirm: () => void;
 }) {
-  const summary = buildDecisionSummary(plan, budget);
+  const summary = buildDecisionSummary(plan, budget, budgetCheck);
 
   return (
     <section className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
@@ -286,6 +322,7 @@ function DecisionColumn({
 function buildDecisionSummary(
   plan: TravelPlan,
   budget: ReturnType<typeof computeBudget>,
+  budgetCheck: BudgetCheck | null,
 ): {
   goodReasons: string[];
   checkBeforeConfirming: string[];
@@ -297,14 +334,20 @@ function buildDecisionSummary(
   const transitCount = allItems.filter((item) => item.transit).length;
   const mealCount = allItems.filter((item) => /점심|저녁|식사|브런치|맛집|식당|카페/.test(item.text)).length;
 
+  const llmGoodReasons = budgetCheck
+    ? (plan.decision?.good_reasons ?? []).filter((r) => !mentionsBudgetCompliance(r))
+    : (plan.decision?.good_reasons ?? []);
+
   const goodReasons = uniqueNonEmpty([
-    ...(plan.decision?.good_reasons ?? []),
+    ...llmGoodReasons,
     plan.stay ? `숙소 기준점 "${plan.stay.name}"을 중심으로 동선을 판단할 수 있습니다.` : "",
     mealCount > 0 ? `식사와 휴식 지점을 일정 안에 함께 배치했습니다.` : "",
     transitCount > 0 ? `장소 사이 이동 시간과 수단을 함께 표시합니다.` : "",
   ]).slice(0, 3);
 
+  const overageNotice = budgetCheck ? buildOverageNotice(budgetCheck) : "";
   const checkBeforeConfirming = uniqueNonEmpty([
+    overageNotice,
     ...(plan.decision?.check_before_confirming ?? []),
     warningCount > 0 ? `위치 확인 필요 표시가 있는 장소 ${warningCount}곳은 방문 전 지도에서 다시 확인하세요.` : "",
     locatedCount > 0 ? `주소와 전화는 ${locatedCount}곳이 Naver 지역검색으로 확인되었습니다.` : "",
@@ -325,6 +368,21 @@ function buildDecisionSummary(
     checkBeforeConfirming: checkBeforeConfirming.length > 0 ? checkBeforeConfirming : ["영업시간, 가격, 메뉴는 방문 전 한 번 더 확인하세요."],
     todoAfterConfirming,
   };
+}
+
+// LLM 이 예산 초과인데도 "예산 내", "100만원 안에서" 같은 자축을 내뱉는 경우를 차단한다.
+// "예산" 키워드를 직접 칭찬 맥락에서 쓴 경우만 매칭 — "예산 초과" 같은 경고 표현은 살린다.
+function mentionsBudgetCompliance(text: string): boolean {
+  if (/(예산|비용)\s*(내|이내|안에서|범위|맞춰|충족|준수|아래|아래로|미만)/.test(text)) return true;
+  if (/(예산|경비)\s*(에|을|를)?\s*(맞췄|지켰|충족|만족)/.test(text)) return true;
+  return false;
+}
+
+function buildOverageNotice(check: BudgetCheck): string {
+  const requested = check.requested.toLocaleString("ko-KR");
+  const scoped = check.scopedTotal.toLocaleString("ko-KR");
+  const over = check.overage.toLocaleString("ko-KR");
+  return `요청 예산 ₩${requested} · 예상 ₩${scoped} (₩${over} 초과) — 비용 항목 재검토 필요`;
 }
 
 function uniqueNonEmpty(items: string[]): string[] {

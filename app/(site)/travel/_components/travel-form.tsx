@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import {
+  BUDGET_SCOPES,
+  DEFAULT_BUDGET_SCOPE,
   DEFAULT_PLANNING_MODEL,
   PLANNING_MODELS,
   USER_PROMPT_MAX,
   parsePlanningModel,
   validateTravelInput,
+  type BudgetScope,
   type PlaceStats,
   type PlanningModel,
   type TravelInput,
@@ -41,6 +44,12 @@ export function TravelForm({
   const [planningModel, setPlanningModel] = useState<PlanningModel>(
     initialInput?.planningModel ?? DEFAULT_PLANNING_MODEL,
   );
+  const [budgetInput, setBudgetInput] = useState(
+    initialInput?.budgetKrw ? String(initialInput.budgetKrw) : "",
+  );
+  const [budgetScope, setBudgetScope] = useState<BudgetScope>(
+    initialInput?.budgetScope ?? DEFAULT_BUDGET_SCOPE,
+  );
   const [state, setState] = useState<FormState>(
     initialPlan
       ? {
@@ -74,7 +83,15 @@ export function TravelForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (isCoolingDown) return;
-    const input: TravelInput = { destination, startDate, endDate, prompt, planningModel };
+    const budgetKrw = parseBudgetField(budgetInput);
+    const input: TravelInput = {
+      destination,
+      startDate,
+      endDate,
+      prompt,
+      planningModel,
+      ...(budgetKrw !== undefined ? { budgetKrw, budgetScope } : {}),
+    };
     const validation = validateTravelInput(input);
     if (!validation.ok) {
       setState({
@@ -176,6 +193,57 @@ export function TravelForm({
             />
           </Field>
         </div>
+
+        <section className="space-y-3 rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <div>
+              <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+                budget
+              </span>
+              <p className="mt-1 text-sm font-medium text-[var(--ink)]">
+                예산 <span className="text-xs font-normal text-[var(--muted)]">(선택)</span>
+              </p>
+            </div>
+            <p className="text-xs text-[var(--muted)]">초과되면 결과 화면에서 알려드려요</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={formatBudgetDisplay(budgetInput)}
+              onChange={(e) => setBudgetInput(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="예: 1,000,000"
+              className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
+            />
+            <span className="shrink-0 text-sm text-[var(--muted)]">원</span>
+          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-semibold text-[var(--muted)]">이 예산에 포함되는 것</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {BUDGET_SCOPES.map((opt) => (
+                <label
+                  key={opt.id}
+                  className={`block cursor-pointer rounded-xl border p-2.5 text-xs transition ${
+                    budgetScope === opt.id
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                      : "border-[var(--line)] bg-white hover:border-[var(--accent)]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="budgetScope"
+                    value={opt.id}
+                    checked={budgetScope === opt.id}
+                    onChange={() => setBudgetScope(opt.id)}
+                    className="sr-only"
+                  />
+                  <span className="block text-sm font-semibold text-[var(--ink)]">{opt.label}</span>
+                  <span className="mt-0.5 block text-[var(--muted)]">{opt.hint}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </section>
 
         <section className="space-y-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -396,6 +464,19 @@ function travelInputErrorMessage(reason: unknown): string | undefined {
   return typeof reason === "string" && reason in messages
     ? messages[reason as TravelInputValidationReason]
     : undefined;
+}
+
+function parseBudgetField(raw: string): number | undefined {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return undefined;
+  const n = Number(digits);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function formatBudgetDisplay(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("ko-KR");
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
