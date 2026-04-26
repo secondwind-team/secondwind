@@ -44,13 +44,14 @@ cd secondwind
 
 | 명령 | 언제 쓰는가 |
 |---|---|
+| `/feature` | secondwind feature inventory 를 조회·추가·수정·삭제/폐기 표시·구현 시작할 때. 도움말은 `/feature help`. |
 | `/office-hours` | "아이디어가 있는데 어디서부터 시작할지 모르겠다." YC 스타일 6가지 질문으로 아이디어를 다듬음. |
 | `/autoplan` | 아이디어가 명확해졌을 때. CEO → 디자인 → 엔지니어링 리뷰를 한 번에 돌려 구체적 계획 생성. |
 | `/qa` | 뭔가 만들고 나서. 실제 브라우저를 열어 테스트하고 버그를 자동 수정. |
 | `/ship` | 큰 PR·복합 릴리스·강한 release audit 이 필요할 때 사용. 일상적인 push/PR 은 `GIT.md` 의 간소 Ship 체크리스트를 기본으로 한다. |
 | `/freeze <경로>` | "이 폴더는 건드리지 마." 지정 경로는 `/unfreeze` 전까지 편집 금지. |
 
-Codex 에서는 전부 `gstack-` 접두사가 붙습니다 — 예: `/gstack-qa`, `/gstack-ship`.
+`/feature` 는 이 repo 의 프로젝트 공용 스킬입니다. gstack 스킬은 Codex 에서 `gstack-` 접두사가 붙습니다 — 예: `/gstack-qa`, `/gstack-ship`.
 
 전체 스킬 목록 (23 스킬 + 8 파워 툴):
 - Claude Code: `~/.claude/skills/gstack/docs/skills.md`
