@@ -431,7 +431,7 @@ function friendlyErrorMessage(httpStatus: number, json: Record<string, unknown>)
     return "Gemini 응답에 문제가 있었습니다. 잠시 후 다시 시도해주세요.";
   }
   if (status === "invalid-response") {
-    return "받은 플랜을 이해하지 못했어요. 요청 사항을 조금 구체화하고 다시 시도해주세요.";
+    return "AI 응답을 읽지 못했어요. 다시 시도하면 대부분 해결됩니다. 반복되면 일정을 1~2일 짧게 줄이거나 자유 요청을 간결하게 적어보세요.";
   }
   const inputMessage = travelInputErrorMessage(reason);
   if (inputMessage) return inputMessage;

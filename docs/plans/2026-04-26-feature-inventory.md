@@ -45,7 +45,7 @@
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
 |---|---|---:|---|---|---|---|
 | `TRAVEL-PLAN-01` | Gemini 기반 일정 생성 | `live` | 하나의 확정 여행안을 받는다. | `app/api/gemini/route.ts`, `travel-planners.ts`, `llm.ts` | streaming 진행 상태 | timeout, upstream 오류 재시도 정책 점검 |
-| `TRAVEL-PLAN-02` | JSON schema 기반 응답 제약 | `live` | 일정 데이터가 UI에서 안정적으로 렌더링된다. | `TRAVEL_PLAN_SCHEMA`, `parseTravelPlan` | schema version 기록 | schema 변경 시 공유 링크 호환 확인 |
+| `TRAVEL-PLAN-02` | JSON schema 기반 응답 제약 | `live` | 일정 데이터가 UI에서 안정적으로 렌더링된다. | `TRAVEL_PLAN_SCHEMA`, `parseTravelPlan` | schema version 기록 | schema 변경 시 공유 링크 호환 확인, ✅ invalid-response 메시지 사용자 친화화 (피드백 40DagbST) |
 | `TRAVEL-PLAN-03` | 시스템 프롬프트 | `live` | 식사, 이동, 비용, caveat 등 일정 품질 기준을 강제한다. | `SYSTEM_PROMPT` in `travel.ts` | prompt version별 changelog | 프롬프트 수정 후 골든셋 eval |
 | `TRAVEL-PLAN-04` | 계획 sanitize | `live` | 공항 도착, 체크인, 조식 같은 비장소 활동을 지도 대상에서 뺀다. | `sanitizeGeneratedPlan`, `shouldSuppressPlaceQuery` | rule 설명을 debug panel 에 노출 | suppress 규칙 과잉/누락 테스트 |
 | `TRAVEL-PLAN-05` | 중복 장소 제거 | `live` | 같은 장소가 반복 마커로 뜨는 것을 줄인다. | `suppressRepeatedPlaceQueries` | 같은 장소 재방문 의도 감지 | 중복 제거가 실제 재방문을 지우는지 확인 |
