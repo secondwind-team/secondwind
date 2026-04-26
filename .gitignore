@@ -30,3 +30,6 @@ Thumbs.db
 .claude/settings.local.json
 .codex/
 .gstack/
+
+# Local feedback cache (TRAVEL-FEEDBACK-01) — read-only snapshots from prod admin endpoint
+docs/feedback/*.local.json

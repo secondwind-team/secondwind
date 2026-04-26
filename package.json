@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "eval:travel": "node scripts/eval-travel.mjs",
+    "feedback:pull": "node scripts/fetch-feedback.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
