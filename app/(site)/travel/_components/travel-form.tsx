@@ -315,7 +315,7 @@ export function TravelForm({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value.slice(0, USER_PROMPT_MAX))}
               maxLength={USER_PROMPT_MAX}
-              rows={6}
+              rows={7}
               placeholder="인원·이동수단·스타일·꼭 하고 싶은 것 등을 자유롭게 써주세요. 숙소는 위 선택 옵션에서 고를 수 있어요."
               className="mt-3 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm leading-relaxed outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
             />
