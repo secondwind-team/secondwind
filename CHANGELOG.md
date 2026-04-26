@@ -2,6 +2,17 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.11.0] - 2026-04-26
+
+### Added
+- `/travel` 추천 방식에 네 번째 옵션 **지도 후보 기반 (grounded)** 추가. 사용자 요청에서 시드(목적지 카테고리·동행자·음식 키워드)를 추출해 Naver 후보 풀을 먼저 만들고, LLM 은 그 풀의 이름과 정확히 같은 문자열만 `place_query` 로 사용하도록 단일 패스 grounding 적용. 풀 외부 장소는 후처리에서 빈 문자열로 정리되고, 풀 내부 장소는 Naver 재호출 없이 풀에서 좌표·주소·카테고리를 직접 채움.
+- `npm run eval:travel` 의 PLANNING_MODELS 에 `grounded` 추가 — 기존 골든셋 3개에서 동일 메트릭으로 측정 가능.
+- 새 모듈 `lib/common/services/travel-grounded.ts` — 시드 추출, 풀 수집, 풀 기반 plan 보정.
+
+### Changed
+- 기존 `classic` / `balanced` / `verified` 의 동작은 유지. 사용자가 명시적으로 `grounded` 를 선택할 때만 새 흐름으로 분기.
+- `grounded` 모델은 `recommended_menu` / `cost_krw` 가 모두 AI 추정임을 system prompt 로 명시해 보수적 출력을 유도.
+
 ## [0.1.10.2] - 2026-04-26
 
 ### Added

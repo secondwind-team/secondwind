@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const PLANNING_MODELS = ["classic", "balanced", "verified"];
+const PLANNING_MODELS = ["classic", "balanced", "verified", "grounded"];
 
 const GOLDEN_CASES = [
   {

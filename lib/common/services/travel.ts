@@ -11,7 +11,7 @@ export type TravelInput = {
   budgetScope?: BudgetScope;
 };
 
-export type PlanningModel = "classic" | "balanced" | "verified";
+export type PlanningModel = "classic" | "balanced" | "verified" | "grounded";
 
 export type BudgetScope = "activity" | "with_transit" | "all";
 export type BudgetCategory = "lodging" | "rental" | "transport" | "admission" | "food" | "shopping";
@@ -79,6 +79,12 @@ export const PLANNING_MODELS: PlanningModelInfo[] = [
     label: "장소 정확도 우선",
     shortLabel: "정확도 우선",
     description: "지도 확인에 실패한 장소를 덜어내고 확실한 장소명만 남깁니다. 일정은 더 여유로워집니다.",
+  },
+  {
+    id: "grounded",
+    label: "지도 후보 기반",
+    shortLabel: "후보 기반",
+    description: "사용자 요청에서 키워드를 뽑아 지도 후보 풀을 먼저 만들고, 그 안에서만 장소를 고릅니다. 추천 장소가 적을 수 있지만 가짜 상호명을 만들 가능성이 가장 낮습니다.",
   },
 ];
 
@@ -263,7 +269,7 @@ function isValidDateString(value: string): boolean {
 }
 
 export function parsePlanningModel(raw: unknown): PlanningModel {
-  return raw === "classic" || raw === "balanced" || raw === "verified"
+  return raw === "classic" || raw === "balanced" || raw === "verified" || raw === "grounded"
     ? raw
     : DEFAULT_PLANNING_MODEL;
 }
@@ -398,6 +404,18 @@ function planningModelInstruction(model: PlanningModel): string {
       "- 지역+카테고리 조합, 기억이 불확실한 식당/카페명, 분점 불명확한 체인명은 피한다.",
       "- 이 초안의 장소명은 지도 후보 검수 패스에서 다시 확인된다. 후보로 확인되지 않을 수 있는 장소는 빈 place_query 로 두는 편을 우선한다.",
       '- 확실한 고유명사를 모르면 place_query 는 빈 문자열 "" 로 두고 text 에도 단정적인 상호명을 쓰지 않는다.',
+    ].join("\n");
+  }
+  if (model === "grounded") {
+    return [
+      "추천 모델: 지도 후보 기반.",
+      "- 목표: 사전에 수집된 지도 후보 풀 안에서만 장소를 선택하는 가장 보수적 모델. 각 day 3~5개 활동.",
+      "- 사용자 자유 요청 끝에 [후보 풀] 섹션이 첨부됩니다. place_query 는 반드시 그 풀의 name 과 글자 그대로 같은 문자열만 사용하세요.",
+      "- 풀에 적합한 후보가 없는 활동(공항·휴식·산책·드라이브 등)은 text 만 적고 place_query 는 빈 문자열 \"\" 로 둡니다.",
+      "- 풀 밖의 새 상호명을 만들면 검수 단계에서 모두 제거되어 사용자에게 빈 항목으로 보입니다 — 풀에서만 고르세요.",
+      "- 같은 풀 항목을 여러 번 반복하지 마세요 (예외: 사용자가 명시한 숙소).",
+      "- 점심/저녁 식사는 유지하되, 풀에 식당 후보가 없으면 \"점심 식사 (현지에서 결정)\" 처럼 일반 활동으로 적고 place_query 는 빈 문자열.",
+      "- recommended_menu 와 cost_krw 는 모두 AI 추정입니다. 확실하지 않은 메뉴·가격은 생략하세요. cost_label 만 적어도 됩니다.",
     ].join("\n");
   }
   return [

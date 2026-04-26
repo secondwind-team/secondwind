@@ -290,7 +290,7 @@ function distanceKm(a: PlaceInfo, b: PlaceInfo): number {
   return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function rejectDayOutliers(plan: TravelPlan): void {
+export function rejectDayOutliers(plan: TravelPlan): void {
   for (const day of plan.days) {
     const placed = day.items.filter(hasGeocodedPlace);
     if (placed.length < 3) continue;

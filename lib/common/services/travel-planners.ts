@@ -9,7 +9,15 @@ import {
   type TravelInput,
   type TravelPlan,
 } from "./travel";
-import { computePlaceStats, enrichPlan, searchPlaceCandidates } from "./travel-enrich";
+import { computePlaceStats, enrichPlan, rejectDayOutliers, searchPlaceCandidates } from "./travel-enrich";
+import {
+  appendPoolToPrompt,
+  applyPoolToPlan,
+  buildPoolMap,
+  collectPoolFromSeeds,
+  extractSeeds,
+  type PoolEntry,
+} from "./travel-grounded";
 
 export type TravelPlannerResult =
   | {
@@ -32,12 +40,18 @@ type PlannerConfig = {
   repairPass: boolean;
   candidatePass: boolean;
   clearUnverifiedPlaces: boolean;
+  /**
+   * true 이면 LLM 호출 전에 Naver 후보 풀을 수집해 user prompt 에 첨부하고,
+   * 응답의 place_query 는 풀 내부 항목만 유효하게 처리한다 (사후 enrich 없음).
+   */
+  groundedPool: boolean;
 };
 
 const PLANNER_CONFIG: Record<PlanningModel, PlannerConfig> = {
-  classic: { temperature: 0.7, repairPass: false, candidatePass: false, clearUnverifiedPlaces: false },
-  balanced: { temperature: 0.35, repairPass: true, candidatePass: false, clearUnverifiedPlaces: false },
-  verified: { temperature: 0.1, repairPass: false, candidatePass: true, clearUnverifiedPlaces: true },
+  classic: { temperature: 0.7, repairPass: false, candidatePass: false, clearUnverifiedPlaces: false, groundedPool: false },
+  balanced: { temperature: 0.35, repairPass: true, candidatePass: false, clearUnverifiedPlaces: false, groundedPool: false },
+  verified: { temperature: 0.1, repairPass: false, candidatePass: true, clearUnverifiedPlaces: true, groundedPool: false },
+  grounded: { temperature: 0.2, repairPass: false, candidatePass: false, clearUnverifiedPlaces: false, groundedPool: true },
 };
 
 const REPAIR_LIMIT = 6;
@@ -92,10 +106,24 @@ export async function runTravelPlanner(
   const rememberBlockedModels = (hits: readonly RateLimitHit[] = []) => {
     hits.forEach((hit) => skippedModels.add(hit.model));
   };
+
+  // grounded 모델: LLM 호출 전에 Naver 후보 풀을 수집해 user prompt 에 첨부.
+  // 풀이 비어 있으면(Naver 키 없음 등) 일반 흐름으로 fallback.
+  let userPrompt = user;
+  let poolMap: Map<string, PoolEntry> | undefined;
+  if (config.groundedPool) {
+    const seeds = extractSeeds(input);
+    const pool = await collectPoolFromSeeds(seeds, input.destination);
+    if (pool.length > 0) {
+      userPrompt = appendPoolToPrompt(user, pool);
+      poolMap = buildPoolMap(pool);
+    }
+  }
+
   const result = await callLlm(
     {
       system,
-      user,
+      user: userPrompt,
       // 3박+많은 item+긴 rationale 케이스에서 6144 가 빡빡해 truncation 이 났던 정황이 있어 8192 로 상향.
       maxTokens: 8192,
       responseSchema: TRAVEL_PLAN_SCHEMA,
@@ -119,7 +147,13 @@ export async function runTravelPlanner(
   let repairedPlaces = 0;
   let candidateChangedItems: TravelItem[] = [];
 
-  await enrichPlan(plan, input.destination);
+  if (poolMap) {
+    // grounded: 풀에서 직접 PlaceInfo 채우고 풀 외부 query 정리. Naver 재호출 없음.
+    applyPoolToPlan(plan, poolMap);
+    rejectDayOutliers(plan);
+  } else {
+    await enrichPlan(plan, input.destination);
+  }
 
   if (config.candidatePass) {
     const candidatePass = await selectVerifiedCandidates(plan, input, llmOpts());
