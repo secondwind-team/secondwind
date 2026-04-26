@@ -113,7 +113,7 @@
 
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
 |---|---|---:|---|---|---|---|
-| `TRAVEL-FEEDBACK-01` | 사용자 피드백 및 버그리포트 | `live` | 사용자가 현재 여행 계획 결과에 대한 품질 피드백이나 버그를 남기고, 팀은 입력값·결과값·화면 맥락을 함께 분석해 개선한다. | `PlanCard` feedback UI, `app/api/travel/feedback/route.ts`, `travel-feedback-store.ts` | 정기 분석 문서화, 관리자 조회 화면 | 저장 기간/열람 권한, 민감정보 마스킹 범위 확장, feedback schema version |
+| `TRAVEL-FEEDBACK-01` | 사용자 피드백 및 버그리포트 | `live` | 사용자가 현재 여행 계획 결과에 대한 품질 피드백이나 버그를 남기고, 팀은 입력값·결과값·화면 맥락을 함께 분석해 개선한다. | `PlanCard` feedback UI, `app/api/travel/feedback/route.ts`, `app/api/travel/feedback/admin/route.ts`, `travel-feedback-store.ts`, `scripts/fetch-feedback.mjs`, `.agents/skills/feedback/`, `docs/feedback/` | 정기 분석 문서화, GUI 관리자 화면 (현재는 CLI/skill 로 충분) | 저장 기간/열람 권한, 민감정보 마스킹 범위 확장, feedback schema version, admin token 회전 운영 |
 
 ### 운영, quota, 품질
 

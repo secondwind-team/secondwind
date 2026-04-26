@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feedback"
+  short_description: "View & investigate user feedback safely"
+  default_prompt: "/feedback help"

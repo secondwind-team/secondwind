@@ -36,10 +36,11 @@ Codex 에서 gstack 스킬은 **`/gstack-` 접두사** 가 붙음:
 `./scripts/bootstrap.sh` 실행 후 repo-local 스킬이 Codex 로 설치됨.
 
 - **`/feature`**: `docs/plans/2026-04-26-feature-inventory.md` 를 기준으로 feature 목록 조회, 상세 보기, 추가, 수정, 삭제/폐기 표시, 구현 시작을 돕는다.
-- 도움말: `/feature help`
+- **`/feedback`**: 운영 환경 사용자 피드백·버그리포트를 admin endpoint 로 받아 로컬 캐시 (`docs/feedback/feedback.local.json`) 에서 조회·분석·수정한다. prod KV 토큰을 로컬에 두지 않는다 (TRAVEL-FEEDBACK-01). 자세한 워크플로는 `docs/feedback/README.md`.
+- 도움말: `/feature help`, `/feedback help`
 
 ### 도구별 quirk
 
 - gstack skill 본체는 `~/.codex/skills/gstack/<skill>/AGENTS.md` 또는 `SKILL.md`.
-- 프로젝트 공용 `/feature` skill 원본은 `.agents/skills/feature/SKILL.md`, 설치본은 `~/.codex/skills/feature/SKILL.md`.
+- 프로젝트 공용 skill 원본은 `.agents/skills/<name>/SKILL.md`, Codex 설치본은 `~/.codex/skills/<name>/SKILL.md` (현재: `feature`, `feedback`).
 - Codex 는 conversation 시작 시 `AGENTS.md` 만 자동 로드 — 다른 .md 파일은 명시적으로 읽어야 함.

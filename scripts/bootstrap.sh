@@ -16,7 +16,8 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 install_project_skill() {
   local host="$1"
-  local source_dir="$2"
+  local skill_name="$2"
+  local source_dir="$3"
   local target_root
 
   case "$host" in
@@ -37,9 +38,26 @@ install_project_skill() {
   fi
 
   mkdir -p "$target_root"
-  rm -rf "$target_root/feature"
-  cp -R "$source_dir" "$target_root/feature"
-  echo "Installed /feature skill for $host -> $target_root/feature"
+  rm -rf "$target_root/$skill_name"
+  cp -R "$source_dir" "$target_root/$skill_name"
+  echo "Installed /$skill_name skill for $host -> $target_root/$skill_name"
+}
+
+install_project_skill_for_hosts() {
+  local skill_name="$1"
+  local source_dir="$2"
+  case "$HOST" in
+    claude)
+      install_project_skill claude "$skill_name" "$source_dir"
+      ;;
+    codex)
+      install_project_skill codex "$skill_name" "$source_dir"
+      ;;
+    both|"")
+      install_project_skill claude "$skill_name" "$source_dir"
+      install_project_skill codex "$skill_name" "$source_dir"
+      ;;
+  esac
 }
 
 # ── 1. Ensure Bun is installed ────────────────────────────────
@@ -97,27 +115,21 @@ else
 fi
 
 # ── 5. Install project-local team skills ──────────────────────
-PROJECT_FEATURE_SKILL="$REPO_ROOT/.agents/skills/feature"
-if [ -d "$PROJECT_FEATURE_SKILL" ]; then
+PROJECT_SKILLS_ROOT="$REPO_ROOT/.agents/skills"
+if [ -d "$PROJECT_SKILLS_ROOT" ]; then
   echo ""
   echo "Installing project skills…"
-  case "$HOST" in
-    claude)
-      install_project_skill claude "$PROJECT_FEATURE_SKILL"
-      ;;
-    codex)
-      install_project_skill codex "$PROJECT_FEATURE_SKILL"
-      ;;
-    both|"")
-      install_project_skill claude "$PROJECT_FEATURE_SKILL"
-      install_project_skill codex "$PROJECT_FEATURE_SKILL"
-      ;;
-  esac
+  for skill_dir in "$PROJECT_SKILLS_ROOT"/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    install_project_skill_for_hosts "$skill_name" "${skill_dir%/}"
+  done
 fi
 
 echo ""
 echo "Done. Next session, try these in your AI coding tool:"
-echo "  /feature help       — manage the shared feature inventory"
+echo "  /feature help        — manage the shared feature inventory"
+echo "  /feedback help       — view & investigate user feedback safely"
 echo "  /office-hours        — start an ideation session"
 echo "  /autoplan            — plan + design + engineering review"
 echo "  /qa                  — browser-based QA with auto-fix"
