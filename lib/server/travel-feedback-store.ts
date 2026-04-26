@@ -59,6 +59,14 @@ export type TravelFeedbackRecord = {
   expiresAt: string;
 };
 
+export type TravelFeedbackListEntry = TravelFeedbackRecord & { id: string };
+
+export type TravelFeedbackListOptions = {
+  limit: number;
+  since?: number;
+  category?: TravelFeedbackCategory;
+};
+
 let cachedClient: Redis | null | undefined;
 
 function getClient(): Redis | null {
@@ -158,6 +166,48 @@ export async function createTravelFeedback(feedback: TravelFeedbackInput): Promi
   }
 
   throw new Error("feedback-id-collision");
+}
+
+export async function listTravelFeedback(
+  opts: TravelFeedbackListOptions,
+): Promise<TravelFeedbackListEntry[] | null> {
+  const redis = getClient();
+  if (!redis) return null;
+
+  const limit = Math.max(1, Math.min(opts.limit, INDEX_LIMIT));
+  const filtered = opts.since != null || opts.category != null;
+  const fetchSize = filtered ? Math.min(INDEX_LIMIT, limit * 4) : limit;
+
+  const ids = await redis.lrange<string>(INDEX_KEY, 0, fetchSize - 1);
+  if (ids.length === 0) return [];
+
+  const keys = ids.map((id) => feedbackKey(id));
+  const raws = await redis.mget<(string | Record<string, unknown> | null)[]>(...keys);
+
+  const out: TravelFeedbackListEntry[] = [];
+  for (let i = 0; i < ids.length && out.length < limit; i += 1) {
+    const id = ids[i];
+    const raw = raws[i];
+    if (id == null || raw == null) continue;
+    const obj = typeof raw === "string" ? parseRecordJson(raw) : (raw as Record<string, unknown>);
+    if (!obj || typeof obj.createdAt !== "string") continue;
+    if (opts.since != null) {
+      const ts = Date.parse(obj.createdAt);
+      if (Number.isNaN(ts) || ts < opts.since) continue;
+    }
+    if (opts.category != null && obj.category !== opts.category) continue;
+    out.push({ id, ...(obj as TravelFeedbackRecord) });
+  }
+  return out;
+}
+
+function parseRecordJson(raw: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function feedbackKey(id: string): string {
