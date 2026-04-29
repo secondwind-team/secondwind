@@ -1,0 +1,41 @@
+name: build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: typecheck / lint / build / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: lint
+        run: npm run lint
+
+      - name: build
+        env:
+          # build 시점에 process.env 접근하는 코드가 있어 빈 값이라도 넣어준다.
+          # 실제 prod 키는 Vercel 의 환경변수에서 주입됨 (PR preview 빌드는 Vercel 측에서 별도).
+          GEMINI_API_KEY: ""
+          NAVER_CLIENT_ID: ""
+          NAVER_CLIENT_SECRET: ""
+          NEXT_PUBLIC_KAKAO_JS_KEY: ""
+        run: npm run build
+
+      - name: test
+        run: npm test
