@@ -60,42 +60,53 @@ export type KakaoPlaces = {
   ) => void;
 };
 
+// 동일 SDK 를 map-view / stay-picker / place-popup 세 곳에서 동시에 호출함.
+// 모듈 레벨 promise 로 memoize 하지 않으면, 첫 호출의 onload 가 fire 된 직후
+// 두 번째 호출이 existing script 에 addEventListener 를 붙이면 영원히 pending
+// 되는 race 가 가능. 캐시는 실패 시 reset 해 재시도를 허용한다.
+let cachedSdk: Promise<KakaoGlobal> | null = null;
+
 export function loadKakaoSdk(appKey: string): Promise<KakaoGlobal> {
   if (typeof window === "undefined") return Promise.reject(new Error("server"));
-  if (window.kakao?.maps) return Promise.resolve(window.kakao);
+  if (cachedSdk) return cachedSdk;
 
-  const existing = document.querySelector<HTMLScriptElement>("script[data-kakao-maps-sdk]");
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener(
-        "load",
-        () => {
-          if (window.kakao?.maps) {
-            window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));
-          } else {
-            reject(new Error("kakao-not-available"));
-          }
-        },
-        { once: true },
-      );
-      existing.addEventListener("error", () => reject(new Error("sdk-load-failed")), { once: true });
-    });
+  cachedSdk = createSdkPromise(appKey);
+  cachedSdk.catch(() => {
+    cachedSdk = null;
+  });
+  return cachedSdk;
+}
+
+function createSdkPromise(appKey: string): Promise<KakaoGlobal> {
+  if (window.kakao?.maps) {
+    const k = window.kakao;
+    return new Promise((resolve) => k.maps.load(() => resolve(k)));
   }
 
   return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
-    s.dataset.kakaoMapsSdk = "true";
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
-    s.onload = () => {
-      if (window.kakao?.maps) {
-        window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));
-      } else {
-        reject(new Error("kakao-not-available"));
-      }
-    };
-    s.onerror = () => reject(new Error("sdk-load-failed"));
-    document.head.appendChild(s);
+    const existing = document.querySelector<HTMLScriptElement>("script[data-kakao-maps-sdk]");
+    const target = existing ?? createScriptTag(appKey);
+    target.addEventListener(
+      "load",
+      () => {
+        if (window.kakao?.maps) {
+          window.kakao.maps.load(() => resolve(window.kakao as KakaoGlobal));
+        } else {
+          reject(new Error("kakao-not-available"));
+        }
+      },
+      { once: true },
+    );
+    target.addEventListener("error", () => reject(new Error("sdk-load-failed")), { once: true });
+    if (!existing) document.head.appendChild(target);
   });
+}
+
+function createScriptTag(appKey: string): HTMLScriptElement {
+  const s = document.createElement("script");
+  s.async = true;
+  s.defer = true;
+  s.dataset.kakaoMapsSdk = "true";
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
+  return s;
 }
