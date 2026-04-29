@@ -115,7 +115,9 @@ export function PlanCard({
         onConfirm={confirmPlan}
       />
 
-      <MapView plan={plan} onLegsLoaded={setLegsByItem} />
+      <div data-print="hide">
+        <MapView plan={plan} onLegsLoaded={setLegsByItem} />
+      </div>
 
       <ol className="space-y-6">
         {plan.days.map((day, dayIdx) => (
@@ -159,9 +161,15 @@ export function PlanCard({
         </ul>
       )}
 
-      <SourcesLegend />
+      <div data-print="hide">
+        <SourcesLegend />
+      </div>
 
-      {shareInput && <ShareSection input={shareInput} plan={plan} model={model} />}
+      {shareInput && (
+        <div data-print="hide">
+          <ShareSection input={shareInput} plan={plan} model={model} />
+        </div>
+      )}
 
       {model && (
         <p className="text-right text-[10px] text-[var(--muted)]">

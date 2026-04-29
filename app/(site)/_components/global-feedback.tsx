@@ -59,7 +59,7 @@ export function GlobalFeedback() {
   }
 
   return (
-    <>
+    <div data-print="hide">
       <button
         type="button"
         onClick={() => {
@@ -155,7 +155,7 @@ export function GlobalFeedback() {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
