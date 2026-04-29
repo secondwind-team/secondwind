@@ -16,6 +16,7 @@ import {
   type TravelItem,
   type TravelPlan,
 } from "@/lib/common/services/travel";
+import { buildIcsFilename, generateIcs } from "@/lib/common/services/travel-ics";
 import { MapView, type LegsByItem, type OsrmLeg } from "./map-view";
 import { PlacePopup } from "./place-popup";
 
@@ -478,6 +479,19 @@ function ShareSection({
     }
   }
 
+  function downloadIcs() {
+    const ics = generateIcs(plan, input);
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = buildIcsFilename(input);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   return (
     <section className="space-y-2 rounded-2xl border border-[var(--line)] bg-slate-50 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -534,6 +548,19 @@ function ShareSection({
           {state.message}
         </p>
       )}
+
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
+        <p className="text-xs text-[var(--muted)]">
+          캘린더에 등록 — 시간 있는 일정만 events 로 저장됩니다.
+        </p>
+        <button
+          type="button"
+          onClick={downloadIcs}
+          className="rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] transition hover:border-[var(--accent)]"
+        >
+          .ics 받기
+        </button>
+      </div>
     </section>
   );
 }
