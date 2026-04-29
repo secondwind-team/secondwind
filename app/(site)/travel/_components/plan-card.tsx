@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { track } from "@vercel/analytics";
 import {
   computeBudget,
   describeBudgetIncludes,
@@ -64,6 +65,10 @@ export function PlanCard({
       // 저장이 막힌 브라우저에서도 현재 화면의 확정 상태는 보여준다.
     }
     setConfirmed(true);
+    track("plan_confirmed", {
+      dayCount: plan.days.length,
+      hasStay: Boolean(plan.stay?.name),
+    });
   }
 
   return (
@@ -460,6 +465,7 @@ function ShareSection({
       }
       const url = new URL(json.url, window.location.origin).toString();
       const expiresAt = typeof json.expiresAt === "string" ? json.expiresAt : "";
+      track("share_created");
       setState({ kind: "ok", url, expiresAt, copied: false });
     } catch {
       setState({ kind: "error", message: "공유 링크를 만들지 못했습니다. 잠시 후 다시 시도해주세요." });
@@ -498,6 +504,7 @@ function ShareSection({
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    track("ics_downloaded", { dayCount: plan.days.length });
   }
 
   return (
