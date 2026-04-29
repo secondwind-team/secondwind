@@ -2,6 +2,32 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.12.0] - 2026-04-29
+
+긴 reliability + 점검 후 후속 작업 묶음. 사용자 직접 보이는 새 기능과 운영 안정성 개선이 함께.
+
+### Added
+- 결과 카드의 공유 섹션에 **iCal `.ics` 받기** 버튼 추가. 시간 있는 일정만 VEVENT 로 변환하여 구글/애플/네이버 캘린더에 한 번에 import (PR #64).
+- 공유 링크 생성 후 **`navigator.share()` 네이티브 공유** 버튼이 모바일에서 노출. 카톡·메시지·메일 OS 공유 시트 직접 호출 (PR #58).
+- 공유 링크(`/travel/[shareId]`) 의 **OG 미리보기 이미지** 자동 생성. 카톡·트위터에 링크 붙이면 secondwind 브랜드 + 목적지·일수·기간이 큰 카드로 보임. Noto Sans KR 동적 subset (PR #61).
+- 루트 `/` 의 **OG 미리보기 이미지** 도 같은 패턴으로 추가. travel/diary/experiment 태그 칩 (PR #66).
+- **인쇄 CSS** — 브라우저 인쇄 시 지도·인터랙션·디버그 영역 자동 숨김, 텍스트 위주의 종이 동선표. 외부 링크는 본문에 URL 같이 표시 (PR #65).
+- 지도에 **마커 클러스터링 + zoom 기반 라벨 토글**. 줌아웃 시 인접 day 마커가 cluster 로 합쳐져 라벨 겹침 회피 (PR #68).
+- 결과 카드 헤더에 **"Naver 호출: N건"** 뱃지. 이번 plan 생성에서 실제 fetch 가 발생한 unique query 수를 표시 — quota 압박 + cache 효과 가시화 (PR #69).
+- **단위 테스트 프레임워크 vitest** 도입. 61 케이스 (`travel.ts` sanitize·decision 정규화·budget·input normalization, `travel-share-store.ts` parseSnapshot, `travel-ics.ts` ics 생성) (PR #59, #64, ADR 0001 amendment).
+- **CI: typecheck / lint / build / test 게이트** (`.github/workflows/build.yml`) 추가. 모든 PR 의 회귀를 사람·AI 가 명령 잊어도 잡힘 (PR #60).
+- 사용자 친화 메시지: travel 응답이 invalid-response 일 때 "응답을 해석하지 못했습니다…" 문구 (PR #51).
+
+### Changed
+- **Naver Open API 호출 동시성 4건으로 제한**. 한 plan 생성에서 누적 60+ 호출까지 burst 가능했던 자리 — Naver burst 차단 + 일일 quota(25k) 보호 (PR #52).
+- **enrichPlan in-request 캐시** 도입. 같은 query+destHint 가 grounded pool / enrich / candidate pass / repair 사이에서 반복 호출되던 자리를 한 번에 dedupe (PR #67).
+- **OSRM 호출을 day 단위 sequential** 로 변경 + day 사이 120ms 간격. public OSRM demo 의 burst rate 정책 우회 → 직선 fallback 빈도 ↓ (PR #63).
+- **Flash Lite 의 partial decision 응답 정규화**. `decision` 의 세 배열 중 하나만 누락해도 plan 전체가 invalid-response 로 떨어지던 자리, `parseTravelPlan` 의 검사 직전에 빈 배열 채워 통과 (PR #53).
+- **숙소 위치를 못 찾았을 때 사용자에게 알림**. `Stay.place_warning` 필드 추가, decision 패널의 "확정 전에 확인할 것" 에 자동 노출. 못 찾은 숙소는 "숙소 기준점으로 동선 판단" good_reason 에서도 자동 제거 (PR #54).
+- **클라이언트 응답에 `isTravelPlan` 가드** 추가 — 서버는 이미 검증하지만 caching/proxy 변형에 대한 defense-in-depth (PR #56).
+- **Kakao SDK 로더 memoize + race 가드**. 동시에 세 컴포넌트가 호출 시 첫 onload 직후 두 번째 호출이 영원히 pending 되던 race 제거 (PR #55).
+- **PlacePopup SDK 로드 실패에 fallback 메시지** 표시. 빈 회색 박스 대신 "지도를 불러오지 못했습니다" + 카카오맵 외부 링크 안내 (PR #57).
+
 ## [0.1.11.0] - 2026-04-26
 
 ### Added

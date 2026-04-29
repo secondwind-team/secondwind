@@ -109,6 +109,7 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 ### LLM quota 모니터링 + 사용자 전달
 **Priority:** P2
 **Why:** 현재 429 시 "1~2분 뒤 다시 시도" 문구만. 언제 풀리는지 · 일일 quota 인지 분당 quota 인지 구분 없음. Google AI Studio Dashboard 링크 or 간단한 사용량 estimation 노출 고려.
+**Partial:** PR #69 로 plan 헤더에 "Naver 호출: N건" 뱃지 추가 (in-request 단위). Gemini 의 분당/일일 cancel 시간 명시 + Naver 누적 quota 추적은 별도.
 
 ### 결정 종료율 KPI 측정
 **Priority:** P3
@@ -123,34 +124,13 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 **Priority:** P3
 **Why:** 설계 문서의 primary 공유 방식. 플랜 state 를 query param 으로 압축해 카톡 공유. (현재는 KV 기반 + 동적 OG 미리보기는 PR #61 로 도입.)
 
-### enrichPlan in-request 캐싱
-**Priority:** P3
-**Why:** PR #52 의 동시성 throttle 로 burst 는 잡았지만, 같은 query 가 candidate pass / repair pass / re-enrich 사이에 중복 호출될 수 있음. 요청 내 Map 으로 dedupe 하면 Naver quota 추가 절약.
-**Trigger:** Naver quota 가 실 사용에서 압박 받을 때.
-
-### map-view 마커 클러스터링
-**Priority:** P3
-**Why:** 하루 5~7곳 + 인접 day 마커가 좁은 지역에 밀집하면 숫자 라벨이 겹쳐 읽기 어려움. `kakao.maps.MarkerClusterer` 또는 zoom-level 기반 라벨 토글.
-
-### OSRM 호출 day 직렬화
-**Priority:** P2
-**Why:** [map-view.tsx:124](app/(site)/travel/_components/map-view.tsx#L124) 가 모든 day 의 route geometry 를 `Promise.all` 로 동시 호출. OSRM public demo 는 burst rate 정책이 모호해 client-side 에서 발사 패턴이 직선 fallback 을 트리거하기 쉬움. day 사이 짧은 간격 또는 sequential 로 안전판 보강. 프로덕션 OSRM 이전 (위 P2 항목) 전까지 가벼운 임시 조치.
-
-### iCal `.ics` export
-**Priority:** P3
-**Why:** decision 패널의 `todo_after_confirming` 마지막 단계가 "확정 후 외부 캘린더 등록". 사용자 동선이 plan-card → 카카오 캘린더/구글 캘린더 수동 입력. `.ics` 다운로드 버튼으로 한 번에. 라이브러리 의존 없이 RFC 5545 텍스트 생성 가능.
-
-### 루트 `/` OG 미리보기 이미지
-**Priority:** P3
-**Why:** PR #61 로 share 별 OG 는 도입됨. 루트 페이지 (브랜드 entry) 도 같은 패턴 재사용해 카톡·트위터에서 secondwind 카드가 보이게.
-
 ### Plan 비교 모드
 **Priority:** P3
 **Why:** 사용자가 같은 input 으로 재생성 시 직전 결과를 잃음. 드로어/사이드 패널에 직전 plan 보존 → 좌우 비교. state 한 슬롯 추가 정도. 확정 결정 UX 강화.
 
-### 일정 인쇄 CSS
+### Naver 누적 quota 추적
 **Priority:** P3
-**Why:** J 강박 사용자 중 종이 동선표를 들고 가는 패턴. `@media print` 로 지도·버튼·share 섹션 숨기고 텍스트 + transit 만 깔끔하게.
+**Why:** PR #69 가 in-request 단위 호출 수만 표시. 누적 일일 호출 수를 KV 에 기록하면 사용자에게 "오늘 X/25,000" 같이 보여줄 수 있음. Gemini quota-store 와 같은 패턴.
 
 ---
 
@@ -175,5 +155,20 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 - **지도-카드 번호 매칭 + OSRM 실제 도로 경로** — PR #3 (2026-04-23)
 - **OSRM 거리·시간 덮어쓰기 + 정확도 UI (점선 밑줄 + 정보 출처 패널)** — PR #9 (2026-04-23)
 - **travel 결정 패널 v0** — v0.1.8.0 (2026-04-25)
-- **테스트 프레임워크 도입 (vitest + 41 단위 테스트)** — PR #59 (2026-04-29). ADR 0001 sovereignty 표 #4 부분 변경 — Amendments 섹션 참조.
+- **Naver 호출 동시성 4건 throttle + 60+ burst 차단** — PR #52, v0.1.12.0 (2026-04-29)
+- **decision 부분 채움 응답 정규화 (Flash Lite 회귀 방어)** — PR #53 (2026-04-29)
+- **숙소 enrich 실패 시 사용자 알림** — PR #54 (2026-04-29)
+- **Kakao SDK 로더 memoize + race 가드** — PR #55 (2026-04-29)
+- **클라이언트 응답 isTravelPlan 가드** — PR #56 (2026-04-29)
+- **PlacePopup SDK 로드 실패 fallback** — PR #57 (2026-04-29)
+- **navigator.share() 네이티브 공유** — PR #58 (2026-04-29)
+- **테스트 프레임워크 도입 (vitest + 71 단위 테스트)** — PR #59, #64 (2026-04-29). ADR 0001 sovereignty 표 #4 부분 변경 — Amendments 섹션 참조.
 - **CI: typecheck / lint / build / test 게이트** — PR #60 (2026-04-29)
+- **공유 링크 OG 미리보기 이미지 + 동적 metadata** — PR #61 (2026-04-29)
+- **OSRM 호출 day 단위 sequential** — PR #63 (2026-04-29)
+- **iCal `.ics` 캘린더 내보내기** — PR #64 (2026-04-29)
+- **인쇄 CSS — 종이 동선표** — PR #65 (2026-04-29)
+- **루트 `/` OG 미리보기 이미지 + metadata 보강** — PR #66 (2026-04-29)
+- **enrichPlan in-request 캐시 (중복 Naver 호출 dedupe)** — PR #67 (2026-04-29)
+- **map-view 마커 클러스터링 + zoom 기반 라벨 토글** — PR #68 (2026-04-29)
+- **plan 헤더 Naver 호출 횟수 뱃지** — PR #69 (2026-04-29)
