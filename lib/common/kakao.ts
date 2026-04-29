@@ -29,6 +29,16 @@ export type KakaoGlobal = {
       xAnchor?: number;
       map?: KakaoMap;
     }) => KakaoCustomOverlay;
+    MarkerClusterer?: new (options: {
+      map: KakaoMap;
+      averageCenter?: boolean;
+      minLevel?: number;
+      disableClickZoom?: boolean;
+      gridSize?: number;
+    }) => KakaoMarkerClusterer;
+    event: {
+      addListener: (target: KakaoMap, type: string, handler: () => void) => void;
+    };
     services?: {
       Places: new () => KakaoPlaces;
       Status: { OK: string; ZERO_RESULT: string; ERROR: string };
@@ -37,10 +47,19 @@ export type KakaoGlobal = {
 };
 export type KakaoLatLng = { __type: "LatLng" };
 export type KakaoLatLngBounds = { extend: (ll: KakaoLatLng) => void; isEmpty: () => boolean };
-export type KakaoMap = { setBounds: (b: KakaoLatLngBounds) => void; setCenter: (ll: KakaoLatLng) => void };
+export type KakaoMap = {
+  setBounds: (b: KakaoLatLngBounds) => void;
+  setCenter: (ll: KakaoLatLng) => void;
+  getLevel: () => number;
+};
 export type KakaoMarker = { setMap: (m: KakaoMap | null) => void };
 export type KakaoPolyline = { setMap: (m: KakaoMap | null) => void };
 export type KakaoCustomOverlay = { setMap: (m: KakaoMap | null) => void };
+export type KakaoMarkerClusterer = {
+  addMarkers: (markers: KakaoMarker[]) => void;
+  clear: () => void;
+  setMap: (m: KakaoMap | null) => void;
+};
 export type KakaoPlaceSearchResult = {
   id: string;
   place_name: string;
@@ -107,6 +126,6 @@ function createScriptTag(appKey: string): HTMLScriptElement {
   s.async = true;
   s.defer = true;
   s.dataset.kakaoMapsSdk = "true";
-  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services,clusterer`;
   return s;
 }

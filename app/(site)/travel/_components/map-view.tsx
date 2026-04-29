@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadKakaoSdk, type KakaoLatLng } from "@/lib/common/kakao";
+import {
+  loadKakaoSdk,
+  type KakaoCustomOverlay,
+  type KakaoLatLng,
+  type KakaoMarker,
+} from "@/lib/common/kakao";
 import {
   enumeratePoints,
   type PointEntry,
@@ -14,6 +19,11 @@ export type LegsByItem = Map<TravelItem, OsrmLeg>;
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
+
+// 이 zoom level 보다 축소되면 day 라벨 CustomOverlay 를 hide 하고 MarkerClusterer 가
+// 인접 포인트를 cluster 로 합친다. default zoom 8 보다 큰 값이라 첫 진입 시엔 라벨이
+// 보이고, 사용자가 zoom out 하면 cluster 모드로 전환.
+const LABEL_HIDE_LEVEL = 9;
 
 type OsrmResult = {
   geometry: Array<[number, number]>;
@@ -101,15 +111,22 @@ export function MapView({
         const firstLatLng = new kakao.maps.LatLng(firstPoint.lat, firstPoint.lng);
         const map = new kakao.maps.Map(containerRef.current, { center: firstLatLng, level: 8 });
 
+        const dayLabelOverlays: KakaoCustomOverlay[] = [];
+        const dayMarkers: KakaoMarker[] = [];
+
         for (const p of points) {
           const ll = new kakao.maps.LatLng(p.lat, p.lng);
           bounds.extend(ll);
           const color = DAY_COLORS[p.dayIndex % DAY_COLORS.length];
           const content = `<div style="background:${color};color:#fff;font-size:11px;font-weight:600;padding:2px 6px;border-radius:9999px;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);white-space:nowrap;">${p.label}</div>`;
-          new kakao.maps.CustomOverlay({ position: ll, content, yAnchor: 0.5, xAnchor: 0.5, map });
+          dayLabelOverlays.push(
+            new kakao.maps.CustomOverlay({ position: ll, content, yAnchor: 0.5, xAnchor: 0.5, map }),
+          );
+          // 라벨이 hide 된 zoom 에서 클러스터링 대상이 될 dot 마커 (default Kakao pin).
+          dayMarkers.push(new kakao.maps.Marker({ position: ll }));
         }
 
-        // 숙소 마커 — day 색과 구분되는 다크 컬러 + 호텔 아이콘
+        // 숙소 마커 — day 색과 구분되는 다크 컬러 + 호텔 아이콘. 클러스터 대상이 아니라 항상 표시.
         const stayLat = plan.stay?.place?.lat;
         const stayLng = plan.stay?.place?.lng;
         if (typeof stayLat === "number" && typeof stayLng === "number") {
@@ -124,6 +141,29 @@ export function MapView({
             map,
           });
         }
+
+        // 클러스터러: 인접 day 포인트 마커를 zoom out 시 합쳐서 라벨 겹침 회피.
+        // SDK 의 clusterer 라이브러리가 로드 안 됐을 수도 (구버전 캐시) — optional 처리.
+        if (kakao.maps.MarkerClusterer) {
+          const clusterer = new kakao.maps.MarkerClusterer({
+            map,
+            averageCenter: true,
+            minLevel: LABEL_HIDE_LEVEL,
+          });
+          clusterer.addMarkers(dayMarkers);
+        } else {
+          // 클러스터러 없을 때는 마커만 직접 map 에 add — 라벨 hide 시 위치 단서 유지
+          for (const marker of dayMarkers) marker.setMap(map);
+        }
+
+        // zoom 에 따라 day 라벨 toggle. zoom out 시 cluster + 마커만 보이고 라벨 사라짐.
+        const updateLabelVisibility = () => {
+          const visible = map.getLevel() < LABEL_HIDE_LEVEL;
+          for (const overlay of dayLabelOverlays) {
+            overlay.setMap(visible ? map : null);
+          }
+        };
+        kakao.maps.event.addListener(map, "zoom_changed", updateLabelVisibility);
 
         // Day 별 그룹화
         const byDay = new Map<number, PointEntry[]>();
