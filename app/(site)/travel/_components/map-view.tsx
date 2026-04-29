@@ -20,6 +20,22 @@ type OsrmResult = {
   legs: OsrmLeg[]; // 길이 = points.length - 1, legs[j] = points[j]→points[j+1]
 };
 
+// abort 가능한 짧은 sleep — abort 시 즉시 resolve 해 effect cleanup 을 막지 않는다.
+function waitOrAbort(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
 // OSRM public demo 로 day 내 구간 실제 도로 경로 받기.
 // 실패 시 undefined — 호출자가 직선 fallback 처리.
 async function fetchRouteGeometry(
@@ -117,13 +133,25 @@ export function MapView({
           byDay.set(p.dayIndex, arr);
         }
 
-        // Day 별 경로: OSRM 으로 도로 경로 병렬 요청, 실패 시 직선 fallback
+        // Day 별 경로: OSRM 으로 도로 경로 sequential 요청, 실패 시 직선 fallback.
+        // public OSRM demo (router.project-osrm.org) 는 burst rate 정책이 명문화돼
+        // 있지 않아 day 동시 요청이 직선 fallback 을 트리거하기 쉬움. 한 번에 하나씩
+        // 보내고 짧은 간격을 둬 burst 가드. 프로덕션 OSRM 이전 (TODOS 참조) 전까지의
+        // 안전판.
         let hadRoad = 0;
         let hadStraight = 0;
         const dayEntries = Array.from(byDay.entries());
-        const routeResults = await Promise.all(
-          dayEntries.map(([, path]) => fetchRouteGeometry(path, abortController.signal)),
-        );
+        const routeResults: Array<OsrmResult | undefined> = [];
+        for (let i = 0; i < dayEntries.length; i++) {
+          if (cancelled || abortController.signal.aborted) break;
+          const entry = dayEntries[i];
+          if (!entry) continue;
+          const [, path] = entry;
+          routeResults.push(await fetchRouteGeometry(path, abortController.signal));
+          if (i < dayEntries.length - 1) {
+            await waitOrAbort(120, abortController.signal);
+          }
+        }
 
         if (cancelled) return;
 
