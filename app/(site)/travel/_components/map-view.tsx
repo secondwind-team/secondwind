@@ -18,7 +18,36 @@ export type OsrmLeg = { distanceM: number; durationS: number };
 export type LegsByItem = Map<TravelItem, OsrmLeg>;
 
 const DAY_COLORS = ["#2563eb", "#059669", "#d97706", "#db2777", "#7c3aed", "#0d9488", "#c026d3"];
-const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
+const OSRM_BASE = "https://router.project-osrm.org/route/v1";
+
+// OSRM profile 분기. mode 가 mixed/transit/flight 면 OSRM 호출 안 하고 직선 fallback.
+type OsrmProfile = "driving" | "walking" | "cycling";
+
+function modeToProfile(mode: string | undefined): OsrmProfile | null {
+  if (!mode) return "driving";
+  if (/도보|걷|걸어|산책|trekking/i.test(mode)) return "walking";
+  if (/자전거|라이딩|cycling/i.test(mode)) return "cycling";
+  if (/지하철|전철|버스|기차|KTX|ITX|SRT|비행기|항공|배|페리/i.test(mode)) return null; // 직선 + 점선
+  // 차량·택시·렌트카·자가용·rental 등 도로 차량은 driving
+  return "driving";
+}
+
+// day 의 leg 별 mode 를 모아 가장 많이 등장한 profile 을 반환.
+// null 이면 OSRM 호출 안 함 (대중교통·항공 등) — 호출자가 직선 fallback 으로 처리.
+// 한 day 안에 mode 가 섞여 있어도 majority 를 따라 한 번에 polyline 그림.
+function pickDayProfile(path: PointEntry[]): OsrmProfile | null {
+  if (path.length < 2) return null;
+  const counts = { driving: 0, walking: 0, cycling: 0, transit: 0 } as Record<string, number>;
+  for (let i = 1; i < path.length; i++) {
+    const profile = modeToProfile(path[i]?.item.transit?.mode);
+    counts[profile ?? "transit"] = (counts[profile ?? "transit"] ?? 0) + 1;
+  }
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const [topKey, topCount] = sorted[0] ?? [];
+  if (!topKey || topCount === 0) return "driving";
+  if (topKey === "transit") return null;
+  return topKey as OsrmProfile;
+}
 
 // 이 zoom level 보다 축소되면 day 라벨 CustomOverlay 를 hide 하고 MarkerClusterer 가
 // 인접 포인트를 cluster 로 합친다. default zoom 8 보다 큰 값이라 첫 진입 시엔 라벨이
@@ -46,15 +75,16 @@ function waitOrAbort(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-// OSRM public demo 로 day 내 구간 실제 도로 경로 받기.
+// OSRM public demo 로 day 내 구간 실제 도로 경로 받기. profile 별 다른 엔드포인트.
 // 실패 시 undefined — 호출자가 직선 fallback 처리.
 async function fetchRouteGeometry(
   points: PointEntry[],
+  profile: OsrmProfile,
   signal: AbortSignal,
 ): Promise<OsrmResult | undefined> {
   if (points.length < 2) return undefined;
   const coordStr = points.map((p) => `${p.lng},${p.lat}`).join(";");
-  const url = `${OSRM_URL}/${coordStr}?overview=full&geometries=geojson`;
+  const url = `${OSRM_BASE}/${profile}/${coordStr}?overview=full&geometries=geojson`;
   try {
     const res = await fetch(url, { signal });
     if (!res.ok) return undefined;
@@ -181,13 +211,20 @@ export function MapView({
         let hadRoad = 0;
         let hadStraight = 0;
         const dayEntries = Array.from(byDay.entries());
+        const dayProfiles = dayEntries.map(([, path]) => pickDayProfile(path));
         const routeResults: Array<OsrmResult | undefined> = [];
         for (let i = 0; i < dayEntries.length; i++) {
           if (cancelled || abortController.signal.aborted) break;
           const entry = dayEntries[i];
           if (!entry) continue;
           const [, path] = entry;
-          routeResults.push(await fetchRouteGeometry(path, abortController.signal));
+          const profile = dayProfiles[i];
+          if (profile === null) {
+            // 대중교통·항공 — OSRM 호출 안 함, 직선 fallback 만
+            routeResults.push(undefined);
+          } else {
+            routeResults.push(await fetchRouteGeometry(path, profile ?? "driving", abortController.signal));
+          }
           if (i < dayEntries.length - 1) {
             await waitOrAbort(120, abortController.signal);
           }
@@ -200,6 +237,8 @@ export function MapView({
         dayEntries.forEach(([dayIdx, path], i) => {
           if (path.length < 2) return;
           const result = routeResults[i];
+          const profile = dayProfiles[i];
+          const isTransitOrFlight = profile === null;
           const latLngs: KakaoLatLng[] = result
             ? result.geometry.map(([lng, lat]) => new kakao.maps.LatLng(lat, lng))
             : path.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
@@ -218,7 +257,8 @@ export function MapView({
             strokeWeight: 3,
             strokeColor: DAY_COLORS[dayIdx % DAY_COLORS.length] ?? "#2563eb",
             strokeOpacity: 0.7,
-            strokeStyle: result ? "solid" : "shortdash",
+            // 대중교통·항공은 항상 점선 (직선이 의도). OSRM 결과 있으면 solid, 실패면 shortdash.
+            strokeStyle: isTransitOrFlight ? "longdash" : result ? "solid" : "shortdash",
             map,
           });
         });
