@@ -1,6 +1,6 @@
 import type { PlaceInfo, TravelInput, TravelPlan } from "./travel";
 import { kakaoMapSearchUrl } from "./travel";
-import { searchPlaceCandidates } from "./travel-enrich";
+import { searchPlaceCandidates, type EnrichCache } from "./travel-enrich";
 
 // 시드 1개당 풀에 들어가는 후보 수. 너무 크면 풀이 비대해지고 LLM 컨텍스트도 늘어남.
 const PER_SEED_LIMIT = 5;
@@ -130,6 +130,7 @@ function normalizeDestKey(destination: string): string {
 export async function collectPoolFromSeeds(
   seeds: ReadonlyArray<string>,
   destination: string,
+  cache?: EnrichCache,
 ): Promise<PoolEntry[]> {
   if (seeds.length === 0) return [];
 
@@ -138,7 +139,7 @@ export async function collectPoolFromSeeds(
   const byName = new Map<string, PoolEntry>();
 
   const tasks = seeds.map(async (seed) => {
-    const candidates = await searchPlaceCandidates(seed, destination, PER_SEED_LIMIT);
+    const candidates = await searchPlaceCandidates(seed, destination, PER_SEED_LIMIT, cache);
     return { seed, candidates };
   });
 
