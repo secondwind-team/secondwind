@@ -61,7 +61,7 @@ export function QuotaDebug({ lastCall }: { lastCall?: LastCall }) {
   if (!lastCall && !snapshot) return null;
 
   return (
-    <>
+    <div data-print="hide">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -132,7 +132,7 @@ export function QuotaDebug({ lastCall }: { lastCall?: LastCall }) {
           )}
         </aside>
       )}
-    </>
+    </div>
   );
 }
 
