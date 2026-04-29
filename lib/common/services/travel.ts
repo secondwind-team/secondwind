@@ -131,6 +131,7 @@ export type BudgetExtra = { label: string; krw: number };
 export type Stay = {
   name: string;
   place?: PlaceInfo;
+  place_warning?: string;
 };
 
 export type DecisionSummary = {
@@ -818,7 +819,8 @@ function isStay(v: unknown): v is Stay {
   if (typeof v !== "object" || v === null) return false;
   const s = v as Record<string, unknown>;
   if (typeof s.name !== "string" || s.name.trim().length === 0) return false;
-  // place 는 enrich 단계에서 채워지므로 LLM 응답에서는 없는 게 정상
+  if (!isOptString(s.place_warning)) return false;
+  // place / place_warning 은 enrich 단계에서 채워지므로 LLM 응답에서는 없는 게 정상
   return true;
 }
 

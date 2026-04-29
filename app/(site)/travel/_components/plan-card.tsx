@@ -344,14 +344,16 @@ function buildDecisionSummary(
 
   const goodReasons = uniqueNonEmpty([
     ...llmGoodReasons,
-    plan.stay ? `숙소 기준점 "${plan.stay.name}"을 중심으로 동선을 판단할 수 있습니다.` : "",
+    plan.stay?.place ? `숙소 기준점 "${plan.stay.name}"을 중심으로 동선을 판단할 수 있습니다.` : "",
     mealCount > 0 ? `식사와 휴식 지점을 일정 안에 함께 배치했습니다.` : "",
     transitCount > 0 ? `장소 사이 이동 시간과 수단을 함께 표시합니다.` : "",
   ]).slice(0, 3);
 
   const overageNotice = budgetCheck ? buildOverageNotice(budgetCheck) : "";
+  const stayWarning = plan.stay?.place_warning ?? "";
   const checkBeforeConfirming = uniqueNonEmpty([
     overageNotice,
+    stayWarning,
     ...(plan.decision?.check_before_confirming ?? []),
     warningCount > 0 ? `위치 확인 필요 표시가 있는 장소 ${warningCount}곳은 방문 전 지도에서 다시 확인하세요.` : "",
     locatedCount > 0 ? `주소와 전화는 ${locatedCount}곳이 Naver 지역검색으로 확인되었습니다.` : "",

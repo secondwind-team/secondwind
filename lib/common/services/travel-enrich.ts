@@ -374,7 +374,16 @@ export async function enrichPlan(plan: TravelPlan, destHint?: string): Promise<v
     const stay = plan.stay;
     tasks.push(
       searchPlace(stay.name, destHint).then((result) => {
-        if (result?.status === "ok") stay.place = result.place;
+        if (!result) {
+          stay.place_warning = `숙소 "${stay.name}" 위치를 지도에서 확인하지 못했습니다.`;
+          return;
+        }
+        if (result.status === "ok") {
+          stay.place = result.place;
+          stay.place_warning = undefined;
+        } else {
+          stay.place_warning = result.warning;
+        }
       }),
     );
   }
