@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { loadKakaoSdk } from "@/lib/common/kakao";
 import { kakaoMapSearchUrl, type TravelItem } from "@/lib/common/services/travel";
@@ -14,6 +14,7 @@ type Props = {
 // 인앱으로 미니맵 + 장소 정보 표시. ESC · 바깥 클릭 · X 로 닫힘.
 export function PlacePopup({ item, onClose }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [sdkFailed, setSdkFailed] = useState(false);
 
   // ESC 로 닫기
   useEffect(() => {
@@ -27,13 +28,17 @@ export function PlacePopup({ item, onClose }: Props) {
 
   // 미니맵 렌더 — lat/lng 있을 때만
   useEffect(() => {
+    setSdkFailed(false);
     const lat = item?.place?.lat;
     const lng = item?.place?.lng;
     if (typeof lat !== "number" || typeof lng !== "number") return;
     const container = mapRef.current;
     if (!container) return;
     const appKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? "";
-    if (!appKey) return;
+    if (!appKey) {
+      setSdkFailed(true);
+      return;
+    }
 
     let cancelled = false;
     loadKakaoSdk(appKey)
@@ -44,7 +49,7 @@ export function PlacePopup({ item, onClose }: Props) {
         new kakao.maps.Marker({ position: center, map });
       })
       .catch(() => {
-        // SDK 로드 실패 — 조용히 무시 (팝업의 fallback 텍스트로 대체됨)
+        if (!cancelled) setSdkFailed(true);
       });
 
     return () => {
@@ -56,8 +61,12 @@ export function PlacePopup({ item, onClose }: Props) {
 
   const place = item.place;
   const hasGeo = typeof place?.lat === "number" && typeof place?.lng === "number";
+  const showMap = hasGeo && !sdkFailed;
   const kakaoUrl = place?.url ?? (item.place_query ? kakaoMapSearchUrl(item.place_query) : undefined);
   const title = place?.name ?? item.text;
+  const fallbackMessage = sdkFailed
+    ? "지도를 불러오지 못했습니다."
+    : (item.place_warning ?? "정확한 위치를 확인하지 못했어요.");
 
   return (
     <div
@@ -92,7 +101,7 @@ export function PlacePopup({ item, onClose }: Props) {
           </button>
         </div>
 
-        {hasGeo ? (
+        {showMap ? (
           <div
             ref={mapRef}
             className="h-64 w-full bg-slate-100"
@@ -100,7 +109,7 @@ export function PlacePopup({ item, onClose }: Props) {
           />
         ) : (
           <div className="bg-slate-50 p-4 text-xs leading-relaxed text-[var(--muted)]">
-            {item.place_warning ?? "정확한 위치를 확인하지 못했어요."} 아래 카카오맵 링크에서 <b>&quot;{item.place_query ?? item.text}&quot;</b> 검색 결과를 확인해보세요.
+            {fallbackMessage} 아래 카카오맵 링크에서 <b>&quot;{item.place_query ?? item.text}&quot;</b> 검색 결과를 확인해보세요.
           </div>
         )}
 
