@@ -2,16 +2,42 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { TravelForm } from "../_components/travel-form";
 import { TravelHero } from "../_components/travel-hero";
+import { enumeratePoints } from "@/lib/common/services/travel";
 import { getTravelShare, isShareId } from "@/lib/server/travel-share-store";
 
 type Props = {
   params: Promise<{ shareId: string }>;
 };
 
-export const metadata: Metadata = {
-  title: "shared travel",
-  description: "공유받은 여행 계획을 확인하고 다시 수정해 만들 수 있습니다.",
-};
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { shareId } = await params;
+  const snapshot = isShareId(shareId) ? await getTravelShare(shareId) : null;
+  if (!snapshot) {
+    return {
+      title: "shared travel",
+      description: "공유 링크가 만료되었거나 잘못된 주소입니다.",
+    };
+  }
+  const { input, plan } = snapshot;
+  const dayCount = plan.days.length;
+  const placeCount = enumeratePoints(plan).length;
+  const title = `${input.destination} 여행 ${dayCount}일 일정`;
+  const description = `${input.startDate} ~ ${input.endDate} · ${dayCount}일 · 장소 ${placeCount}곳`;
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
 
 export default async function SharedTravelPage({ params }: Props) {
   const { shareId } = await params;
