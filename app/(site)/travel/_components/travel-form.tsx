@@ -8,6 +8,7 @@ import {
   DEFAULT_PLANNING_MODEL,
   PLANNING_MODELS,
   USER_PROMPT_MAX,
+  isTravelPlan,
   parsePlanningModel,
   validateTravelInput,
   type BudgetCategory,
@@ -121,6 +122,14 @@ export function TravelForm({
         startCooldown();
         return;
       }
+      if (!isTravelPlan(json.plan)) {
+        setState({
+          kind: "error",
+          message: "응답을 해석하지 못했습니다. 잠시 후 다시 시도해주세요.",
+        });
+        startCooldown();
+        return;
+      }
       const model = typeof json.model === "string" ? json.model : undefined;
       const responsePlanningModel = parsePlanningModel(json.planningModel);
       const placeStats = extractPlaceStats(json.placeStats);
@@ -129,7 +138,7 @@ export function TravelForm({
       setPlanInput(checkedInput);
       setState({
         kind: "ok",
-        plan: json.plan as TravelPlan,
+        plan: json.plan,
         model,
         planningModel: responsePlanningModel,
         placeStats,
