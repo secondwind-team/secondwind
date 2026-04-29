@@ -430,6 +430,11 @@ function ShareSection({
   model?: string;
 }) {
   const [state, setState] = useState<ShareState>({ kind: "idle" });
+  const [canNativeShare, setCanNativeShare] = useState(false);
+
+  useEffect(() => {
+    setCanNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
 
   async function createShare() {
     setState({ kind: "saving" });
@@ -458,6 +463,18 @@ function ShareSection({
       setState({ kind: "ok", url, expiresAt, copied: true });
     } catch {
       setState({ kind: "ok", url, expiresAt, copied: false });
+    }
+  }
+
+  async function nativeShare(url: string) {
+    try {
+      await navigator.share({
+        title: `${input.destination} 여행 계획`,
+        text: `${input.destination} ${plan.days.length}일 일정 (${input.startDate} ~ ${input.endDate})`,
+        url,
+      });
+    } catch {
+      // 사용자 cancel 또는 미지원 — 조용히 무시 (복사 버튼이 fallback)
     }
   }
 
@@ -495,6 +512,15 @@ function ShareSection({
           >
             {state.copied ? "복사됨" : "복사"}
           </button>
+          {canNativeShare && (
+            <button
+              type="button"
+              onClick={() => nativeShare(state.url)}
+              className="rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] transition hover:border-[var(--accent)]"
+            >
+              공유
+            </button>
+          )}
           {state.expiresAt && (
             <span className="text-[11px] text-[var(--muted)]">
               {formatExpiresAt(state.expiresAt)} 만료
