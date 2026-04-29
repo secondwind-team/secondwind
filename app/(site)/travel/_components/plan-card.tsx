@@ -92,6 +92,14 @@ export function PlanCard({
                 {placeStats.warnings > 0 ? ` · 확인 필요 ${placeStats.warnings}` : ""}
               </span>
             )}
+            {placeStats && typeof placeStats.naverCalls === "number" && placeStats.naverCalls > 0 && (
+              <span
+                className="rounded-full border border-dashed border-[var(--line)] bg-white px-2 py-1"
+                title="이번 요청에서 Naver 지역검색 호출 횟수 (cache hit · 재시도 제외)"
+              >
+                Naver 호출: {placeStats.naverCalls}건
+              </span>
+            )}
           </div>
         )}
         {plan.stay && (

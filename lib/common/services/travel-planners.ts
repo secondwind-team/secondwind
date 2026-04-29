@@ -198,7 +198,7 @@ export async function runTravelPlanner(
     llmModel: result.model,
     promptVersion: result.promptVersion,
     usage,
-    placeStats: computePlaceStats(plan, repairedPlaces),
+    placeStats: computePlaceStats(plan, repairedPlaces, enrichCache),
     ...(rateLimitHits.length > 0 ? { rateLimitHits } : {}),
   };
 }

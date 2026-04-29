@@ -95,6 +95,8 @@ export type PlaceStats = {
   destinationMismatches: number;
   outlierRejects: number;
   repairedPlaces: number;
+  /** 한 plan 생성에서 실제 Naver 호출 횟수 (cache hit 제외, 재시도 제외). */
+  naverCalls?: number;
 };
 
 export type TransitInfo = {

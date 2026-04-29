@@ -393,6 +393,7 @@ function extractPlaceStats(raw: unknown): PlaceStats | undefined {
   const destinationMismatches = typeof r.destinationMismatches === "number" ? r.destinationMismatches : undefined;
   const outlierRejects = typeof r.outlierRejects === "number" ? r.outlierRejects : undefined;
   const repairedPlaces = typeof r.repairedPlaces === "number" ? r.repairedPlaces : undefined;
+  const naverCalls = typeof r.naverCalls === "number" ? r.naverCalls : undefined;
   if (
     totalPlaceQueries === undefined ||
     verifiedPlaces === undefined ||
@@ -403,7 +404,15 @@ function extractPlaceStats(raw: unknown): PlaceStats | undefined {
   ) {
     return undefined;
   }
-  return { totalPlaceQueries, verifiedPlaces, warnings, destinationMismatches, outlierRejects, repairedPlaces };
+  return {
+    totalPlaceQueries,
+    verifiedPlaces,
+    warnings,
+    destinationMismatches,
+    outlierRejects,
+    repairedPlaces,
+    ...(naverCalls !== undefined ? { naverCalls } : {}),
+  };
 }
 
 function extractUsage(raw: unknown): Omit<LastCall, "model"> | undefined {
