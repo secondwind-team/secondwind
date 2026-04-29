@@ -52,16 +52,6 @@ secondwind 의 열린 작업 · 리스크 · 후속 아이템.
 **Why:** OSRM public demo 는 ToS 상 heavy use 금지. Rate limit 맞으면 지도 경로가 직선으로 fallback 돼 UX 저하.
 **Options:** 자체 OSRM 인스턴스, Kakao Mobility (비즈 전환 필요), Mapbox Directions.
 
-### 이동수단별 경로 렌더링 분기 (polyline)
-**Priority:** P2
-**Why:** 현재 OSRM `/driving` 고정이라 지하철·도보·버스 등 mode 와 무관하게 자동차 도로 위에 선이 그어짐. 거리·시간 덮어쓰기 (PR #9) 는 이미 mode 감지로 car-only 로 제한 돼 있지만, 지도 polyline 은 여전히 driving 경로.
-**Design:**
-- `차량`/`택시` → `/driving` 유지
-- `도보` → `/walking`, `자전거` → `/cycling` (public demo 지원 서버 확인 필요)
-- `지하철`/`버스` → OSRM 불가 (도로망 그래프 기반). 직선 점선 + "대중교통 경로 미지원" 주석, 또는 Kakao Mobility 대중교통 API 도입 (비즈 전환 필요)
-- `비행기` → 직선 (항공 경로)
-- `map-view.tsx:fetchRouteGeometry` 가 mode 인자를 받아 URL 의 profile 세그먼트 분기
-
 ### Chat 기반 부분 수정
 **Priority:** P2
 **Why:** 설계 문서 (`akushi-main-design-20260422-102616.md`) 의 핵심 UX — "박물관 빼줘" 같은 자연어 수정. 현재는 폼 재제출만 가능.
@@ -107,30 +97,25 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 **관련:** PR #13, `docs/decisions/0001-v0-stack-and-accepted-risks.md` (v0 에서 의식적으로 skip 한 exit criteria 중 하나 재검토).
 
 ### LLM quota 모니터링 + 사용자 전달
-**Priority:** P2
+**Priority:** P3
 **Why:** 현재 429 시 "1~2분 뒤 다시 시도" 문구만. 언제 풀리는지 · 일일 quota 인지 분당 quota 인지 구분 없음. Google AI Studio Dashboard 링크 or 간단한 사용량 estimation 노출 고려.
-**Partial:** PR #69 로 plan 헤더에 "Naver 호출: N건" 뱃지 추가 (in-request 단위). Gemini 의 분당/일일 cancel 시간 명시 + Naver 누적 quota 추적은 별도.
+**Done so far:** PR #69 in-request Naver 호출 뱃지, PR #71 Naver 일일 누적 quota 디버그 패널 표시. Gemini 도 quota-store 가 RPM/RPD/TPM 추적 + 디버그 패널에 표시 중. **남은 부분:** 사용자(비개발자) 친화 메시지 — 디버그 패널 외 일반 UI 에서도 429 시 "약 X분 뒤 자동 복구" 같은 명확한 안내. Trigger: 실 사용 중 429 다발 시.
 
-### 결정 종료율 KPI 측정
-**Priority:** P3
-**Why:** ADR 0001 의 "NOT in scope" 목록. "이 정도면 됨" 이 실제로 작동하는지 측정 없이는 product-market fit 체크 불가. 재생성률 · 공유 클릭 · edit 횟수 등 trace.
-**Hint:** Vercel Analytics 또는 PostHog 무료 티어.
+### 결정 funnel 분석 — 데이터 수집 후 첫 분석
+**Priority:** P2
+**Why:** PR #75 로 Vercel Analytics + 핵심 이벤트(plan_generated/regenerated/confirmed/share_created/ics_downloaded/plan_swapped) 도입. 일주일 ~ 한 달 데이터 쌓이면 재생성률·확정률·공유율 분석. "이 정도면 됨" 작동 여부 첫 데이터 기반 검증.
 
-### PWA manifest + 서비스 워커
+### 서비스 워커 + 오프라인 캐시
 **Priority:** P3
-**Why:** 설계 문서 distribution 계획의 일부. 홈 화면 설치, 오프라인 저장된 일정 열람. Phase 3 네이티브 래핑의 전제.
+**Why:** PR #74 로 PWA manifest + 아이콘은 도입 (홈 화면 설치 가능). 오프라인 캐시 / SW 는 별개. workbox 같은 라이브러리 도입해 share 받은 plan 을 비행기 모드에서도 열 수 있게.
 
 ### URL 공유 (LZ-string 압축)
 **Priority:** P3
 **Why:** 설계 문서의 primary 공유 방식. 플랜 state 를 query param 으로 압축해 카톡 공유. (현재는 KV 기반 + 동적 OG 미리보기는 PR #61 로 도입.)
 
-### Plan 비교 모드
+### Plan 비교 모드 — day/item 단위 diff
 **Priority:** P3
-**Why:** 사용자가 같은 input 으로 재생성 시 직전 결과를 잃음. 드로어/사이드 패널에 직전 plan 보존 → 좌우 비교. state 한 슬롯 추가 정도. 확정 결정 UX 강화.
-
-### Naver 누적 quota 추적
-**Priority:** P3
-**Why:** PR #69 가 in-request 단위 호출 수만 표시. 누적 일일 호출 수를 KV 에 기록하면 사용자에게 "오늘 X/25,000" 같이 보여줄 수 있음. Gemini quota-store 와 같은 패턴.
+**Why:** PR #73 로 두 plan 사이 toggle (직전 결과 전환) 은 도입. 다음 단계는 두 plan 의 변경된 day/item 을 highlight 로 표시 (added/removed/changed). state 는 이미 있어서 비교 알고리즘만.
 
 ---
 
@@ -171,4 +156,9 @@ Naver Open API 공식 지역검색은 스키마상 `title / category / phone / a
 - **루트 `/` OG 미리보기 이미지 + metadata 보강** — PR #66 (2026-04-29)
 - **enrichPlan in-request 캐시 (중복 Naver 호출 dedupe)** — PR #67 (2026-04-29)
 - **map-view 마커 클러스터링 + zoom 기반 라벨 토글** — PR #68 (2026-04-29)
-- **plan 헤더 Naver 호출 횟수 뱃지** — PR #69 (2026-04-29)
+- **plan 헤더 Naver 호출 횟수 뱃지** — PR #69 → PR #71 (2026-04-29). #69 는 stack squash 함정으로 main 누락 → #71 에서 변경 재포함.
+- **Naver 일일 누적 quota 카운터 (KV) + 디버그 패널 표시** — PR #71 (2026-04-29)
+- **이동수단별 OSRM polyline 분기 (도보/자전거/차량/대중교통)** — PR #72 (2026-04-29)
+- **plan 비교 모드 — 직전 결과 보존 + 토글** — PR #73 (2026-04-29)
+- **PWA manifest + 아이콘 (홈 화면 설치)** — PR #74 (2026-04-29)
+- **Vercel Analytics + 결정 funnel 핵심 이벤트** — PR #75 (2026-04-29)

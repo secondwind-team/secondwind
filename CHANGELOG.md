@@ -2,6 +2,29 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.13.0] - 2026-04-29
+
+같은 날 두 번째 묶음. v0.1.12.0 의 점검 결과 후속 + 신규 기능 5개 + 운영 모니터링 보강. 24 PR 한 세션의 후반부.
+
+### Added
+- **Naver 일일 누적 호출 카운터** + 디버그 패널의 "Naver Local Search · YYYY-MM-DD (KST)" 사용/한도 바 표시 (PR #71). `lib/server/naver-quota-store.ts` 가 KV INCRBY + 25h TTL 로 자동 리셋. 한도 25,000/일.
+- **plan 헤더의 "Naver 호출: N건" 뱃지** — 이번 plan 생성에서 실제 fetch 가 발생한 unique query 수 (PR #69 → PR #71 재포함).
+- **이동수단별 OSRM polyline 분기** (PR #72) — 도보·자전거 일정도 mode 에 맞는 경로 (`/walking`, `/cycling`). 대중교통·항공은 longdash 직선으로 의도 표현. day 의 majority mode 따라 결정.
+- **plan 비교 모드** (PR #73) — 재생성 시 직전 결과 보존. PlanCard 상단의 dashed banner 에 "{일수}일 · {장소}곳 · ₩{경비}" + "직전 결과로 전환" 토글 버튼. 다시 누르면 원위치.
+- **PWA manifest + 아이콘** (PR #74) — iOS / 안드로이드 / 데스크탑에서 "홈 화면에 추가" 가능. standalone 모드. `public/icon.svg` (svg 아이콘) + `app/apple-icon.tsx` (iOS 용 PNG 동적 생성).
+- **Vercel Analytics + 결정 funnel 이벤트** (PR #75) — `<Analytics />` 자동 페이지뷰 + 6개 custom 이벤트 (`plan_generated` / `plan_regenerated` / `plan_confirmed` / `plan_swapped` / `share_created` / `ics_downloaded`). 재생성률·확정률·공유율·캘린더율 측정 가능.
+
+### Changed
+- 이동수단 mode 분류 정규식: 차량·택시·렌트 → driving / 도보·산책 → walking / 자전거 → cycling / 지하철·버스·기차·KTX·비행기·배 → null (직선).
+- TODOS.md 의 "Plan 비교 모드" 항목 갱신: toggle 도입됨, 다음 단계는 day/item 단위 diff highlight (P3 로 유지).
+- TODOS.md 의 "결정 종료율 KPI" → "결정 funnel 분석 — 데이터 수집 후 첫 분석" (P2): Analytics 도입됐으니 다음은 데이터 분석.
+- TODOS.md 의 "PWA manifest + 서비스 워커" → "서비스 워커 + 오프라인 캐시" (P3): manifest 는 도입됐고 SW 만 남음.
+- TODOS.md 의 "LLM quota 모니터링" P2 → P3: 디버그 패널 표시 + Naver 누적 카운터로 부분 처리. 일반 UI 의 사용자 친화 메시지는 trigger 발생 시 우선순위 ↑.
+
+### Fixed
+- **PR #69 의 stack squash 함정 복구**: `refactor/enrich-in-request-cache` 위 stack 으로 만들어 base PR squash merge 시 main 누락. PR #71 에 변경 재포함하여 정상 배포.
+- **PR #75 의 머지 conflict 해결**: travel-form.tsx 와 plan-card.tsx 가 PR #71/#73 과 동시 수정으로 충돌. main merge + resolve 후 통과. 이번 conflict 의 부산물로 `plan_swapped` 이벤트도 같이 추가됨 (당초 별도 PR 예정이었던 것 통합).
+
 ## [0.1.12.0] - 2026-04-29
 
 긴 reliability + 점검 후 후속 작업 묶음. 사용자 직접 보이는 새 기능과 운영 안정성 개선이 함께.

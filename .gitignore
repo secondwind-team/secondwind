@@ -33,3 +33,4 @@ Thumbs.db
 
 # Local feedback cache (TRAVEL-FEEDBACK-01) — read-only snapshots from prod admin endpoint
 docs/feedback/*.local.json
+.vercel
