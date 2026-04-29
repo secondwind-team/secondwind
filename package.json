@@ -9,6 +9,7 @@
     "eval:travel": "node scripts/eval-travel.mjs",
     "feedback:pull": "node scripts/fetch-feedback.mjs",
     "lint": "next lint",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "eslint-config-next": "^15.1.6",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.5"
   }
 }
