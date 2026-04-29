@@ -12,6 +12,33 @@ const PER_CALL_TIMEOUT_MS = 5_000;
 const RETRY_DELAY_MS = 300;
 const DAY_OUTLIER_THRESHOLD_KM = 120;
 
+// Naver Open API 동시 호출 상한. 한 요청에서 enrichPlan/candidate pass/grounded pool 이
+// 각각 Promise.all 로 발사하면 누적 60+ 호출까지 burst 가능 — Naver 측 burst 차단과
+// 일일 quota(25k/day) 소진을 막기 위해 인스턴스 단위로 동시성을 제한한다.
+const NAVER_MAX_CONCURRENCY = parseConcurrency(process.env.NAVER_MAX_CONCURRENCY) ?? 4;
+let naverActiveCalls = 0;
+const naverWaiters: Array<() => void> = [];
+
+function parseConcurrency(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+}
+
+async function withNaverSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (naverActiveCalls >= NAVER_MAX_CONCURRENCY) {
+    await new Promise<void>((resolve) => naverWaiters.push(resolve));
+  }
+  naverActiveCalls += 1;
+  try {
+    return await fn();
+  } finally {
+    naverActiveCalls -= 1;
+    const next = naverWaiters.shift();
+    if (next) next();
+  }
+}
+
 type NaverLocalItem = {
   title?: string;
   category?: string;
@@ -171,25 +198,27 @@ function categoryMatchesQuery(query: string, category: string | undefined): bool
 }
 
 async function fetchNaverOnce(query: string): Promise<NaverLocalItem[] | null> {
-  const url = `${NAVER_URL}?query=${encodeURIComponent(query)}&display=5`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error("naver-timeout")), PER_CALL_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "X-Naver-Client-Id": env.naverClientId,
-        "X-Naver-Client-Secret": env.naverClientSecret,
-      },
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { items?: NaverLocalItem[] };
-    return data.items ?? [];
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  return withNaverSlot(async () => {
+    const url = `${NAVER_URL}?query=${encodeURIComponent(query)}&display=5`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error("naver-timeout")), PER_CALL_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "X-Naver-Client-Id": env.naverClientId,
+          "X-Naver-Client-Secret": env.naverClientSecret,
+        },
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { items?: NaverLocalItem[] };
+      return data.items ?? [];
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 }
 
 async function searchPlace(query: string, destHint?: string): Promise<PlaceLookupResult | undefined> {
