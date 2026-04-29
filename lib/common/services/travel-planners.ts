@@ -9,7 +9,13 @@ import {
   type TravelInput,
   type TravelPlan,
 } from "./travel";
-import { computePlaceStats, enrichPlan, rejectDayOutliers, searchPlaceCandidates } from "./travel-enrich";
+import {
+  computePlaceStats,
+  createEnrichCache,
+  enrichPlan,
+  rejectDayOutliers,
+  searchPlaceCandidates,
+} from "./travel-enrich";
 import {
   appendPoolToPrompt,
   applyPoolToPlan,
@@ -107,13 +113,18 @@ export async function runTravelPlanner(
     hits.forEach((hit) => skippedModels.add(hit.model));
   };
 
+  // 한 plan 요청 내에서 같은 query 가 여러 단계 (grounded pool / enrich / candidate
+  // pass / repair → re-enrich) 에 걸쳐 반복 호출될 수 있어, 요청 lifecycle 동안만
+  // 살아있는 캐시로 dedupe. PR #52 throttle 의 후속.
+  const enrichCache = createEnrichCache();
+
   // grounded 모델: LLM 호출 전에 Naver 후보 풀을 수집해 user prompt 에 첨부.
   // 풀이 비어 있으면(Naver 키 없음 등) 일반 흐름으로 fallback.
   let userPrompt = user;
   let poolMap: Map<string, PoolEntry> | undefined;
   if (config.groundedPool) {
     const seeds = extractSeeds(input);
-    const pool = await collectPoolFromSeeds(seeds, input.destination);
+    const pool = await collectPoolFromSeeds(seeds, input.destination, enrichCache);
     if (pool.length > 0) {
       userPrompt = appendPoolToPrompt(user, pool);
       poolMap = buildPoolMap(pool);
@@ -152,17 +163,17 @@ export async function runTravelPlanner(
     applyPoolToPlan(plan, poolMap);
     rejectDayOutliers(plan);
   } else {
-    await enrichPlan(plan, input.destination);
+    await enrichPlan(plan, input.destination, enrichCache);
   }
 
   if (config.candidatePass) {
-    const candidatePass = await selectVerifiedCandidates(plan, input, llmOpts());
+    const candidatePass = await selectVerifiedCandidates(plan, input, llmOpts(), enrichCache);
     usage = addUsage(usage, candidatePass.usage);
     rateLimitHits.push(...candidatePass.rateLimitHits);
     rememberBlockedModels(candidatePass.rateLimitHits);
     candidateChangedItems = candidatePass.changedItems;
     if (candidateChangedItems.length > 0) {
-      await enrichPlan(plan, input.destination);
+      await enrichPlan(plan, input.destination, enrichCache);
     }
   }
 
@@ -196,6 +207,7 @@ async function selectVerifiedCandidates(
   plan: TravelPlan,
   input: TravelInput,
   llmOpts: { skipModels?: ReadonlyArray<GeminiModel> } = {},
+  cache?: ReturnType<typeof createEnrichCache>,
 ): Promise<{ changedItems: TravelItem[]; usage: GeminiUsage; rateLimitHits: RateLimitHit[] }> {
   const targets = collectRepairTargets(plan)
     .filter((target) => !target.item.place || target.item.place_warning)
@@ -208,7 +220,7 @@ async function selectVerifiedCandidates(
     await Promise.all(
       targets.map(async (target) => ({
         ...target,
-        candidates: (await searchPlaceCandidates(target.item.place_query ?? "", input.destination, CANDIDATES_PER_PLACE))
+        candidates: (await searchPlaceCandidates(target.item.place_query ?? "", input.destination, CANDIDATES_PER_PLACE, cache))
           .filter((place) => place.name)
           .map((place) => ({
             name: place.name!,
