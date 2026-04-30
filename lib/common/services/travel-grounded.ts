@@ -1,4 +1,4 @@
-import type { PlaceInfo, TravelInput, TravelPlan } from "./travel";
+import type { MustVisitItem, PlaceInfo, TravelInput, TravelPlan } from "./travel";
 import { kakaoMapSearchUrl } from "./travel";
 import { searchPlaceCandidates, type EnrichCache } from "./travel-enrich";
 
@@ -164,6 +164,45 @@ export async function collectPoolFromSeeds(
   }
 
   return Array.from(byName.values()).slice(0, MAX_POOL_SIZE);
+}
+
+/**
+ * 사용자 mustVisit 중 resolved (place 가 채워진) 항목을 풀의 **앞쪽** 에 우선 삽입.
+ * 이유: 사용자 검증된 ground truth 가 keyword seed 검색 결과보다 신뢰도 높음.
+ * unresolved mustVisit (텍스트만) 은 풀에 들어가지 않음 — keyword seed 로
+ * 자연스럽게 검색되거나, 안 되면 SYSTEM_PROMPT 의 "필수 방문 장소" 규칙으로
+ * place_query 자체는 통과 (단, 풀 외부라 grounded mode 의 applyPoolToPlan
+ * 단계에서 빈 문자열 정리됨 — 이 비대칭은 PR 0 단계의 수용 가능 한계).
+ */
+export function prependMustVisitToPool(
+  pool: ReadonlyArray<PoolEntry>,
+  mustVisit: ReadonlyArray<MustVisitItem> | undefined,
+): PoolEntry[] {
+  if (!mustVisit || mustVisit.length === 0) return [...pool];
+  const seen = new Set<string>();
+  const out: PoolEntry[] = [];
+  for (const mv of mustVisit) {
+    if (!mv.place?.name) continue;
+    if (seen.has(mv.place.name)) continue;
+    seen.add(mv.place.name);
+    const entry: PoolEntry = {
+      name: mv.place.name,
+      seedTag: "mustVisit",
+      ...(mv.place.category ? { category: mv.place.category } : {}),
+      ...(mv.place.address ? { address: mv.place.address } : {}),
+      ...(mv.place.phone ? { phone: mv.place.phone } : {}),
+      ...(mv.place.url ? { url: mv.place.url } : {}),
+      ...(typeof mv.place.lat === "number" ? { lat: mv.place.lat } : {}),
+      ...(typeof mv.place.lng === "number" ? { lng: mv.place.lng } : {}),
+    };
+    out.push(entry);
+  }
+  for (const entry of pool) {
+    if (seen.has(entry.name)) continue;
+    seen.add(entry.name);
+    out.push(entry);
+  }
+  return out;
 }
 
 export function appendPoolToPrompt(userPrompt: string, pool: ReadonlyArray<PoolEntry>): string {

@@ -23,6 +23,7 @@ import {
   buildPoolMap,
   collectPoolFromSeeds,
   extractSeeds,
+  prependMustVisitToPool,
   type PoolEntry,
 } from "./travel-grounded";
 
@@ -125,7 +126,9 @@ export async function runTravelPlanner(
   let poolMap: Map<string, PoolEntry> | undefined;
   if (config.groundedPool) {
     const seeds = extractSeeds(input);
-    const pool = await collectPoolFromSeeds(seeds, input.destination, enrichCache);
+    const seedPool = await collectPoolFromSeeds(seeds, input.destination, enrichCache);
+    // resolved mustVisit 을 풀의 앞쪽에 우선 삽입. PR 0 단계는 textarea 라 항상 unresolved → no-op.
+    const pool = prependMustVisitToPool(seedPool, input.mustVisit);
     if (pool.length > 0) {
       userPrompt = appendPoolToPrompt(user, pool);
       poolMap = buildPoolMap(pool);
@@ -148,7 +151,7 @@ export async function runTravelPlanner(
   if (result.status === "error") return { status: "error", reason: result.reason, model: result.model };
   rememberBlockedModels(result.rateLimitHits);
 
-  const plan = parseTravelPlan(result.text);
+  const plan = parseTravelPlan(result.text, { mustVisit: input.mustVisit });
   if (!plan) return { status: "invalid-response", raw: result.text.slice(0, 500) };
   if (input.stay?.name) {
     plan.stay = input.stay;

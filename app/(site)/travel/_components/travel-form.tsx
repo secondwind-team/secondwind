@@ -7,12 +7,16 @@ import {
   BUDGET_CATEGORIES,
   DEFAULT_BUDGET_INCLUDES,
   DEFAULT_PLANNING_MODEL,
+  MUST_VISIT_MAX_ITEMS,
+  MUST_VISIT_NAME_MAX,
+  MUST_VISIT_TEXTAREA_MAX,
   PLANNING_MODELS,
   USER_PROMPT_MAX,
   isTravelPlan,
   parsePlanningModel,
   validateTravelInput,
   type BudgetCategory,
+  type MustVisitItem,
   type PlaceStats,
   type PlanningModel,
   type Stay,
@@ -64,6 +68,9 @@ export function TravelForm({
     initialInput?.budgetIncludes ?? DEFAULT_BUDGET_INCLUDES,
   );
   const [stay, setStay] = useState<Stay | undefined>(initialInput?.stay);
+  const [mustVisitInput, setMustVisitInput] = useState<string>(
+    serializeMustVisitToText(initialInput?.mustVisit),
+  );
   const [state, setState] = useState<FormState>(
     initialPlan
       ? {
@@ -101,6 +108,7 @@ export function TravelForm({
     e.preventDefault();
     if (isCoolingDown) return;
     const budgetKrw = parseBudgetField(budgetInput);
+    const mustVisit = parseMustVisitFromText(mustVisitInput);
     const input: TravelInput = {
       destination,
       startDate,
@@ -108,6 +116,7 @@ export function TravelForm({
       prompt,
       planningModel,
       ...(stay ? { stay } : {}),
+      ...(mustVisit.length > 0 ? { mustVisit } : {}),
       ...(budgetKrw !== undefined ? { budgetKrw, budgetIncludes } : {}),
     };
     const validation = validateTravelInput(input);
@@ -155,6 +164,7 @@ export function TravelForm({
         dayCount: json.plan.days.length,
         hasStay: Boolean(checkedInput.stay?.name),
         hasBudget: typeof checkedInput.budgetKrw === "number" && checkedInput.budgetKrw > 0,
+        mustVisitCount: checkedInput.mustVisit?.length ?? 0,
       });
       // 직전 ok 결과를 previousSlot 으로 보존 — 사용자가 toggle 로 돌아갈 수 있게.
       if (isRegeneration && state.kind === "ok" && planInput) {
@@ -303,6 +313,8 @@ export function TravelForm({
               </section>
 
               <StayPicker destination={destination} value={stay} onChange={setStay} />
+
+              <MustVisitField value={mustVisitInput} onChange={setMustVisitInput} />
 
               <section className="space-y-3">
                 <div>
@@ -592,4 +604,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function MustVisitField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const lines = value.split("\n").filter((line) => line.trim().length > 0);
+  const itemCount = Math.min(lines.length, MUST_VISIT_MAX_ITEMS);
+  return (
+    <section className="space-y-2">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">필수 방문 장소 (선택)</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            한 줄에 하나씩 적어주세요. 일정에 모두 포함하도록 LLM 에 강제 주입합니다.
+          </p>
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          {itemCount} / {MUST_VISIT_MAX_ITEMS}
+        </p>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, MUST_VISIT_TEXTAREA_MAX))}
+        maxLength={MUST_VISIT_TEXTAREA_MAX}
+        rows={4}
+        placeholder={"예:\n카페 델문도\n성산일출봉\n흑돈가 성산점"}
+        className="w-full resize-y rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm leading-relaxed outline-none transition placeholder:text-slate-400 focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
+      />
+    </section>
+  );
+}
+
+// textarea raw 문자열 → MustVisitItem 배열. validator 가 한번 더 정제하지만 클라이언트에서도 미리 통일.
+function parseMustVisitFromText(raw: string): MustVisitItem[] {
+  if (!raw || !raw.trim()) return [];
+  const seen = new Set<string>();
+  const out: MustVisitItem[] = [];
+  for (const line of raw.split("\n")) {
+    const name = line.trim().slice(0, MUST_VISIT_NAME_MAX);
+    if (!name) continue;
+    const key = name.toLowerCase().replace(/\s+/g, "");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name });
+    if (out.length >= MUST_VISIT_MAX_ITEMS) break;
+  }
+  return out;
+}
+
+function serializeMustVisitToText(items: MustVisitItem[] | undefined): string {
+  if (!items || items.length === 0) return "";
+  return items.map((item) => item.name).join("\n");
 }
