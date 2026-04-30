@@ -115,6 +115,19 @@
 |---|---|---:|---|---|---|---|
 | `TRAVEL-FEEDBACK-01` | 사용자 피드백 및 버그리포트 | `live` | 사용자가 현재 여행 계획 결과에 대한 품질 피드백이나 버그를 남기고, 팀은 입력값·결과값·화면 맥락을 함께 분석해 개선한다. | `PlanCard` feedback UI, `app/api/travel/feedback/route.ts`, `app/api/travel/feedback/admin/route.ts`, `travel-feedback-store.ts`, `scripts/fetch-feedback.mjs`, `.agents/skills/feedback/`, `docs/feedback/` | 정기 분석 문서화, GUI 관리자 화면 (현재는 CLI/skill 로 충분) | 저장 기간/열람 권한, 민감정보 마스킹 범위 확장, feedback schema version, admin token 회전 운영 |
 
+### 장소 컬렉션 (내 장소)
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `TRAVEL-PLACES-01` | 리스트 CRUD | `planned` | 사용자가 만든 그룹별로 장소를 모은다 ("제주 다음달", "근처맛집"). | `app/(site)/travel/places/`, `lib/common/services/places.ts`, `places-storage.ts`, `docs/plans/2026-04-29-my-places.md` | 정렬·검색 (리스트 많아지면) | localStorage 5MB 도달 시 UX |
+| `TRAVEL-PLACES-02` | 장소 텍스트 추가 / CRUD | `planned` | 평소에 들은 장소를 텍스트로 모아둔다. | `app/(site)/travel/places/[listId]/`, `places-storage.ts` | 메모·태그 확장 | 동일 이름 dedup, JSON 손상 복구 |
+| `TRAVEL-PLACES-03` | AI 장소 매칭 (개별 + 일괄) | `planned` | 텍스트로 적은 장소를 Naver 와 매칭해 주소·전화·좌표 채움. | `app/api/places/resolve/route.ts` (신규), `lib/common/services/travel-enrich.ts` 의 `searchPlaceCandidates` 재사용 | 후보 자동 우선순위 학습 | hard quota 도입 시점 |
+| `TRAVEL-PLACES-04` | 여행 계획에 must-visit 주입 | `planned` | "이 장소들은 반드시 가야 함" 을 LLM 에 강제. | `lib/common/services/travel.ts` (mustVisit, buildTravelPrompt, sanitize protectedNames, 좌표 보존, mustVisitMissing), `lib/common/services/travel-grounded.ts` (풀 우선 삽입), `app/(site)/travel/_components/travel-form.tsx` | per-place hint override | mustVisit 누락률 모니터링 |
+| `TRAVEL-PLACES-05` | 외부 앱 share_target | `planned` | 카카오·네이버·구글맵에서 공유 → secondwind 로 자동 추가. | (PWA manifest 필요, 미구현) | — | PWA blocker 와 묶음 |
+| `TRAVEL-PLACES-06` | 인앱 지도 picker | `planned` | 카카오맵으로 직접 탐색해서 장소 추가. | `app/(site)/travel/places/_components/` (별도 plan) | stay-picker 와 다중 선택 통합 | Kakao 의존성 강화 검토 |
+| `TRAVEL-PLACES-07` | 동기화 (KV / device-id) | `planned` | 같은 폰에서 브라우저 캐시 지워도 데이터 보존. | `lib/server/places-storage-kv.ts` (미구현, StorageAdapter 인터페이스로 무수정 교체) | 익명 device-id 쿠키 정책 | 마이그레이션 hook (`exportSnapshot`/`importSnapshot`) |
+| `TRAVEL-PLACES-08` | 리스트 공유 링크 | `planned` | 친구에게 "근처맛집" 리스트 공유. | `app/api/places/share/` (미구현) | TRAVEL-SHARE 패턴 재사용 | -07 동기화 선행 |
+
 ### 운영, quota, 품질
 
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
