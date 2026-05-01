@@ -135,6 +135,23 @@ export function PlanCard({
         </p>
       </header>
 
+      {plan.mustVisitMissing && plan.mustVisitMissing.length > 0 && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">필수 방문 장소가 일정에 포함되지 않았습니다</p>
+          <ul className="mt-1 list-disc pl-5 leading-relaxed">
+            {plan.mustVisitMissing.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-amber-800">
+            rationale 의 &lsquo;달성 못한 부분&rsquo; 사유를 확인하거나, 일정을 다시 만들어보세요.
+          </p>
+        </div>
+      )}
+
       <DecisionPanel
         plan={plan}
         budget={budget}
