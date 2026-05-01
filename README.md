@@ -27,7 +27,7 @@
 1. **AI CLI 설치** — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 또는 [Codex CLI](https://github.com/openai/codex) 중 본인이 사용할 것.
 2. **프로젝트 클론**
    ```bash
-   git clone https://github.com/akushig/secondwind.git secondwind
+   git clone https://github.com/secondwind-team/secondwind.git secondwind
    cd secondwind
    ```
 3. 완료. 이후는 [GSTACK.md](./GSTACK.md) 의 "설치" 섹션 참고.
@@ -146,7 +146,7 @@ wsl --install
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone https://github.com/akushig/secondwind.git secondwind
+git clone https://github.com/secondwind-team/secondwind.git secondwind
 cd secondwind
 ```
 
