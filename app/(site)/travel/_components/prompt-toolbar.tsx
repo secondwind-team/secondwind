@@ -10,8 +10,6 @@ const TEMPLATE = [
   "꼭 하고 싶은 것:",
   "피하고 싶은 것:",
   "그 외 추가정보:",
-  "",
-  "예산·숙소는 위 선택 옵션에서 따로 지정할 수 있어요.",
 ].join("\n");
 
 type Example = { title: string; body: string };
