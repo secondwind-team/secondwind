@@ -199,6 +199,11 @@ export function TravelForm({
     setNow(Date.now());
   }
 
+  function handleStartDateChange(nextStartDate: string) {
+    setStartDate(nextStartDate);
+    setEndDate((currentEndDate) => currentEndDate || nextStartDate);
+  }
+
   return (
     <div className="space-y-8">
       <form onSubmit={onSubmit} className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-[var(--shadow-soft)] sm:p-7">
@@ -234,7 +239,7 @@ export function TravelForm({
                 required
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
                 className="w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-sm outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]"
               />
             </Field>
