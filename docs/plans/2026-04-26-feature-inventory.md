@@ -21,6 +21,7 @@
 |---|---|---:|---|---|
 | `TRAVEL` | 여행 계획 서비스 | `live` | 목적지, 기간, 요청사항을 받아 하나의 여행 계획을 만든다. | `app/(site)/travel`, `lib/common/services/travel*` |
 | `DIARY` | 다이어리 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/diary/page.tsx` |
+| `FINZ` | 친구 기반 투자 대화 실험 | `partial` | 취향 카드로 투자 캐릭터를 만들고, 친구 그룹의 오늘의 우정주/투자 레이드를 연다. | `docs/plans/2026-05-24-finz-mvp1-plan.md`, `app/(site)/finz` |
 | `EXPERIMENT-3` | 세 번째 실험 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/experiment-3/page.tsx` |
 | `COMMON-UI` | 공통 UI/레이아웃 | `live` | 홈, 사이트 레이아웃, 공통 카드. | `app/(site)`, `components/common` |
 | `LLM-PLATFORM` | LLM 프록시/모델 운영 | `ops` | Gemini 호출, fallback, quota, prompt version. | `app/api/gemini/route.ts`, `lib/common/llm.ts` |
@@ -148,6 +149,17 @@
 | `DIARY-CORE-01` | 일기 작성 | `placeholder` | 아직 기능 정의 전. | 여행 후 회고인지, 매일 쓰는 감정 기록인지? |
 | `DIARY-CORE-02` | AI 요약/회고 | `placeholder` | secondwind 의 다른 서비스와 연결 가능. | 여행 계획과 이어지는 기록인가? |
 | `DIARY-CORE-03` | 공유/비공개 설정 | `placeholder` | 민감한 개인 데이터가 될 수 있음. | 저장소와 privacy 기준은? |
+
+## FINZ MVP 1 후보 목록
+
+| Feature ID | 기능 | 상태 | 설명 | 다음 질문 |
+|---|---|---:|---|---|
+| `FINZ-MVP-01` | 시작 화면과 취향 카드 선택 | `live` | `/finz`에서 FINZ의 목적을 짧게 보여주고, 사용자가 추상 취향 카드를 3개 이상 고른다. | 캐릭터 소환 CTA 이후 `FINZ-MVP-02`로 연결 |
+| `FINZ-MVP-02` | 개인 투자 캐릭터 소환 | `live` | 선택한 카드 태그로 미래기술 딜러, 배당 힐러 등 캐릭터와 스탯을 생성한다. | AI 문장 생성 없이 deterministic fallback으로 구현 완료 |
+| `FINZ-MVP-03` | 친구 그룹/파티 구성 | `planned` | localStorage 기반으로 그룹 이름과 멤버 캐릭터를 모아 파티 조합을 보여준다. | 첫 dogfooding은 한 기기 임시 입력으로 충분한가? |
+| `FINZ-MVP-04` | 오늘의 우정주와 투자 레이드 생성 | `planned` | 그룹 조합 기반으로 대화 소재 종목과 역할별 레이드 미션을 만든다. | 실제 종목을 쓸지, 테마/섹터부터 시작할지? |
+| `FINZ-MVP-05` | 한 줄 포지션과 파티 요약 | `planned` | 각 멤버가 매력 있음/관망/회의적 같은 포지션과 한 줄 의견을 남기고, 파티 요약을 본다. | 자유 채팅 없이 구조화 입력만으로 대화가 시작되는가? |
+| `FINZ-MVP-06` | Dogfooding 피드백 루프 | `planned` | 친구 3명 기준으로 캐릭터 공유, 우정주 반응, 레이드 재방문 의향을 기록한다. | travel feedback 시스템을 재사용할지, 문서 체크리스트로 충분한지? |
 
 ## Experiment-3 후보 목록
 

@@ -12,9 +12,12 @@ export default function SiteLayout({
         <Link href="/" className="text-base font-semibold tracking-tight text-[var(--ink)]">
           secondwind
         </Link>
-        <nav className="text-sm text-[var(--muted)]">
+        <nav className="flex items-center gap-1 text-sm text-[var(--muted)]">
           <Link href="/travel" className="rounded-xl px-3 py-1.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]">
             travel
+          </Link>
+          <Link href="/finz" className="rounded-xl px-3 py-1.5 transition hover:bg-emerald-50 hover:text-emerald-700">
+            FINZ
           </Link>
         </nav>
       </header>
