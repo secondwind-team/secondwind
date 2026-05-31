@@ -123,7 +123,7 @@
 | `TRAVEL-PLACES-01` | 리스트 CRUD | `planned` | 사용자가 만든 그룹별로 장소를 모은다 ("제주 다음달", "근처맛집"). | `app/(site)/travel/places/`, `lib/common/services/places.ts`, `places-storage.ts`, `docs/plans/2026-04-29-my-places.md` | 정렬·검색 (리스트 많아지면) | localStorage 5MB 도달 시 UX |
 | `TRAVEL-PLACES-02` | 장소 텍스트 추가 / CRUD | `planned` | 평소에 들은 장소를 텍스트로 모아둔다. | `app/(site)/travel/places/[listId]/`, `places-storage.ts` | 메모·태그 확장 | 동일 이름 dedup, JSON 손상 복구 |
 | `TRAVEL-PLACES-03` | AI 장소 매칭 (개별 + 일괄) | `planned` | 텍스트로 적은 장소를 Naver 와 매칭해 주소·전화·좌표 채움. | `app/api/places/resolve/route.ts` (신규), `lib/common/services/travel-enrich.ts` 의 `searchPlaceCandidates` 재사용 | 후보 자동 우선순위 학습 | hard quota 도입 시점 |
-| `TRAVEL-PLACES-04` | 여행 계획에 must-visit 주입 | `planned` | "이 장소들은 반드시 가야 함" 을 LLM 에 강제. | `lib/common/services/travel.ts` (mustVisit, buildTravelPrompt, sanitize protectedNames, 좌표 보존, mustVisitMissing), `lib/common/services/travel-grounded.ts` (풀 우선 삽입), `app/(site)/travel/_components/travel-form.tsx` | per-place hint override | mustVisit 누락률 모니터링 |
+| `TRAVEL-PLACES-04` | 여행 계획에 must-visit 주입 | `partial` | "이 장소들은 반드시 가야 함" 을 LLM 에 강제. Phase 0' textarea 는 구현됨, 내 장소 모달 연동은 gate 이후. | `lib/common/services/travel.ts` (mustVisit, buildTravelPrompt, sanitize protectedNames, 좌표 보존, mustVisitMissing), `lib/common/services/travel-grounded.ts` (풀 우선 삽입), `app/(site)/travel/_components/travel-form.tsx`, `scripts/eval-travel.mjs` | per-place hint override, 내 장소 모달/칩으로 textarea 교체 | `npm run eval:travel -- --ab-mustvisit` gate, mustVisit 누락률 모니터링 |
 | `TRAVEL-PLACES-05` | 외부 앱 share_target | `planned` | 카카오·네이버·구글맵에서 공유 → secondwind 로 자동 추가. | (PWA manifest 필요, 미구현) | — | PWA blocker 와 묶음 |
 | `TRAVEL-PLACES-06` | 인앱 지도 picker | `planned` | 카카오맵으로 직접 탐색해서 장소 추가. | `app/(site)/travel/places/_components/` (별도 plan) | stay-picker 와 다중 선택 통합 | Kakao 의존성 강화 검토 |
 | `TRAVEL-PLACES-07` | 동기화 (KV / device-id) | `planned` | 같은 폰에서 브라우저 캐시 지워도 데이터 보존. | `lib/server/places-storage-kv.ts` (미구현, StorageAdapter 인터페이스로 무수정 교체) | 익명 device-id 쿠키 정책 | 마이그레이션 hook (`exportSnapshot`/`importSnapshot`) |
@@ -136,7 +136,7 @@
 | `TRAVEL-OPS-01` | quota debug panel | `partial` | 개발 중 모델 사용량과 차단 상태를 본다. | `QuotaDebug`, `app/api/quota/route.ts`, `quota-store.ts` | 관리자 전용 토글 | 공개 UI 에 남길지 제거할지 결정 |
 | `TRAVEL-OPS-02` | 429 cooldown | `live` | 반복 제출로 quota를 더 소모하지 않는다. | `travel-form.tsx`, `friendlyErrorMessage` | 실제 retry-after 표시 | cooldown 시간이 실제 제한과 맞는지 |
 | `TRAVEL-OPS-03` | blocked model skip | `live` | 이미 막힌 모델 호출을 건너뛴다. | `getBlockedModels`, `markBlocked`, `callLlm` | dashboard 표시 | KV 실패 시 graceful degradation |
-| `TRAVEL-OPS-04` | prompt/eval 골든셋 | `planned` | 프롬프트 수정 회귀를 잡는다. | `scripts/eval-travel.mjs`, `TODOS.md` | 5~10개 대표 입력 snapshot | 모델 업데이트 후 수동 실행 |
+| `TRAVEL-OPS-04` | prompt/eval 골든셋 | `partial` | 프롬프트 수정 회귀를 잡는다. 기본 골든셋과 mustVisit A/B 모드는 있음, 운영 snapshot 축적은 아직 수동. | `scripts/eval-travel.mjs`, `TODOS.md` | 5~10개 대표 입력 snapshot 확장 | 모델 업데이트 후 수동 실행, snapshot 저장 위치/판정 기준 정례화 |
 | `TRAVEL-OPS-05` | hallucination 방어 | `planned` | 존재하지 않는 장소 추천을 줄인다. | `TODOS.md`, `travel-enrich.ts` | 2-phase candidate pool | P1 로 관리, dogfooding feedback 수집 |
 | `TRAVEL-OPS-06` | Kakao 의존성 해결 | `planned` | 지도 장애 리스크를 줄인다. | `TODOS.md`, `MapView` | 커스텀 도메인/Mapbox/Leaflet 검토 | borrowed Kakao app key 리스크 |
 | `TRAVEL-OPS-07` | CI build gate | `planned` | PR에서 type/lint/build 회귀를 잡는다. | `TODOS.md`, `.github/workflows` | GitHub Actions 추가 | 비개발자 팀원에게 위험 설명 필수 |
@@ -157,7 +157,7 @@
 | `FINZ-MVP-01` | 시작 화면과 취향 카드 선택 | `live` | `/finz`에서 FINZ의 목적을 짧게 보여주고, 사용자가 추상 취향 카드를 3개 이상 고른다. | 캐릭터 소환 CTA 이후 `FINZ-MVP-02`로 연결 |
 | `FINZ-MVP-02` | 개인 투자 캐릭터 소환 | `live` | 선택한 카드 태그로 미래기술 딜러, 배당 힐러 등 캐릭터와 스탯을 생성한다. | AI 문장 생성 없이 deterministic fallback으로 구현 완료 |
 | `FINZ-MVP-03` | 친구 그룹/파티 구성 | `planned` | localStorage 기반으로 그룹 이름과 멤버 캐릭터를 모아 파티 조합을 보여준다. | 첫 dogfooding은 한 기기 임시 입력으로 충분한가? |
-| `FINZ-MVP-04` | 오늘의 우정주와 투자 레이드 생성 | `planned` | 그룹 조합 기반으로 대화 소재 종목과 역할별 레이드 미션을 만든다. | 실제 종목을 쓸지, 테마/섹터부터 시작할지? |
+| `FINZ-MVP-04` | AI 오늘의 우정주 추천 + 대화 진행 | `planned` | 그룹 조합을 Gemini에 보내 대화 소재 종목/테마와 진행 질문을 만들고, AI가 후속 질문·반박 소재로 대화를 이끈다. | 저장 없는 AI Pick + stateless facilitator V0를 먼저 만들고, 이후 party snapshot 저장/초대 링크를 붙인다. |
 | `FINZ-MVP-05` | 한 줄 포지션과 파티 요약 | `planned` | 각 멤버가 매력 있음/관망/회의적 같은 포지션과 한 줄 의견을 남기고, 파티 요약을 본다. | 자유 채팅 없이 구조화 입력만으로 대화가 시작되는가? |
 | `FINZ-MVP-06` | Dogfooding 피드백 루프 | `planned` | 친구 3명 기준으로 캐릭터 공유, 우정주 반응, 레이드 재방문 의향을 기록한다. | travel feedback 시스템을 재사용할지, 문서 체크리스트로 충분한지? |
 
@@ -165,8 +165,8 @@
 
 | Feature ID | 기능 | 상태 | 설명 | 다음 질문 |
 |---|---|---:|---|---|
-| `EXPERIMENT-3-CORE-01` | 세 번째 서비스 정의 | `placeholder` | 아직 이름과 문제 정의가 없음. | travel/diary 와 같은 플랫폼에 둘 이유가 있는가? |
-| `EXPERIMENT-3-CORE-02` | 실험 종료/삭제 판단 | `placeholder` | 자리만 있는 서비스가 혼란을 만들 수 있음. | 유지할지, 숨길지, 제거할지? |
+| `EXPERIMENT-3-CORE-01` | 세 번째 서비스 정의 | `placeholder` | FINZ가 별도 서비스로 올라왔으므로 placeholder 의미가 약해짐. | 유지할지, 숨길지, 제거할지? |
+| `EXPERIMENT-3-CORE-02` | 실험 종료/삭제 판단 | `placeholder` | 자리만 있는 서비스가 혼란을 만들 수 있음. | FINZ가 세 번째 서비스라면 `/experiment-3`를 제거할지? |
 
 ## 팀 운영용 추천 흐름
 
