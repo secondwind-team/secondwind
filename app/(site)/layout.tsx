@@ -16,6 +16,9 @@ export default function SiteLayout({
           <Link href="/travel" className="rounded-xl px-3 py-1.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]">
             travel
           </Link>
+          <Link href="/finz" className="rounded-xl px-3 py-1.5 transition hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]">
+            FINZ
+          </Link>
         </nav>
       </header>
       <main className="flex-1">{children}</main>

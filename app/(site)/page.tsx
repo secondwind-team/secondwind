@@ -35,12 +35,14 @@ export default function LandingPage() {
           status="coming-soon"
           summary="준비 중"
         />
-        <ServiceCard
-          title="experiment-3"
-          owner="덕우"
-          status="coming-soon"
-          summary="준비 중"
-        />
+        <Link href="/finz" className="block">
+          <ServiceCard
+            title="FINZ"
+            owner="덕우"
+            status="ready"
+            summary="취향 카드로 투자 캐릭터를 소환하고, 친구들과 이야기할 첫 단서를 만듭니다."
+          />
+        </Link>
       </section>
     </div>
   );
