@@ -29,20 +29,20 @@ export default function LandingPage() {
             summary="J 강박에 쓰이는 여행 계획. 더 적은 결정으로 하나의 확정안을 받습니다."
           />
         </Link>
+        <Link href="/finz" className="block">
+          <ServiceCard
+            title="FINZ"
+            owner="덕우"
+            status="ready"
+            summary="친구들의 투자 취향을 캐릭터로 만들고 오늘의 우정주 대화를 시작합니다."
+          />
+        </Link>
         <ServiceCard
           title="diary"
           owner="태훈"
           status="coming-soon"
           summary="준비 중"
         />
-        <Link href="/finz" className="block">
-          <ServiceCard
-            title="FINZ"
-            owner="덕우"
-            status="ready"
-            summary="취향 카드로 투자 캐릭터를 소환하고, 친구들과 이야기할 첫 단서를 만듭니다."
-          />
-        </Link>
       </section>
     </div>
   );
