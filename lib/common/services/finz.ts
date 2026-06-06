@@ -23,6 +23,25 @@ export type FinzCharacter = {
   roleMission: string;
 };
 
+export type FinzProfile = {
+  selectedCardIds: string[];
+  selectedCards: FinzTasteCard[];
+  selectedTags: string[];
+  character: FinzCharacter;
+};
+
+export type FinzDailyPick = {
+  name: string;
+  kind: "stock" | "theme";
+  oneLine: string;
+  whyThisFits: string[];
+  debatePoint: string;
+  openingQuestions: string[];
+  conversationSeeds: string[];
+  rolePrompt: string;
+  caveats: string[];
+};
+
 type CharacterArchetype = FinzCharacter & {
   tagWeights: Record<string, number>;
 };
@@ -269,3 +288,88 @@ export function summonFinzCharacter(selectedIds: string[]): FinzCharacter | null
   const { tagWeights: _tagWeights, ...character } = winner.character;
   return character;
 }
+
+export function buildFinzProfile(selectedIds: string[]): FinzProfile | null {
+  const selectedCards = getSelectedTasteCards(selectedIds);
+  const character = summonFinzCharacter(selectedIds);
+  if (!character) return null;
+
+  return {
+    selectedCardIds: selectedCards.map((card) => card.id),
+    selectedCards,
+    selectedTags: summarizeTasteTags(selectedCards, 6),
+    character,
+  };
+}
+
+export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
+  if (!value || typeof value !== "object") return false;
+  const pick = value as Partial<FinzDailyPick>;
+  return (
+    typeof pick.name === "string" &&
+    (pick.kind === "stock" || pick.kind === "theme") &&
+    typeof pick.oneLine === "string" &&
+    stringArray(pick.whyThisFits) &&
+    typeof pick.debatePoint === "string" &&
+    stringArray(pick.openingQuestions) &&
+    stringArray(pick.conversationSeeds) &&
+    typeof pick.rolePrompt === "string" &&
+    stringArray(pick.caveats)
+  );
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+export const FINZ_DAILY_PICK_SCHEMA = {
+  type: "object",
+  properties: {
+    name: {
+      type: "string",
+      description: "오늘 이야기할 종목명 또는 테마명",
+    },
+    kind: {
+      type: "string",
+      enum: ["stock", "theme"],
+    },
+    oneLine: {
+      type: "string",
+      description: "매수 추천이 아니라 대화 소재임을 드러내는 한 줄",
+    },
+    whyThisFits: {
+      type: "array",
+      items: { type: "string" },
+    },
+    debatePoint: {
+      type: "string",
+    },
+    openingQuestions: {
+      type: "array",
+      items: { type: "string" },
+    },
+    conversationSeeds: {
+      type: "array",
+      items: { type: "string" },
+    },
+    rolePrompt: {
+      type: "string",
+      description: "사용자 캐릭터가 이 소재를 볼 때 맡으면 좋은 관점",
+    },
+    caveats: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: [
+    "name",
+    "kind",
+    "oneLine",
+    "whyThisFits",
+    "debatePoint",
+    "openingQuestions",
+    "conversationSeeds",
+    "rolePrompt",
+    "caveats",
+  ],
+} as const;
