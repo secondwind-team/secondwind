@@ -2,6 +2,19 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.14.0] - 2026-06-06
+
+FINZ MVP 범위를 “작게 완전하게 동작하는 개인 우정주 생성”으로 줄인 첫 릴리스.
+
+### Added
+- **Google 로그인 기반 FINZ 프로필 저장** — `/finz`에서 취향 카드 3개 이상 선택 후 로그인한 사용자의 카드 선택과 deterministic 캐릭터를 Neon DB에 저장.
+- **개인 오늘의 우정주 생성** — 저장된 FINZ 프로필을 기존 Gemini 호출 레이어에 전달해 오늘 이야기할 종목 또는 테마 1개와 질문/대화 소재를 생성.
+- **오늘 결과 재방문 복원** — 같은 KST 날짜의 우정주 결과를 Neon DB에 저장하고, 재방문 시 다시 표시.
+- **FINZ 서버 API** — `GET/PUT /api/finz/profile`, `GET/POST /api/finz/pick`, `GET/POST /api/auth/[...nextauth]`.
+
+### Changed
+- FINZ의 다음 개발 단위를 친구 그룹/레이드 전체가 아니라 “로그인 + DB + AI가 모두 통과하는 작은 완전 기능”으로 재정의.
+
 ## [0.1.13.0] - 2026-04-29
 
 같은 날 두 번째 묶음. v0.1.12.0 의 점검 결과 후속 + 신규 기능 5개 + 운영 모니터링 보강. 24 PR 한 세션의 후반부.
