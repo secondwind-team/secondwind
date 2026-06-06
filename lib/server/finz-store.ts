@@ -4,6 +4,7 @@ import type {
   FinzDailyPick,
   FinzProfile,
 } from "@/lib/common/services/finz";
+import { finzProfileKey } from "@/lib/common/services/finz";
 
 export type StoredFinzProfile = FinzProfile & {
   userEmail: string;
@@ -15,6 +16,7 @@ export type StoredFinzDailyPick = {
   id: string;
   userEmail: string;
   pickDate: string;
+  profileKey: string | null;
   profile: FinzProfile;
   pick: FinzDailyPick;
   model: string | null;
@@ -54,6 +56,7 @@ async function ensureSchema() {
           id TEXT PRIMARY KEY,
           user_email TEXT NOT NULL,
           pick_date TEXT NOT NULL,
+          profile_key TEXT,
           profile_snapshot JSONB NOT NULL,
           pick JSONB NOT NULL,
           model TEXT,
@@ -62,6 +65,10 @@ async function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (user_email, pick_date)
         )
+      `;
+      await sql`
+        ALTER TABLE finz_daily_picks
+        ADD COLUMN IF NOT EXISTS profile_key TEXT
       `;
     })();
   }
@@ -118,12 +125,17 @@ export async function upsertFinzProfile(input: {
 export async function getDailyPick(input: {
   userEmail: string;
   pickDate: string;
+  profileKey?: string;
 }): Promise<StoredFinzDailyPick | null> {
   await ensureSchema();
+  const profileKey = input.profileKey ?? null;
   const [row] = await getSql()`
-    SELECT id, user_email, pick_date, profile_snapshot, pick, model, prompt_version, created_at
+    SELECT id, user_email, pick_date, profile_key, profile_snapshot, pick, model, prompt_version, created_at
     FROM finz_daily_picks
-    WHERE user_email = ${input.userEmail} AND pick_date = ${input.pickDate}
+    WHERE
+      user_email = ${input.userEmail}
+      AND pick_date = ${input.pickDate}
+      AND (${profileKey}::text IS NULL OR profile_key = ${profileKey})
     LIMIT 1
   `;
   if (!row) return null;
@@ -141,11 +153,13 @@ export async function upsertDailyPick(input: {
 }): Promise<StoredFinzDailyPick> {
   await ensureSchema();
   const id = crypto.randomUUID();
+  const profileKey = finzProfileKey(input.profile);
   const [row] = await getSql()`
     INSERT INTO finz_daily_picks (
       id,
       user_email,
       pick_date,
+      profile_key,
       profile_snapshot,
       pick,
       model,
@@ -156,6 +170,7 @@ export async function upsertDailyPick(input: {
       ${id},
       ${input.userEmail},
       ${input.pickDate},
+      ${profileKey},
       ${JSON.stringify(input.profile)}::jsonb,
       ${JSON.stringify(input.pick)}::jsonb,
       ${input.model},
@@ -163,13 +178,14 @@ export async function upsertDailyPick(input: {
       ${JSON.stringify(input.usage ?? null)}::jsonb
     )
     ON CONFLICT (user_email, pick_date) DO UPDATE SET
+      profile_key = EXCLUDED.profile_key,
       profile_snapshot = EXCLUDED.profile_snapshot,
       pick = EXCLUDED.pick,
       model = EXCLUDED.model,
       prompt_version = EXCLUDED.prompt_version,
       usage = EXCLUDED.usage,
       created_at = NOW()
-    RETURNING id, user_email, pick_date, profile_snapshot, pick, model, prompt_version, created_at
+    RETURNING id, user_email, pick_date, profile_key, profile_snapshot, pick, model, prompt_version, created_at
   `;
   if (!row) {
     throw new Error("finz-daily-pick-upsert-failed");
@@ -182,6 +198,7 @@ function rowToPick(row: Record<string, unknown>): StoredFinzDailyPick {
     id: row.id as string,
     userEmail: row.user_email as string,
     pickDate: row.pick_date as string,
+    profileKey: (row.profile_key as string | null) ?? null,
     profile: row.profile_snapshot as FinzProfile,
     pick: row.pick as FinzDailyPick,
     model: (row.model as string | null) ?? null,

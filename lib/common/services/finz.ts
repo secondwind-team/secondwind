@@ -302,6 +302,10 @@ export function buildFinzProfile(selectedIds: string[]): FinzProfile | null {
   };
 }
 
+export function finzProfileKey(profile: Pick<FinzProfile, "selectedCardIds" | "character">): string {
+  return [profile.character.classId, ...profile.selectedCardIds].join("|");
+}
+
 export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
   if (!value || typeof value !== "object") return false;
   const pick = value as Partial<FinzDailyPick>;
