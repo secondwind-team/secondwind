@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.15.0] - 2026-06-14
+
+### Added
+- **FINZ 친구 파티 (FINZ-MVP-03)** — 로그인 없이 취향 카드로 캐릭터를 만들고 초대 링크를 보내면, 친구가 링크로 들어와 자기 캐릭터를 만들어 두 캐릭터가 한 파티에 모이는 2인 파티 흐름. 새 화면 `/finz/party`(생성)·`/finz/party/[groupId]`(룸), 새 API `POST /api/finz/party`·`GET·POST /api/finz/party/[groupId]`(조회/합류). Upstash KV 7일 TTL 저장(`sw:finz:group:*`, travel-share 패턴 재사용), 익명 `memberId`(localStorage) 기반 신원 — 기존 로그인 개인 우정주 흐름은 그대로 유지. 파티 기반 AI 우정주/진행자는 다음 단계(FINZ-MVP-04). KV 동시 join 은 2인 직렬 트래픽 기준 last-write-wins 로 수용.
+
 ## [0.1.14.3] - 2026-06-13
 
 ### Fixed
