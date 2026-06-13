@@ -306,6 +306,91 @@ export function finzProfileKey(profile: Pick<FinzProfile, "selectedCardIds" | "c
   return [profile.character.classId, ...profile.selectedCardIds].join("|");
 }
 
+const FINZ_FALLBACK_THEMES: Record<string, { name: string; why: string; debate: string }> = {
+  "future-tech-dealer": {
+    name: "요즘 가장 뜨거운 기술 트렌드",
+    why: "세상을 바꿀 기술과 성장 스토리에 먼저 반응하는 당신다운 주제예요.",
+    debate: "지금 이 기술은 진짜 변화일까, 아니면 과열된 기대일까?",
+  },
+  "dividend-healer": {
+    name: "오래 버티는 배당·현금흐름 이야기",
+    why: "화려한 급등보다 꾸준한 현금흐름을 좋아하는 당신과 잘 맞아요.",
+    debate: "안정적인 배당주는 지금도 매력적일까, 성장에서 너무 멀어진 걸까?",
+  },
+  "value-tanker": {
+    name: "싸게 사서 버티는 가치투자 이야기",
+    why: "좋은 회사라도 가격과 체력을 먼저 따지는 당신의 결에 맞는 주제예요.",
+    debate: "싸다는 건 기회일까, 싼 데는 이유가 있는 함정일까?",
+  },
+  "brand-ranger": {
+    name: "내가 매일 쓰는 브랜드 이야기",
+    why: "사람들이 실제로 쓰고 좋아하는 브랜드를 먼저 보는 당신답죠.",
+    debate: "익숙한 브랜드는 안전한 선택일까, 이미 다 알려져 늦은 걸까?",
+  },
+  "meme-berserker": {
+    name: "지금 커뮤니티가 떠드는 화제의 종목",
+    why: "시장의 열기와 커뮤니티 에너지를 빠르게 읽는 당신과 어울려요.",
+    debate: "이 분위기는 진짜 신호일까, 곧 식을 거품일까?",
+  },
+  "macro-mage": {
+    name: "금리·환율·경기 흐름 이야기",
+    why: "개별 기업보다 큰 흐름을 먼저 보는 당신의 시야에 맞아요.",
+    debate: "지금 매크로 환경은 위험 신호일까, 과한 걱정일까?",
+  },
+  "crisis-scavenger": {
+    name: "남들이 무서워할 때 줍는 역발상 이야기",
+    why: "모두가 피할 때 오히려 궁금해하는 당신다운 주제예요.",
+    debate: "지금의 공포는 줍줍 기회일까, 아직 더 떨어질 신호일까?",
+  },
+  "story-scout": {
+    name: "숫자보다 스토리에 끌리는 종목 이야기",
+    why: "창업자와 제품의 서사에 먼저 끌리는 당신과 잘 맞아요.",
+    debate: "좋은 스토리는 좋은 투자로 이어질까, 이야기에 취한 걸까?",
+  },
+};
+
+const FINZ_FALLBACK_DEFAULT = {
+  name: "오늘 가볍게 던져볼 투자 이야기",
+  why: "당신의 취향 카드와 어울리는, 부담 없이 시작할 수 있는 주제예요.",
+  debate: "지금 들어가는 건 기회일까, 늦은 걸까?",
+};
+
+// AI 생성이 실패했을 때(키 미설정·모델 장애·응답 파싱/스키마 실패 등) 대화가 끊기지 않도록
+// 프로필만으로 만드는 deterministic 폴백 픽. 실명 종목 환각을 피하려고 안전한 '테마'를 쓴다.
+export function buildFinzFallbackPick(
+  profile: Pick<FinzProfile, "character" | "selectedTags">,
+): FinzDailyPick {
+  const theme = FINZ_FALLBACK_THEMES[profile.character.classId] ?? FINZ_FALLBACK_DEFAULT;
+  const tags = profile.selectedTags.slice(0, 3);
+  return {
+    name: theme.name,
+    kind: "theme",
+    oneLine: `${profile.character.className}답게 친구들과 가볍게 이야기 나눠볼 오늘의 소재예요.`,
+    whyThisFits: [
+      theme.why,
+      tags.length > 0
+        ? `당신의 취향(${tags.join(", ")})과 결이 맞는 주제예요.`
+        : "당신의 취향 카드와 어울리는 주제예요.",
+      "정답을 맞히는 게 아니라 서로의 관점을 꺼내보는 게 목적이에요.",
+    ],
+    debatePoint: theme.debate,
+    openingQuestions: [
+      "이 주제에서 너는 어떤 회사가 먼저 떠올라?",
+      "지금 들어가는 건 늦은 걸까, 아직 기회일까?",
+    ],
+    conversationSeeds: [
+      "최근에 이 주제로 눈에 띈 뉴스가 있었어?",
+      "친구 중에 여기 진심인 사람 있어?",
+      "10년 뒤에도 살아남을 회사는 어디일 것 같아?",
+    ],
+    rolePrompt: profile.character.roleMission,
+    caveats: [
+      "FINZ는 투자 조언이나 매매 추천이 아니라, 친구들과 이야기할 대화 소재를 만드는 실험이에요.",
+      "지금은 AI 생성이 잠시 불안정해 기본 소재로 보여주고 있어요. 잠시 뒤 다시 생성하면 더 맞춤된 우정주를 받을 수 있어요.",
+    ],
+  };
+}
+
 export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
   if (!value || typeof value !== "object") return false;
   const pick = value as Partial<FinzDailyPick>;

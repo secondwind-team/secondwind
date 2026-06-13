@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   FINZ_DAILY_PICK_SCHEMA,
+  buildFinzFallbackPick,
   buildFinzProfile,
   finzProfileKey,
   isFinzDailyPick,
@@ -87,47 +88,39 @@ export async function POST(req: Request) {
     { skipModels },
   );
 
-  if (result.status === "not-configured") {
-    return NextResponse.json(
-      { status: "not-configured", reason: "GEMINI_API_KEY 가 설정되지 않았습니다." },
-      { status: 503 },
-    );
-  }
-  if (result.status === "disabled") {
-    return NextResponse.json(result, { status: 503 });
-  }
-  if (result.status === "error") {
-    return NextResponse.json(result, { status: 502 });
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.text);
-  } catch {
-    return NextResponse.json(
-      { status: "invalid-response", reason: "finz-pick-json-parse-failed" },
-      { status: 502 },
-    );
-  }
-  if (!isFinzDailyPick(parsed)) {
-    return NextResponse.json(
-      { status: "invalid-response", reason: "finz-pick-schema-mismatch" },
-      { status: 502 },
-    );
+  if (result.status === "ok") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.text);
+    } catch {
+      parsed = null;
+    }
+    if (isFinzDailyPick(parsed)) {
+      void recordCall(result.model, result.usage.total).catch(() => {});
+      const dailyPick = await upsertDailyPick({
+        userEmail: user.email,
+        pickDate,
+        profile,
+        pick: parsed,
+        model: result.model,
+        promptVersion: result.promptVersion,
+        usage: result.usage,
+      });
+      return NextResponse.json({ status: "ok", dailyPick });
+    }
+    console.warn("[finz/pick] LLM 응답 파싱/스키마 실패 — fallback 픽 사용");
+  } else {
+    console.warn(`[finz/pick] LLM 호출 실패(${result.status}) — fallback 픽 사용`);
   }
 
-  void recordCall(result.model, result.usage.total).catch(() => {});
-  const dailyPick = await upsertDailyPick({
-    userEmail: user.email,
-    pickDate,
-    profile,
-    pick: parsed,
-    model: result.model,
-    promptVersion: result.promptVersion,
-    usage: result.usage,
-  });
-
-  return NextResponse.json({ status: "ok", dailyPick });
+  // AI 실패 시: 같은 날 저장된 픽이 있으면 다운그레이드하지 않고 그대로 보여주고,
+  // 없으면 프로필 기반 deterministic 폴백 픽으로 대화가 끊기지 않게 한다.
+  // (폴백은 저장하지 않아 다음 시도에서 다시 AI 생성을 시도한다.)
+  if (existing) {
+    return NextResponse.json({ status: "ok", dailyPick: existing });
+  }
+  const fallbackPick = buildFinzFallbackPick(profile);
+  return NextResponse.json({ status: "ok", fallback: true, dailyPick: { pick: fallbackPick } });
 }
 
 const FINZ_PICK_SYSTEM_PROMPT = [

@@ -170,13 +170,18 @@ export function FinzTasteSelector() {
       const json = (await res.json()) as {
         status: string;
         reason?: string;
+        fallback?: boolean;
         dailyPick?: { pick?: FinzDailyPick };
       };
       if (!res.ok || json.status !== "ok" || !json.dailyPick?.pick) {
         throw new Error(json.reason ?? "pick-failed");
       }
       setDailyPick(json.dailyPick.pick);
-      setMessage("오늘의 우정주를 저장했습니다.");
+      setMessage(
+        json.fallback
+          ? "AI가 잠시 불안정해 기본 소재로 보여드려요. 잠시 뒤 다시 생성하면 맞춤 우정주를 받을 수 있어요."
+          : "오늘의 우정주를 저장했습니다.",
+      );
     } catch {
       setMessage("오늘의 우정주를 만들지 못했습니다. 잠시 뒤 다시 시도해주세요.");
     } finally {
