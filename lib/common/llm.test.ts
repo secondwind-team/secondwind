@@ -50,3 +50,47 @@ describe("callLlm — thinkingBudget plumbing", () => {
     expect(genConfig.thinkingConfig).toBeUndefined();
   });
 });
+
+// 잘린(MAX_TOKENS) 200 응답을 ok 로 오판하던 버그 회귀 방지.
+describe("callLlm — finishReason 처리", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  async function loadWithGeminiJson(geminiBody: Record<string, unknown>) {
+    vi.stubEnv("GEMINI_API_KEY", "test-key-abcdefghij");
+    vi.resetModules();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(geminiBody), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const { callLlm } = await import("./llm");
+    return callLlm;
+  }
+
+  it("finishReason=MAX_TOKENS 면 (본문이 잘려도) ok 가 아니라 error 를 반환한다", async () => {
+    const callLlm = await loadWithGeminiJson({
+      candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: '{"name":"잘린' }] } }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+    });
+    const res = await callLlm({ system: "s", user: "u" });
+    expect(res.status).toBe("error");
+  });
+
+  it("finishReason=STOP 면 정상 ok 를 반환한다", async () => {
+    const callLlm = await loadWithGeminiJson({
+      candidates: [{ finishReason: "STOP", content: { parts: [{ text: '{"ok":true}' }] } }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+    });
+    const res = await callLlm({ system: "s", user: "u" });
+    expect(res.status).toBe("ok");
+  });
+});

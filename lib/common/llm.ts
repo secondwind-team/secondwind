@@ -205,7 +205,10 @@ async function callGemini(
     }
 
     const json = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+        finishReason?: string;
+      }>;
       usageMetadata?: {
         promptTokenCount?: number;
         candidatesTokenCount?: number;
@@ -213,9 +216,20 @@ async function callGemini(
         thoughtsTokenCount?: number;
       };
     };
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const candidate = json.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    const text = candidate?.content?.parts?.[0]?.text ?? "";
     if (!text) {
-      return { status: "error", reason: "empty response", model };
+      return {
+        status: "error",
+        reason: finishReason ? `no-text (${finishReason})` : "empty response",
+        model,
+      };
+    }
+    // STOP 이 아닌 종료 사유(MAX_TOKENS / SAFETY / RECITATION 등)는 본문이 잘렸거나 차단된 것.
+    // 잘린 200 응답을 ok 로 흘려보내면 호출자가 JSON.parse 단계에서야 터지고 모델 폴백 기회도 잃는다.
+    if (finishReason && finishReason !== "STOP") {
+      return { status: "error", reason: `incomplete (${finishReason})`, model };
     }
     const um = json.usageMetadata ?? {};
     const usage: GeminiUsage = {

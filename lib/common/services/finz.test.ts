@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildFinzFallbackPick,
+  buildFinzProfile,
   getSelectedTasteCards,
+  isFinzDailyPick,
   summarizeTasteTags,
   summonFinzCharacter,
 } from "./finz";
@@ -40,5 +43,38 @@ describe("summarizeTasteTags", () => {
     ]);
 
     expect(summarizeTasteTags(cards, 3)).toEqual(["consumer", "brand", "quality"]);
+  });
+});
+
+describe("buildFinzFallbackPick", () => {
+  it("프로필로 만든 폴백 픽이 isFinzDailyPick 을 통과하고 theme 다", () => {
+    const profile = buildFinzProfile(["durable-company", "daily-brand", "cashflow-calm"]);
+    if (!profile) throw new Error("프로필 생성 실패");
+
+    const pick = buildFinzFallbackPick(profile);
+
+    expect(isFinzDailyPick(pick)).toBe(true);
+    expect(pick.kind).toBe("theme");
+    expect(pick.openingQuestions.length).toBeGreaterThanOrEqual(2);
+    expect(pick.caveats.some((c) => c.includes("대화 소재"))).toBe(true);
+  });
+
+  it("알 수 없는 클래스도 default 테마로 유효한 픽을 만든다", () => {
+    const pick = buildFinzFallbackPick({
+      character: {
+        classId: "unknown-class",
+        className: "테스트 캐릭터",
+        levelTitle: "Lv.1",
+        summary: "",
+        stats: { attack: 0, defense: 0, patience: 0, research: 0, fomoRisk: 0 },
+        weakness: "",
+        tease: "",
+        roleMission: "관점을 나눠보세요.",
+      },
+      selectedTags: [],
+    });
+
+    expect(isFinzDailyPick(pick)).toBe(true);
+    expect(pick.kind).toBe("theme");
   });
 });
