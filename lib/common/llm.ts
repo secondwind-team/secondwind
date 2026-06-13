@@ -9,6 +9,10 @@ export type LlmCallInput = {
   // 출력이 schema 에 맞춰지므로 JSON.parse 실패 · 필드 누락 · 타입 불일치가 거의 사라진다.
   // 단, maxOutputTokens 에 닿아 출력이 잘리는 truncation 은 schema 로 못 막는다.
   responseSchema?: object;
+  // thinkingBudget=0 이면 thinking 을 끈다. gemini-2.5-flash 는 thinking 이 기본 ON 이라,
+  // maxOutputTokens 가 작으면 thinking 이 예산을 다 먹어 본문이 잘린다(finishReason=MAX_TOKENS).
+  // 구조화 JSON 생성처럼 추론이 불필요한 호출은 0 으로 꺼서 truncation 을 막고 지연/비용을 줄인다.
+  thinkingBudget?: number;
 };
 
 // 순서 = primary → fallback. 429/503 에만 fallback 하며,
@@ -183,6 +187,9 @@ async function callGemini(
           maxOutputTokens: input.maxTokens ?? 2048,
           responseMimeType: "application/json",
           ...(input.responseSchema ? { responseSchema: input.responseSchema } : {}),
+          ...(typeof input.thinkingBudget === "number"
+            ? { thinkingConfig: { thinkingBudget: input.thinkingBudget } }
+            : {}),
         },
       }),
       signal: controller.signal,

@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.14.2] - 2026-06-13
+
+### Fixed
+- FINZ “오늘의 우정주 생성”이 항상 실패하고 “오늘의 우정주를 만들지 못했습니다”가 뜨던 문제 수정. gemini-2.5-flash의 thinking 토큰이 `maxOutputTokens`(1800)를 거의 다 소비해 본문 JSON이 잘려 나오던 것(`finishReason=MAX_TOKENS`)이 원인. 우정주 픽 호출에서 thinking을 끄도록 `LlmCallInput.thinkingBudget` 옵션을 추가해 `generationConfig.thinkingConfig`로 전달한다. 옵션을 주지 않는 travel 등 다른 Gemini 호출은 동작 무변경.
+
 ## [0.1.14.1] - 2026-06-07
 
 ### Fixed

@@ -80,6 +80,9 @@ export async function POST(req: Request) {
       temperature: 0.75,
       maxTokens: 1800,
       responseSchema: FINZ_DAILY_PICK_SCHEMA,
+      // gemini-2.5-flash 의 thinking 이 maxOutputTokens 를 다 먹어 JSON 이 잘리는 것을 막는다.
+      // 우정주 픽은 구조화 JSON 생성이라 thinking 이 불필요하다.
+      thinkingBudget: 0,
     },
     { skipModels },
   );
