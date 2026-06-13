@@ -21,7 +21,7 @@
 |---|---|---:|---|---|
 | `TRAVEL` | 여행 계획 서비스 | `live` | 목적지, 기간, 요청사항을 받아 하나의 여행 계획을 만든다. | `app/(site)/travel`, `lib/common/services/travel*` |
 | `DIARY` | 다이어리 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/diary/page.tsx` |
-| `FINZ` | 친구 기반 투자 대화 실험 | `partial` | 취향 카드로 투자 캐릭터를 만들고, 친구 그룹의 오늘의 우정주/투자 레이드를 연다. | `docs/plans/2026-05-24-finz-mvp1-plan.md`, `app/(site)/finz` |
+| `FINZ` | 친구 기반 투자 대화 실험 | `partial` | **현재 코드는 1인(솔로) 흐름까지만 동작**: 취향 카드 → 캐릭터 소환 → 로그인 사용자 1인의 오늘의 우정주 생성. 비전의 친구 그룹/파티/레이드는 미구현. 다음 단계는 2인 사회적 루프. | `docs/plans/2026-06-13-finz-mvp2-social-loop-plan.md` (현행 기준), `docs/plans/2026-05-24-finz-mvp1-plan.md` (기획-코드 갈라짐), `app/(site)/finz` |
 | `EXPERIMENT-3` | 세 번째 실험 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/experiment-3/page.tsx` |
 | `COMMON-UI` | 공통 UI/레이아웃 | `live` | 홈, 사이트 레이아웃, 공통 카드. | `app/(site)`, `components/common` |
 | `LLM-PLATFORM` | LLM 프록시/모델 운영 | `ops` | Gemini 호출, fallback, quota, prompt version. | `app/api/gemini/route.ts`, `lib/common/llm.ts` |
@@ -156,11 +156,12 @@
 |---|---|---:|---|---|
 | `FINZ-MVP-01` | 시작 화면과 취향 카드 선택 | `live` | `/finz`에서 FINZ의 목적을 짧게 보여주고, 사용자가 추상 취향 카드를 3개 이상 고른다. | 캐릭터 소환 CTA 이후 `FINZ-MVP-02`로 연결 |
 | `FINZ-MVP-02` | 개인 투자 캐릭터 소환 | `live` | 선택한 카드 태그로 미래기술 딜러, 배당 힐러 등 캐릭터와 스탯을 생성한다. | AI 문장 생성 없이 deterministic fallback으로 구현 완료 |
-| `FINZ-MVP-02A` | 로그인한 개인 우정주 생성 | `live` | Google 로그인 사용자의 취향 카드와 캐릭터를 Neon DB에 저장하고, Gemini로 오늘 이야기할 우정주/테마 1개와 질문 소재를 생성한다. | 친구 그룹으로 넓히기 전 로그인 + DB + AI 풀세트를 검증하는 작은 완전 기능 |
-| `FINZ-MVP-03` | 친구 그룹/파티 구성 | `planned` | localStorage 기반으로 그룹 이름과 멤버 캐릭터를 모아 파티 조합을 보여준다. | 첫 dogfooding은 한 기기 임시 입력으로 충분한가? |
-| `FINZ-MVP-04` | AI 오늘의 우정주 추천 + 대화 진행 | `planned` | 그룹 조합을 Gemini에 보내 대화 소재 종목/테마와 진행 질문을 만들고, AI가 후속 질문·반박 소재로 대화를 이끈다. | 저장 없는 AI Pick + stateless facilitator V0를 먼저 만들고, 이후 party snapshot 저장/초대 링크를 붙인다. |
+| `FINZ-MVP-02A` | 로그인한 개인 우정주 생성 | `live` | Google 로그인 사용자의 취향 카드와 캐릭터를 Neon DB에 저장하고, Gemini로 오늘 이야기할 우정주/테마 1개와 질문 소재를 생성한다. ⚠️ 1인(솔로) 흐름 — 비전의 파티 기반과 다름. 로그인 **필수**는 plan의 "로그인 미룸/localStorage" 결정과 상충. | 유지보수: Gemini 실패 시 deterministic fallback 부재, `UNIQUE(user_email,pick_date)` vs `profile_key` 클로버링, mid-flow 로그인 벽, 자동 force-save 부작용, 안 읽히는 `character` JSONB. (`2026-06-13` plan §6) |
+| `FINZ-MVP-03` | 링크 기반 2인 파티 구성 *(재정의)* | `planned` | 초대 **링크 1개**로 친구가 합류해 두 캐릭터가 한 파티 화면에 모인다. 그룹 id를 URL/KV에 실어 복원(실시간 인프라 없음), 로그인은 선택. "두 번째 사람"을 들이는 핵심 PR. | 링크 합류를 OAuth 뒤에 두지 말 것 (Q3). 2명만 지원해도 사회적 가설 증명. (`2026-06-13` plan §4·§7) |
+| `FINZ-MVP-04` | 파티 기반 우정주 + AI 진행자 1-shot *(재정의)* | `planned` | 2인 파티 조합을 Gemini에 보내 우정주 1개 + 싸울 포인트 + 캐릭터별 역할(`whyThisParty[]`, 멤버별 `rolePrompts[]`)을 생성. facilitator는 무한 루프가 아니라 **1회 응답**. V0는 theme 기본 + fallback 픽. | 토큰 복리 비용·파티 해산 시점은 MVP에서 풀지 말고 1-shot으로 우회. 실명 종목은 그라운딩 전까지 보류 (Q4). |
 | `FINZ-MVP-05` | 한 줄 포지션과 파티 요약 | `planned` | 각 멤버가 매력 있음/관망/회의적 같은 포지션과 한 줄 의견을 남기고, 파티 요약을 본다. | 자유 채팅 없이 구조화 입력만으로 대화가 시작되는가? |
-| `FINZ-MVP-06` | Dogfooding 피드백 루프 | `planned` | 친구 3명 기준으로 캐릭터 공유, 우정주 반응, 레이드 재방문 의향을 기록한다. | travel feedback 시스템을 재사용할지, 문서 체크리스트로 충분한지? |
+| `FINZ-MVP-06` | 2인 Dogfooding 피드백 루프 | `planned` | 친구 2명 기준으로 파티 합류·캐릭터 공유·우정주 반응·재방문 의향을 기록한다. | travel feedback 시스템 재사용 vs 문서 체크리스트? 성공 기준은 `2026-06-13` plan §8. |
+| `FINZ-RAID-01` | 투자 레이드 (보스/역할 미션) | `planned` | 우정주를 보스로 두고 캐릭터별 역할 미션으로 대화를 게임화. | 게임 톤 유지/제거(Q2)를 데모로 결판낸 **뒤에만** 구현. 미결 시 캐릭터의 "다음 레이드 역할" 카피는 유물. |
 
 ## Experiment-3 후보 목록
 
