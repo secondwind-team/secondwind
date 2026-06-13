@@ -6,6 +6,10 @@ secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-M
 
 ### Fixed
 - FINZ “오늘의 우정주 생성”이 항상 실패하고 “오늘의 우정주를 만들지 못했습니다”가 뜨던 문제 수정. gemini-2.5-flash의 thinking 토큰이 `maxOutputTokens`(1800)를 거의 다 소비해 본문 JSON이 잘려 나오던 것(`finishReason=MAX_TOKENS`)이 원인. 우정주 픽 호출에서 thinking을 끄도록 `LlmCallInput.thinkingBudget` 옵션을 추가해 `generationConfig.thinkingConfig`로 전달한다. 옵션을 주지 않는 travel 등 다른 Gemini 호출은 동작 무변경.
+- Gemini 응답이 잘리거나(`MAX_TOKENS`) 차단된 경우(`STOP`이 아닌 종료 사유)를 `callGemini`가 명확한 에러로 처리한다. 이전에는 잘린 200 응답을 정상으로 오인해 호출자가 JSON 파싱 단계에서야 실패하고 모델 폴백 기회도 잃었다.
+
+### Added
+- FINZ 우정주 AI 생성이 실패해도(키 미설정·모델 장애·응답 파싱/스키마 실패) 프로필 기반 deterministic 폴백 ‘테마’ 픽으로 대화가 끊기지 않게 한다. 폴백은 실명 종목 대신 안전한 테마를 쓰고, 저장하지 않아 다음 시도에서 다시 AI 생성을 시도한다. 같은 날 저장된 픽이 있으면 폴백으로 덮어쓰지 않는다.
 
 ## [0.1.14.1] - 2026-06-07
 
