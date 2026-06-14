@@ -60,7 +60,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
 
     if (result.status === "ok" && result.text.trim()) {
       void recordCall(result.model, result.usage.total).catch(() => {});
-      const answer = withSources(result.text.trim(), result.sources);
+      // 면책 문구는 서버 불변식으로 — 모델이 빠뜨려도 반드시 붙는다(금융 맥락 안전).
+      const answer = withSources(ensureDisclaimer(result.text.trim()), result.sources);
       const appended = await appendAnswerMessage(groupId, answer);
       return NextResponse.json({ status: "ok", message: appended.message });
     }
@@ -85,8 +86,12 @@ const FINZ_ASK_SYSTEM_PROMPT = [
   "욕설·혐오·불법 요청은 정중히 거절하라.",
 ].join("\n");
 
-function buildAskPrompt(transcript: string, question: string): string {
+type TranscriptTurn = { speaker: string; text: string };
+
+function buildAskPrompt(transcript: TranscriptTurn[], question: string): string {
   // 대화·질문은 데이터로만 전달한다(프롬프트 인젝션 방어). 지시는 위 system 에만 있다.
+  // speaker 는 서버가 정한 값이고 turn 은 구조화 배열이라, 사용자 텍스트에 끼운 줄바꿈·"finz:" 가짜
+  // 프리픽스가 별도 발화로 위장하지 못한다(JSON.stringify 가 개행을 이스케이프).
   return JSON.stringify(
     {
       instruction: "아래 [대화 맥락]을 참고해 [질문]에 답해라. 최신 사실은 검색으로 확인할 것.",
@@ -98,18 +103,26 @@ function buildAskPrompt(transcript: string, question: string): string {
   );
 }
 
-function buildTranscript(messages: FinzChatMessage[], members: { memberId: string; displayName: string }[]): string {
+function buildTranscript(messages: FinzChatMessage[], members: { memberId: string; displayName: string }[]): TranscriptTurn[] {
   const nameOf = (id: string) => members.find((m) => m.memberId === id)?.displayName ?? "친구";
   const recent = messages.slice(-TRANSCRIPT_TURNS);
-  const lines: string[] = [];
+  const turns: TranscriptTurn[] = [];
   for (const m of recent) {
-    if (m.kind === "text") lines.push(`${m.role === "finz" ? "finz" : nameOf(m.authorId)}: ${m.text}`);
-    else if (m.kind === "pick") lines.push(`finz: (우정주 테마 '${m.payload.name}' 를 뽑음)`);
-    else if (m.kind === "summary") lines.push(`finz: (파티 요약) ${m.payload.summary}`);
-    else if (m.kind === "position") lines.push(`${nameOf(m.authorId)}: (입장) ${m.payload.stance}${m.payload.note ? " · " + m.payload.note : ""}`);
+    // speaker 는 서버가 아는 role 에서만 도출(사용자 텍스트로 위장 불가).
+    if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
+    else if (m.kind === "pick") turns.push({ speaker: "finz", text: `(우정주 테마 '${m.payload.name}' 를 뽑음)` });
+    else if (m.kind === "summary") turns.push({ speaker: "finz", text: `(파티 요약) ${m.payload.summary}` });
+    else if (m.kind === "position")
+      turns.push({ speaker: nameOf(m.authorId), text: `(입장) ${m.payload.stance}${m.payload.note ? " · " + m.payload.note : ""}` });
     // system 은 생략
   }
-  return lines.join("\n");
+  return turns;
+}
+
+const DISCLAIMER = "ℹ️ 투자 조언이 아니라 정보 참고용이야.";
+function ensureDisclaimer(text: string): string {
+  if (/참고용|투자\s*조언/.test(text)) return text; // 모델이 이미 붙였으면 중복 안 함
+  return `${text}\n\n${DISCLAIMER}`;
 }
 
 function withSources(text: string, sources?: { title: string; uri: string }[]): string {

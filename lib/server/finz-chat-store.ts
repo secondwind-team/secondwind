@@ -302,11 +302,14 @@ export async function releaseSummaryLock(id: string): Promise<void> {
   if (redis) await redis.del(summaryLockKey(id));
 }
 
-// @finz 답변 동시·연속 호출 방지(그라운딩 LLM 은 비용↑). 짧은 NX 락.
+// @finz 동시 중복 호출(=동시 그라운딩 LLM 비용) 방지용 "동시성 락". 쿨다운이 아니다 —
+// 답이 끝나면 finally 에서 풀어 다음 @finz 가 곧바로 답을 받게 한다("반드시 대답" 요구 충족).
+// TTL 은 호출 최악 시간(per-attempt 60s × 2모델 fallback)을 덮어 진행 중 만료로 동시성 구멍이
+// 생기지 않게 크게 잡는다(서버 크래시 시 자동 해제용 안전망). 진행 중인 한 명만 LLM 을 쓴다.
 export async function acquireAskLock(id: string): Promise<boolean> {
   const redis = getClient();
   if (!redis) return true;
-  const res = await redis.set(askLockKey(id), "1", { nx: true, ex: 20 });
+  const res = await redis.set(askLockKey(id), "1", { nx: true, ex: 130 });
   return res === "OK";
 }
 
