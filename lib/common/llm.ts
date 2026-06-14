@@ -13,7 +13,13 @@ export type LlmCallInput = {
   // maxOutputTokens 가 작으면 thinking 이 예산을 다 먹어 본문이 잘린다(finishReason=MAX_TOKENS).
   // 구조화 JSON 생성처럼 추론이 불필요한 호출은 0 으로 꺼서 truncation 을 막고 지연/비용을 줄인다.
   thinkingBudget?: number;
+  // grounded=true 면 Google Search 그라운딩을 켜고 자유 텍스트(plain)로 답한다.
+  // responseSchema/JSON 모드와 동시 사용 불가라, grounded 면 JSON 강제를 끈다.
+  // 실시간 시세·뉴스처럼 모델이 모르는 사실을 검색으로 메워 답해야 할 때 쓴다.
+  grounded?: boolean;
 };
+
+export type LlmSource = { title: string; uri: string };
 
 // 순서 = primary → fallback. 429/503 에만 fallback 하며,
 // for-of 단방향 순회라서 A→B→A 순환이 구조적으로 불가능.
@@ -45,6 +51,7 @@ export type LlmResult =
       model: GeminiModel;
       usage: GeminiUsage;
       rateLimitHits?: RateLimitHit[];
+      sources?: LlmSource[]; // grounded 호출의 검색 출처(있을 때만)
     }
   | { status: "disabled"; reason: string }
   | { status: "not-configured" }
@@ -176,21 +183,27 @@ async function callGemini(
   }
 
   try {
+    // grounded 면 plain text + googleSearch 툴(JSON 모드와 동시 불가). 아니면 기존 JSON 모드.
+    const generationConfig: Record<string, unknown> = {
+      temperature: input.temperature ?? 0.6,
+      maxOutputTokens: input.maxTokens ?? 2048,
+      ...(typeof input.thinkingBudget === "number"
+        ? { thinkingConfig: { thinkingBudget: input.thinkingBudget } }
+        : {}),
+    };
+    if (!input.grounded) {
+      generationConfig.responseMimeType = "application/json";
+      if (input.responseSchema) generationConfig.responseSchema = input.responseSchema;
+    }
+
     const res = await fetch(`${url}?key=${encodeURIComponent(env.geminiApiKey)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: input.system }] },
         contents: [{ role: "user", parts: [{ text: input.user }] }],
-        generationConfig: {
-          temperature: input.temperature ?? 0.6,
-          maxOutputTokens: input.maxTokens ?? 2048,
-          responseMimeType: "application/json",
-          ...(input.responseSchema ? { responseSchema: input.responseSchema } : {}),
-          ...(typeof input.thinkingBudget === "number"
-            ? { thinkingConfig: { thinkingBudget: input.thinkingBudget } }
-            : {}),
-        },
+        generationConfig,
+        ...(input.grounded ? { tools: [{ googleSearch: {} }] } : {}),
       }),
       signal: controller.signal,
     });
@@ -208,6 +221,9 @@ async function callGemini(
       candidates?: Array<{
         content?: { parts?: Array<{ text?: string }> };
         finishReason?: string;
+        groundingMetadata?: {
+          groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
+        };
       }>;
       usageMetadata?: {
         promptTokenCount?: number;
@@ -218,7 +234,8 @@ async function callGemini(
     };
     const candidate = json.candidates?.[0];
     const finishReason = candidate?.finishReason;
-    const text = candidate?.content?.parts?.[0]?.text ?? "";
+    // 그라운딩 응답은 텍스트가 여러 part 로 쪼개질 수 있어 전부 합친다(JSON 모드는 part 1개).
+    const text = (candidate?.content?.parts ?? []).map((p) => p.text).filter(Boolean).join("");
     if (!text) {
       return {
         status: "error",
@@ -238,7 +255,17 @@ async function callGemini(
       total: um.totalTokenCount ?? 0,
       ...(typeof um.thoughtsTokenCount === "number" ? { thoughts: um.thoughtsTokenCount } : {}),
     };
-    return { status: "ok", text, promptVersion: env.promptVersion, model, usage };
+    const sources: LlmSource[] = (candidate?.groundingMetadata?.groundingChunks ?? [])
+      .map((c) => ({ title: c.web?.title ?? "", uri: c.web?.uri ?? "" }))
+      .filter((s) => s.title || s.uri);
+    return {
+      status: "ok",
+      text,
+      promptVersion: env.promptVersion,
+      model,
+      usage,
+      ...(sources.length ? { sources } : {}),
+    };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "unknown";
     return { status: "error", reason, model };

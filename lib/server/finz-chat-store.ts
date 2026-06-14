@@ -45,6 +45,9 @@ function summaryLockKey(id: string): string {
 function rerollLockKey(id: string): string {
   return `${chatKey(id)}:reroll-lock`;
 }
+function askLockKey(id: string): string {
+  return `${chatKey(id)}:ask-lock`;
+}
 
 function newId(): string {
   return crypto.randomUUID();
@@ -210,6 +213,23 @@ export async function appendSummaryMessage(
   return appendChatMessage(id, stored);
 }
 
+// @finz 질문에 대한 답변 — finz 의 자유 텍스트 메시지.
+export async function appendAnswerMessage(
+  id: string,
+  text: string,
+): Promise<{ status: "ok" | "not-found"; message?: FinzStoredChatMessage }> {
+  const stored: FinzStoredChatMessage = {
+    id: newId(),
+    role: "finz",
+    authorId: "finz",
+    authorName: "FINZ",
+    kind: "text",
+    text,
+    createdAt: new Date().toISOString(),
+  };
+  return appendChatMessage(id, stored);
+}
+
 // 내부: 꼬리 N개를 파싱된 FinzChatMessage(seq 포함)로. 레이트 리밋/요약 조회용.
 async function readWindow(id: string, count: number): Promise<FinzChatMessage[]> {
   const redis = getClient();
@@ -280,4 +300,20 @@ export async function acquireSummaryLock(id: string): Promise<boolean> {
 export async function releaseSummaryLock(id: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.del(summaryLockKey(id));
+}
+
+// @finz 동시 중복 호출(=동시 그라운딩 LLM 비용) 방지용 "동시성 락". 쿨다운이 아니다 —
+// 답이 끝나면 finally 에서 풀어 다음 @finz 가 곧바로 답을 받게 한다("반드시 대답" 요구 충족).
+// TTL 은 호출 최악 시간(per-attempt 60s × 2모델 fallback)을 덮어 진행 중 만료로 동시성 구멍이
+// 생기지 않게 크게 잡는다(서버 크래시 시 자동 해제용 안전망). 진행 중인 한 명만 LLM 을 쓴다.
+export async function acquireAskLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(askLockKey(id), "1", { nx: true, ex: 130 });
+  return res === "OK";
+}
+
+export async function releaseAskLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(askLockKey(id));
 }

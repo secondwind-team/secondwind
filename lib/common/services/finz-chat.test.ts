@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeNextNudge,
   isFinzStoredChatMessage,
+  mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
   type FinzChatMemberLite,
@@ -92,6 +93,20 @@ describe("computeNextNudge", () => {
   it("둘 다 입장 + 최신 요약 있으면 null", () => {
     const n = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), summary(4)], MEMBERS, "a");
     expect(n).toBeNull();
+  });
+});
+
+describe("mentionsFinz", () => {
+  it("@finz / @핀즈 / 대소문자 / 문장 중간 감지", () => {
+    expect(mentionsFinz("@finz 오늘 주가 어때?")).toBe(true);
+    expect(mentionsFinz("야 @FINZ 뉴스 알려줘")).toBe(true);
+    expect(mentionsFinz("@핀즈 안녕")).toBe(true);
+    expect(mentionsFinz("@finz야 이거 봐")).toBe(true);
+  });
+  it("멘션 없으면 false", () => {
+    expect(mentionsFinz("그냥 대화")).toBe(false);
+    expect(mentionsFinz("finz 좋다")).toBe(false); // @ 없음
+    expect(mentionsFinz("email@finance.com")).toBe(false);
   });
 });
 

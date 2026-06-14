@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
 import {
   computeNextNudge,
+  mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
   type FinzChatMemberLite,
@@ -55,6 +56,7 @@ export function FinzPartyRoom({
   const [pending, setPending] = useState<PendingText[]>([]);
   const [pickBusy, setPickBusy] = useState(false);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  const [askBusy, setAskBusy] = useState(false);
   const [positionSubmitting, setPositionSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -180,24 +182,53 @@ export function FinzPartyRoom({
     }
   }
 
-  async function sendText(text: string) {
+  async function sendText(text: string, reuseId?: string) {
     const memberId = getOrCreateMemberId();
-    const tempId = crypto.randomUUID();
+    const tempId = reuseId ?? crypto.randomUUID(); // 재시도는 같은 id 재사용 → 서버 dedup 이 합침
     setPending((p) => [...p, { tempId, text, status: "sending" }]);
     bumpStick();
     try {
       const res = await fetch(`/api/finz/party/${groupId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId, text, id: tempId }), // tempId=메시지 id → 재시도해도 dedup 으로 합쳐짐
+        body: JSON.stringify({ memberId, text, id: tempId }),
       });
       const json = (await res.json()) as { status: string };
       if (!res.ok || json.status !== "ok") throw new Error("send-failed");
       await refetch();
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200); // 상대 응답을 빠르게 당겨오기
+      // @finz 멘션이면 멘션 토큰을 떼고 실제 질문으로 답을 받는다. 토큰만 있으면 안내.
+      if (mentionsFinz(text)) {
+        const q = text.replace(/@\s*(finz|핀즈)/gi, "").trim();
+        if (q) void ask(q);
+        else setActionError("@finz 뒤에 궁금한 걸 적어줘.");
+      }
     } catch {
       setPending((p) => p.map((x) => (x.tempId === tempId ? { ...x, status: "failed" } : x)));
+    }
+  }
+
+  async function ask(question: string) {
+    setAskBusy(true);
+    setActionError(null);
+    bumpStick();
+    try {
+      const memberId = getOrCreateMemberId();
+      const res = await fetch(`/api/finz/party/${groupId}/ask`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId, question }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { busy?: boolean };
+      if (!res.ok) setActionError("finz 가 답하지 못했어. 잠시 뒤 다시 @finz 로 물어봐줘.");
+      else if (json.busy) setActionError("finz 가 아직 답하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 @finz 로 물어봐줘.");
+    } finally {
+      setAskBusy(false);
+      bumpStick();
     }
   }
 
@@ -205,7 +236,7 @@ export function FinzPartyRoom({
     const item = pending.find((x) => x.tempId === tempId);
     if (!item) return;
     setPending((p) => p.filter((x) => x.tempId !== tempId));
-    void sendText(item.text);
+    void sendText(item.text, tempId);
   }
 
   async function openPick(force: boolean) {
@@ -326,7 +357,7 @@ export function FinzPartyRoom({
         pending={pending}
         myMemberId={myMemberId}
         nudge={nudge}
-        aiBusy={pickBusy || summaryBusy}
+        aiBusy={pickBusy || summaryBusy || askBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}

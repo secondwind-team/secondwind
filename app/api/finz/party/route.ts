@@ -36,7 +36,10 @@ export async function POST(req: Request) {
     }
     // 환영 시스템 라인은 best-effort — 시드 실패가 create 를 막지 않는다(빈 방은 ephemeral nudge 가 커버).
     try {
-      await appendSystemMessage(result.id, "파티를 만들었어! 친구를 초대하면 둘의 조합으로 우정주를 뽑아줄게.");
+      await appendSystemMessage(
+        result.id,
+        "파티를 만들었어! 친구를 초대하면 둘의 조합으로 우정주를 뽑아줄게. 궁금한 게 있으면 @finz 로 물어봐 — 오늘 주가·뉴스도 답해줄게.",
+      );
     } catch {
       // 무시
     }
