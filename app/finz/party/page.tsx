@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function FinzPartyCreatePage() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 px-4 pb-24 pt-5">
       <header className="fz-bubble fz-bubble--pick p-5 sm:p-6">
         <p className="fz-seclabel">finz · 친구와 함께</p>
         <h1 className="fz-display mt-2 text-2xl leading-tight text-[var(--fz-ink)] sm:text-3xl">친구와 함께할 파티를 만들어.</h1>

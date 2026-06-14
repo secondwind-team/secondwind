@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildFinzGroupMember, createFinzGroup } from "@/lib/server/finz-group-store";
+import { appendSystemMessage } from "@/lib/server/finz-chat-store";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,13 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
+    // 환영 시스템 라인은 best-effort — 시드 실패가 create 를 막지 않는다(빈 방은 ephemeral nudge 가 커버).
+    try {
+      await appendSystemMessage(result.id, "파티를 만들었어! 친구를 초대하면 둘의 조합으로 우정주를 뽑아줄게.");
+    } catch {
+      // 무시
+    }
+
     return NextResponse.json({
       status: "ok",
       id: result.id,

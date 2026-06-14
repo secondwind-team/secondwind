@@ -22,7 +22,9 @@ export default function FinzLayout({ children }: { children: React.ReactNode }) 
           </Link>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-xl px-4 pb-24 pt-5">{children}</main>
+      {/* flex-1 min-h-0 로 남은 높이를 채워 채팅방이 정확히 (뷰포트 - 헤더) 높이를 갖게 한다.
+          매직넘버 calc 없음(폰트 로드에 강건). 패딩은 각 페이지가 직접 갖는다(채팅방은 풀블리드). */}
+      <main className="mx-auto flex w-full max-w-xl flex-1 min-h-0 flex-col">{children}</main>
     </div>
   );
 }

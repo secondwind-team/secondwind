@@ -3,7 +3,7 @@ import { FinzTasteSelector } from "./_components/finz-taste-selector";
 
 export default function FinzPage() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 px-4 pb-24 pt-5">
       <header className="fz-bubble fz-bubble--pick p-5 sm:p-6">
         <p className="fz-seclabel">finz · 핀즈</p>
         <h1 className="fz-display mt-2 text-2xl leading-tight text-[var(--fz-ink)] sm:text-3xl">

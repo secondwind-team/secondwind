@@ -6,18 +6,40 @@ import {
   type FinzPartyPick,
   type FinzPartyPosition,
 } from "@/lib/common/services/finz";
+import {
+  selectLatestPick,
+  selectLatestPositionsByMember,
+  type FinzChatMessage,
+} from "@/lib/common/services/finz-chat";
 import { callLlm } from "@/lib/common/llm";
-import { MAX_MEMBERS, getFinzGroup, isFinzGroupId, setFinzGroupSummary } from "@/lib/server/finz-group-store";
+import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
+import {
+  acquireSummaryLock,
+  appendSummaryMessage,
+  getChatTail,
+  releaseSummaryLock,
+} from "@/lib/server/finz-chat-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
-// 진행자 1-shot 파티 요약. 2명 + 픽 + 양쪽 포지션이 모두 있을 때만. force 없음 — 한 번 생성 후 캐시,
-// 포지션이 바뀌면 store 가 요약을 지워 자연히 재생성된다(무한 재생성/낭비 방지).
-export async function POST(_req: Request, { params }: { params: Promise<{ groupId: string }> }) {
+type Body = { memberId?: unknown };
+
+// 진행자 1-shot 파티 요약 → 채팅에 finz 요약 메시지로 append. 채팅 tail 에서 최신 픽 + 멤버별 최신 포지션을
+// 읽는다. 선행 조건(픽/양쪽 포지션) 미충족이면 에러 대신 nudged:true(클라이언트가 ephemeral nudge 표시).
+// 동시 호출은 원자적 락으로 한 번만 LLM. 이 픽 기준 포지션 이후 이미 요약이 있으면 그걸 반환(재호출 방지).
+export async function POST(req: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
   if (!isFinzGroupId(groupId)) {
     return NextResponse.json({ status: "error", reason: "invalid-id" }, { status: 400 });
+  }
+
+  let memberId = "";
+  try {
+    const body = (await req.json().catch(() => ({}))) as Body;
+    memberId = typeof body.memberId === "string" ? body.memberId : "";
+  } catch {
+    memberId = "";
   }
 
   const group = await getFinzGroup(groupId);
@@ -25,29 +47,47 @@ export async function POST(_req: Request, { params }: { params: Promise<{ groupI
   if (group.members.length < MAX_MEMBERS) {
     return NextResponse.json({ status: "error", reason: "not-full" }, { status: 409 });
   }
-  if (!group.pick) {
-    return NextResponse.json({ status: "error", reason: "no-pick" }, { status: 409 });
+  // 멤버만 — pick 라우트와 동일한 가드(링크 누수 시 비멤버의 쿼터 남용·스팸 차단).
+  if (!group.members.some((m) => m.memberId === memberId)) {
+    return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
   }
 
-  const positions = group.positions ?? [];
-  const bothPositioned =
-    positions.length >= MAX_MEMBERS &&
-    group.members.every((m) => positions.some((p) => p.memberId === m.memberId));
-  if (!bothPositioned) {
-    return NextResponse.json({ status: "error", reason: "positions-incomplete" }, { status: 409 });
+  const tail = await getChatTail(groupId, -1);
+  const latestPick = selectLatestPick(tail.messages);
+  if (!latestPick) {
+    return NextResponse.json({ status: "ok", nudged: true }); // 클라이언트가 '픽 먼저' nudge 표시
   }
 
-  if (group.summary) {
-    return NextResponse.json({ status: "ok", group });
+  const positionMap = selectLatestPositionsByMember(tail.messages, latestPick.seq);
+  const allPositioned = group.members.every((m) => positionMap.has(m.memberId));
+  if (!allPositioned) {
+    return NextResponse.json({ status: "ok", nudged: true }); // 클라이언트가 '입장 기다림' nudge 표시
+  }
+
+  // 이 픽·포지션 기준 최신 요약이 이미 있으면 재사용(Gemini 호출 없음).
+  const latestPositionSeq = Math.max(...[...positionMap.values()].map((p) => p.seq), latestPick.seq);
+  const existing = latestSummaryAfter(tail.messages, latestPositionSeq);
+  if (existing) {
+    return NextResponse.json({ status: "ok", message: existing });
+  }
+
+  // 원자적 쿨다운: 동시 탭이면 한 번만 생성. 락 실패면 잠시 뒤 폴링으로 결과를 받는다.
+  const got = await acquireSummaryLock(groupId);
+  if (!got) {
+    return NextResponse.json({ status: "ok", deduped: true });
   }
 
   const memberNames = new Map(group.members.map((m) => [m.memberId, m.displayName]));
+  const positions: FinzPartyPosition[] = group.members.map((m) => {
+    const p = positionMap.get(m.memberId)!;
+    return { memberId: m.memberId, stance: p.stance, note: p.note, createdAt: "" };
+  });
 
   const skipModels = await getBlockedModels();
   const result = await callLlm(
     {
       system: FINZ_PARTY_SUMMARY_SYSTEM_PROMPT,
-      user: buildPartySummaryPrompt(group.pick, positions, memberNames),
+      user: buildPartySummaryPrompt(latestPick.payload, positions, memberNames),
       temperature: 0.6,
       maxTokens: 900,
       responseSchema: FINZ_PARTY_SUMMARY_SCHEMA,
@@ -65,10 +105,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ groupI
     }
     if (isFinzPartySummary(parsed)) {
       void recordCall(result.model, result.usage.total).catch(() => {});
-      const setResult = await setFinzGroupSummary(groupId, parsed);
-      if (setResult.status === "ok" && setResult.group) {
-        return NextResponse.json({ status: "ok", group: setResult.group });
+      const appended = await appendSummaryMessage(groupId, parsed);
+      if (appended.status !== "ok" || !appended.message) {
+        await releaseSummaryLock(groupId);
+        return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
       }
+      return NextResponse.json({ status: "ok", message: appended.message });
     }
     console.warn("[finz/party/summary] LLM 응답 파싱/스키마 실패 — fallback 사용");
   } else {
@@ -79,7 +121,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ groupI
     group.members.map((m) => ({ memberId: m.memberId, name: m.displayName })),
     positions,
   );
-  return NextResponse.json({ status: "ok", fallback: true, group: { ...group, summary: fallback } });
+  const appended = await appendSummaryMessage(groupId, fallback);
+  if (appended.status !== "ok" || !appended.message) {
+    await releaseSummaryLock(groupId);
+    return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
+  }
+  return NextResponse.json({ status: "ok", fallback: true, message: appended.message });
+}
+
+// 주어진 seq 이후의 최신 요약 메시지(없으면 null).
+function latestSummaryAfter(messages: FinzChatMessage[], afterSeq: number) {
+  let latest: Extract<FinzChatMessage, { kind: "summary" }> | null = null;
+  for (const m of messages) {
+    if (m.kind === "summary" && m.seq > afterSeq && (latest === null || m.seq > latest.seq)) latest = m;
+  }
+  return latest;
 }
 
 const FINZ_PARTY_SUMMARY_SYSTEM_PROMPT = [

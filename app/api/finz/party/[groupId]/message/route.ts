@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { FINZ_PARTY_STANCES, type FinzPartyStance } from "@/lib/common/services/finz";
 import { isFinzGroupId } from "@/lib/server/finz-group-store";
-import { appendPositionMessage } from "@/lib/server/finz-chat-store";
+import { appendTextMessage } from "@/lib/server/finz-chat-store";
 
 export const runtime = "nodejs";
 
-type Body = { memberId?: unknown; stance?: unknown; note?: unknown };
+type Body = { memberId?: unknown; text?: unknown; id?: unknown };
 
-// 멤버 한 줄 포지션 → 채팅에 position 메시지로 append(LLM 없음, 즉시). 멤버만 쓸 수 있다(members-guard).
-// 매번 새 메시지로 쌓인다(입장 바꾼 이력이 채팅에 남음). authorName 은 서버 조회, note 길이 제한은 store.
+// 멤버 자유 텍스트 전송. LLM 절대 안 거침. authorName 은 서버 조회(클라이언트 값 무시),
+// 280자/멤버당 레이트 제한은 store 에서. 권위 있는 echo 메시지(실 id)를 돌려줘 클라이언트가
+// 낙관적 임시 버블을 id 로 교체한다.
 export async function POST(req: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
   if (!isFinzGroupId(groupId)) {
@@ -23,15 +23,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   }
 
   const memberId = typeof body.memberId === "string" ? body.memberId : "";
-  const stance = body.stance;
-  if (typeof stance !== "string" || !(FINZ_PARTY_STANCES as readonly string[]).includes(stance)) {
-    return NextResponse.json({ status: "error", reason: "invalid-stance" }, { status: 400 });
-  }
-  const note = typeof body.note === "string" ? body.note : "";
+  const text = typeof body.text === "string" ? body.text : "";
+  const clientId = typeof body.id === "string" ? body.id : undefined;
 
-  const result = await appendPositionMessage(groupId, memberId, stance as FinzPartyStance, note);
+  const result = await appendTextMessage(groupId, memberId, text, clientId);
   if (result.status === "not-found") return NextResponse.json({ status: "not-found" }, { status: 404 });
   if (result.status === "not-member")
     return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
+  if (result.status === "rate-limited")
+    return NextResponse.json({ status: "error", reason: "rate-limited" }, { status: 429 });
+  if (result.status === "empty")
+    return NextResponse.json({ status: "error", reason: "empty" }, { status: 400 });
+
   return NextResponse.json({ status: "ok", message: result.message });
 }

@@ -29,6 +29,8 @@
   --fz-shadow-sm: 0 3px 10px -6px rgb(120 80 40 / 0.25);
 
   min-height: 100svh;
+  display: flex;
+  flex-direction: column;
   background: var(--fz-bg);
   color: var(--fz-ink);
   font-family: var(--fz-body);
@@ -223,6 +225,26 @@
   color: var(--fz-coral-ink);
 }
 
+/* finz "입력 중" 점 3개 */
+.fz-typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.fz-typing > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fz-muted);
+  animation: fzBlink 1.2s infinite ease-in-out both;
+}
+.fz-typing > i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.fz-typing > i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
 @keyframes fzPop {
   from {
     opacity: 0;
@@ -234,10 +256,27 @@
   }
 }
 
+@keyframes fzBlink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fz-bubble,
   .fz-msg {
     animation: none;
+  }
+  .fz-typing > i {
+    animation: none;
+    opacity: 0.6;
   }
   .fz-chip,
   .fz-btn {
