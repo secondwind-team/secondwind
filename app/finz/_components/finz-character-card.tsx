@@ -8,7 +8,7 @@ const STAT_LABELS: Array<{ key: keyof FinzCharacterStats; label: string }> = [
   { key: "fomoRisk", label: "FOMO 위험" },
 ];
 
-const CLASS_EMOJI: Record<string, string> = {
+export const CLASS_EMOJI: Record<string, string> = {
   "future-tech-dealer": "🚀",
   "dividend-healer": "💖",
   "value-tanker": "🛡️",
@@ -18,6 +18,10 @@ const CLASS_EMOJI: Record<string, string> = {
   "crisis-scavenger": "🧲",
   "story-scout": "🧭",
 };
+
+export function finzClassEmoji(classId: string | undefined): string {
+  return (classId && CLASS_EMOJI[classId]) || "✨";
+}
 
 // 한 멤버/내 투자 캐릭터를 프로필+스티커 느낌으로. taste-selector·party-room 공용.
 export function FinzCharacterCard({
@@ -31,7 +35,7 @@ export function FinzCharacterCard({
   tags?: string[];
   highlight?: boolean;
 }) {
-  const emoji = CLASS_EMOJI[character.classId] ?? "✨";
+  const emoji = finzClassEmoji(character.classId);
   return (
     <article
       className={`fz-card overflow-hidden ${highlight ? "ring-2 ring-[var(--fz-coral)]" : ""}`}

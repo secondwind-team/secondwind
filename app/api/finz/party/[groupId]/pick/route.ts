@@ -7,17 +7,20 @@ import {
   type FinzPartyPick,
   type FinzProfile,
 } from "@/lib/common/services/finz";
+import { selectLatestPick } from "@/lib/common/services/finz-chat";
 import { callLlm } from "@/lib/common/llm";
-import { MAX_MEMBERS, getFinzGroup, isFinzGroupId, setFinzGroupPick } from "@/lib/server/finz-group-store";
+import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
+import { acquirePickLock, appendPickMessage, getChatTail, releasePickLock } from "@/lib/server/finz-chat-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
-type Body = { force?: unknown };
+type Body = { force?: unknown; memberId?: unknown };
 type PartyMemberInput = { name: string; profile: FinzProfile | null };
 
-// 파티 우정주 생성. 로그인 불필요(파티 식별은 memberId). 2명이 다 모인 파티에서만 의미가 있다.
-// V0 는 환각 방어로 theme-only(스키마 enum + 프롬프트 + kind 강제). AI 실패 시 deterministic fallback.
+// 파티 우정주 생성 → 채팅에 finz 픽 메시지로 append. 로그인 불필요(식별은 memberId). 2명이 다 모인 파티만.
+// V0 는 환각 방어로 theme-only. 둘이 동시에 눌러도 원자적 락(SET NX)으로 LLM 은 한 번만 — 나머지는 deduped.
+// force(재추첨)면 락을 먼저 비우고 새로 뽑는다. AI 실패 시 deterministic fallback 을 (이번엔) 저장한다.
 export async function POST(req: Request, { params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
   if (!isFinzGroupId(groupId)) {
@@ -25,9 +28,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   }
 
   let force = false;
+  let memberId = "";
   try {
     const body = (await req.json().catch(() => ({}))) as Body;
     force = body.force === true;
+    memberId = typeof body.memberId === "string" ? body.memberId : "";
   } catch {
     force = false;
   }
@@ -37,10 +42,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   if (group.members.length < MAX_MEMBERS) {
     return NextResponse.json({ status: "error", reason: "not-full" }, { status: 409 });
   }
+  // 멤버만 — 링크가 새어도 비멤버가 LLM 쿼터를 태우거나 타임라인을 어지럽히지 못하게.
+  if (!group.members.some((m) => m.memberId === memberId)) {
+    return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
+  }
 
-  // 이미 픽이 있고 강제 재생성이 아니면 캐시 반환.
-  if (!force && group.pick) {
-    return NextResponse.json({ status: "ok", group });
+  // 원자적 쿨다운: 락 획득 실패면 최근/진행 중 픽이 있다는 뜻 → Gemini 호출 없이 기존 픽 반환.
+  const got = await acquirePickLock(groupId, force);
+  if (!got) {
+    const tail = await getChatTail(groupId, -1);
+    return NextResponse.json({ status: "ok", deduped: true, message: selectLatestPick(tail.messages) });
   }
 
   const members: PartyMemberInput[] = group.members.map((m) => ({
@@ -73,10 +84,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
       if (isFinzPartyPick(parsed)) {
         const pick: FinzPartyPick = { ...parsed, kind: "theme" }; // belt-and-suspenders: V0 theme 고정
         void recordCall(result.model, result.usage.total).catch(() => {});
-        const setResult = await setFinzGroupPick(groupId, pick, { force });
-        if (setResult.status === "ok" && setResult.group) {
-          return NextResponse.json({ status: "ok", group: setResult.group });
+        const appended = await appendPickMessage(groupId, pick);
+        if (appended.status !== "ok" || !appended.message) {
+          await releasePickLock(groupId); // append 실패 → 락 풀어 재시도 가능하게
+          return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
         }
+        return NextResponse.json({ status: "ok", message: appended.message });
       }
       console.warn("[finz/party/pick] LLM 응답 파싱/스키마 실패 — fallback 사용");
     } else {
@@ -86,9 +99,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     console.warn("[finz/party/pick] 멤버 프로필 복원 실패(카탈로그 변경) — fallback 사용");
   }
 
-  // 실패 시: deterministic 폴백을 응답에만 싣고 저장하지 않는다(다음 시도에서 AI 재시도).
+  // 실패 시: deterministic 폴백을 채팅에 저장한다(대화가 끊기지 않게). 재추첨은 force 로.
   const fallbackPick = buildFinzPartyFallbackPick(members);
-  return NextResponse.json({ status: "ok", fallback: true, group: { ...group, pick: fallbackPick } });
+  const appended = await appendPickMessage(groupId, fallbackPick);
+  if (appended.status !== "ok" || !appended.message) {
+    await releasePickLock(groupId);
+    return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
+  }
+  return NextResponse.json({ status: "ok", fallback: true, message: appended.message });
 }
 
 const FINZ_PARTY_PICK_SYSTEM_PROMPT = [

@@ -2,6 +2,15 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.19.0] - 2026-06-14
+
+### Changed
+- **FINZ 를 카카오톡식 채팅방으로 전면 재구조화.** 단계별 화면 + "저장" 모델을 버리고 **단일 append-only 타임라인이 곧 상태**가 되는 메신저 구조로 전환. 자유 텍스트 대화 + 우정주 픽 + 멤버 한 줄 입장 + AI 요약 + 시스템 알림이 모두 채팅 메시지로 흐른다. "저장" 개념 없음 — append 가 유일한 연산.
+  - **2-키 이벤트 로그**: `sw:finz:group:<id>` 는 신원(멤버)만, `sw:finz:chat:<id>` 는 Redis LIST(원자적 `rpush`, seq=읽기 시점 인덱스). 기존 read-modify-write + compare-and-skip 레이스 클래스 제거. 그룹 blob 의 pick/positions/summary 필드는 폐지(레거시 blob 은 관용 파싱).
+  - **풀하이트 메신저 UI**: 상단 헤더(멤버 아바타·초대) + 스크롤 타임라인(me=오른쪽 코랄·상대=왼쪽 흰색·finz=봇 말풍선·시스템=가운데 pill) + 하단 입력바 + `+` 액션 시트(우정주 뽑기/내 입장/요약). 비멤버는 전체 화면 조인(캐릭터 빌더), 이미 2명이면 새 파티 안내.
+  - **"이제 뭐 하지" 코칭(ephemeral nudge)**: 현재 상태에서 다음 행동(초대→픽→입장→요약)을 클라이언트가 매 렌더 계산해 단 하나의 CTA 버블로 안내(비저장).
+  - **하드닝**: pick/summary 는 원자적 `SET NX` 락으로 동시 LLM 중복 호출 차단(force 재추첨은 reroll-lock), 자유 텍스트는 LLM 에 절대 도달하지 않음(인젝션 표면 무증가), pick/summary 라우트 members-guard 추가, 낙관적 전송은 tempId=메시지 id 로 재시도 중복 방지, 모바일 키보드는 visualViewport 로 입력바 추적, 폴링 적응(보임 3s/숨김 8s), 스크린리더 간결 알림 + reduced-motion. 테스트 138 통과.
+
 ## [0.1.18.0] - 2026-06-14
 
 ### Changed

@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { FinzPartyPosition } from "@/lib/common/services/finz";
 import {
   MAX_MEMBERS,
   applyJoinToGroup,
-  applyPositionUpsert,
   buildFinzGroupMember,
   isFinzGroupId,
   isFinzGroupMember,
@@ -11,10 +9,6 @@ import {
   type FinzGroup,
   type FinzGroupMember,
 } from "./finz-group-store";
-
-function pos(memberId: string, stance: FinzPartyPosition["stance"] = "매력 있음", note = ""): FinzPartyPosition {
-  return { memberId, stance, note, createdAt: "2026-06-14T00:00:00.000Z" };
-}
 
 const CARDS = ["durable-company", "daily-brand", "cashflow-calm"];
 
@@ -114,82 +108,20 @@ describe("isFinzGroupMember", () => {
   });
 });
 
-describe("parseGroup — pick 관용 처리 (MVP-04)", () => {
-  const VALID_PICK = {
-    name: "구독 경제",
-    kind: "theme",
-    oneLine: "y",
-    whyThisParty: ["a"],
-    rolePrompts: [
-      { memberName: "A", role: "r", prompt: "p" },
-      { memberName: "B", role: "r", prompt: "p" },
-    ],
-    debatePoint: "d",
-    openingQuestions: ["q"],
-    conversationSeeds: ["s"],
-    caveats: ["투자 조언이 아니라 대화 소재"],
-  };
-
-  it("유효한 pick 은 round-trip 으로 보존", () => {
-    const g = { ...group([member("a"), member("b")]), pick: VALID_PICK };
-    expect(parseGroup(g)?.pick?.name).toBe("구독 경제");
-  });
-  it("깨진 pick 은 드롭하되 파티(멤버)는 유지", () => {
-    const g = { ...group([member("a"), member("b")]), pick: { name: "broken" } };
-    const parsed = parseGroup(g);
-    expect(parsed).not.toBeNull();
-    expect(parsed?.pick).toBeUndefined();
-    expect(parsed?.members).toHaveLength(2);
-  });
-  it("pick 없는 그룹도 그대로 파싱", () => {
-    expect(parseGroup(group([member("a")]))?.pick).toBeUndefined();
-  });
-});
-
-describe("applyPositionUpsert (MVP-05)", () => {
-  it("멤버면 포지션 추가하고 기존 요약을 무효화", () => {
-    const g: FinzGroup = {
+describe("parseGroup — 레거시 필드 무시 (채팅 LIST 이전)", () => {
+  it("옛 blob 의 pick/positions/summary 가 있어도 거절하지 않고 신원만 뽑는다", () => {
+    const legacy = {
       ...group([member("a"), member("b")]),
-      summary: { summary: "옛 요약", nextNudge: "또 하자" },
-    };
-    const r = applyPositionUpsert(g, pos("a"));
-    expect(r.status).toBe("ok");
-    expect(r.group.positions).toHaveLength(1);
-    expect(r.group.summary).toBeUndefined();
-  });
-  it("같은 memberId 는 교체(중복 추가 안 함)", () => {
-    let g: FinzGroup = group([member("a"), member("b")]);
-    g = applyPositionUpsert(g, pos("a", "매력 있음")).group;
-    const r = applyPositionUpsert(g, pos("a", "회의적"));
-    expect(r.group.positions).toHaveLength(1);
-    expect(r.group.positions?.[0]?.stance).toBe("회의적");
-  });
-  it("멤버가 아니면 not-member", () => {
-    expect(applyPositionUpsert(group([member("a"), member("b")]), pos("zzz")).status).toBe("not-member");
-  });
-});
-
-describe("parseGroup — positions/summary 관용 (MVP-05)", () => {
-  it("유효한 positions/summary round-trip", () => {
-    const g = {
-      ...group([member("a"), member("b")]),
-      positions: [pos("a"), pos("b")],
+      pick: { name: "구독 경제", kind: "theme" },
+      positions: [{ memberId: "a", stance: "매력 있음", note: "", createdAt: "t" }],
       summary: { summary: "s", nextNudge: "n" },
     };
-    const p = parseGroup(g);
-    expect(p?.positions).toHaveLength(2);
-    expect(p?.summary?.summary).toBe("s");
-  });
-  it("깨진 positions 항목·summary 는 드롭하되 파티(멤버)는 유지", () => {
-    const g = {
-      ...group([member("a"), member("b")]),
-      positions: [pos("a"), { memberId: "b", stance: "사세요", note: "", createdAt: "t" }],
-      summary: { summary: "s" },
-    };
-    const p = parseGroup(g);
-    expect(p).not.toBeNull();
-    expect(p?.positions).toHaveLength(1);
-    expect(p?.summary).toBeUndefined();
-    expect(p?.members).toHaveLength(2);
+    const parsed = parseGroup(legacy) as (FinzGroup & Record<string, unknown>) | null;
+    expect(parsed).not.toBeNull();
+    expect(parsed?.members).toHaveLength(2);
+    // 신원 전용 — 대화 필드는 더 이상 그룹에 실리지 않는다.
+    expect(parsed?.pick).toBeUndefined();
+    expect(parsed?.positions).toBeUndefined();
+    expect(parsed?.summary).toBeUndefined();
   });
 });

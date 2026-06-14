@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildFinzGroupMember, isFinzGroupId, joinFinzGroup } from "@/lib/server/finz-group-store";
+import { appendSystemMessage } from "@/lib/server/finz-chat-store";
 
 export const runtime = "nodejs";
 
@@ -37,5 +38,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   if (result.status === "full") {
     return NextResponse.json({ status: "full", reason: "party-full", group: result.group }, { status: 409 });
   }
+
+  // 합류 알림은 best-effort — 실패해도 join 응답을 막지 않는다.
+  if (result.status === "ok") {
+    try {
+      await appendSystemMessage(groupId, `${member.displayName}님이 들어왔어요`);
+    } catch {
+      // 무시
+    }
+  }
+
   return NextResponse.json({ status: "ok", memberId, group: result.group });
 }

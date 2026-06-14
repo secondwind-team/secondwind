@@ -1,24 +1,17 @@
-// 서버 전용: FINZ 2인 파티를 Upstash Redis 에 7일 TTL 로 저장한다.
-// travel-share-store 의 create/get 패턴을 그대로 미러링하되, 파티는 join(멤버 추가)이
-// 필요하므로 read-modify-write 를 더한다. 멤버는 selectedCardIds 만 저장하고 캐릭터는
-// 렌더 시 buildFinzProfile 로 재구성한다(카탈로그 변경으로 파티 전체가 죽지 않게).
+// 서버 전용: FINZ 2인 파티의 "신원"(누가 이 방에 있나)을 Upstash Redis 에 7일 TTL 로 저장한다.
+// 대화(픽·포지션·요약·자유텍스트)는 더 이상 이 blob 에 없다 — 별도 append-only LIST
+// (lib/server/finz-chat-store.ts, sw:finz:chat:<id>) 가 단일 소스다. 이 blob 은 id/members/타임스탬프만.
+// 멤버는 selectedCardIds 만 저장하고 캐릭터는 렌더 시 buildFinzProfile 로 재구성한다(카탈로그 변경 내성).
 //
 // 식별은 로그인(email)이 아니라 클라이언트가 만든 memberId 다. 파티 라우트는 getCurrentUser 를
-// 절대 호출하지 않는다. (주의: memberId 는 위조 가능한 클라이언트 값 — MVP-03 은 join 이후 멤버별
-// 쓰기가 없어 영향이 거의 없지만, MVP-04 에서 멤버별 mutable 쓰기를 붙이기 전 보강 필요.)
+// 절대 호출하지 않는다. (주의: memberId 는 위조 가능한 클라이언트 값 — GET 이 양쪽 memberId 를 노출하므로
+// 한 멤버가 다른 멤버인 척 쓰는 것은 막지 못한다. 2인 신뢰 파티 기준 수용(payoff 없음). 단, 채팅 append
+// 계층은 role/authorId 를 finz/system 으로 위조하는 것은 하드 거절하고 authorName 은 서버에서 조회한다.
+// 비신뢰/다중 파티로 넓힐 땐 join 시 서버 발급 토큰으로 보강할 것 — 후속 과제.)
 
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
-import {
-  buildFinzProfile,
-  isFinzPartyPick,
-  isFinzPartyPosition,
-  isFinzPartySummary,
-  type FinzPartyPick,
-  type FinzPartyPosition,
-  type FinzPartyStance,
-  type FinzPartySummary,
-} from "@/lib/common/services/finz";
+import { buildFinzProfile } from "@/lib/common/services/finz";
 
 export const FINZ_GROUP_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const MAX_MEMBERS = 2;
@@ -26,7 +19,8 @@ const ID_LENGTH = 6;
 const MAX_ID_ATTEMPTS = 12;
 const ID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_NAME_LENGTH = 24;
-const MAX_NOTE_LENGTH = 80;
+// 채팅 포지션 코멘트 길이 상한 — finz-chat-store 가 import 해서 쓴다.
+export const MAX_NOTE_LENGTH = 80;
 
 export type FinzGroupMember = {
   memberId: string;
@@ -35,16 +29,12 @@ export type FinzGroupMember = {
   joinedAt: string;
 };
 
+// 신원 전용. 픽/포지션/요약은 채팅 LIST 로 이동했다(더 이상 여기 없음).
 export type FinzGroup = {
   id: string;
   members: FinzGroupMember[];
   createdAt: string;
   expiresAt: string;
-  // 파티 우정주 픽(MVP-04). 2명이 다 모인 뒤 생성. 깨진 픽은 parseGroup 에서 드롭(파티는 유지).
-  pick?: FinzPartyPick;
-  // 멤버별 한 줄 포지션 + AI 1-shot 요약(MVP-05). 둘 다 optional — 옛 blob 도 파싱되게.
-  positions?: FinzPartyPosition[];
-  summary?: FinzPartySummary;
 };
 
 export type JoinResult =
@@ -54,7 +44,8 @@ export type JoinResult =
 
 let cachedClient: Redis | null | undefined;
 
-function getClient(): Redis | null {
+// finz-chat-store 가 같은 싱글톤을 공유해야 read-your-writes 일관성(인덱스=seq, 락)이 유지된다.
+export function getClient(): Redis | null {
   if (cachedClient === undefined) {
     const url = process.env.KV_REST_API_URL;
     const token = process.env.KV_REST_API_TOKEN;
@@ -67,7 +58,7 @@ export function isFinzPartyConfigured(): boolean {
   return getClient() !== null;
 }
 
-function groupKey(id: string): string {
+export function groupKey(id: string): string {
   return `sw:finz:group:${id}`;
 }
 
@@ -164,89 +155,6 @@ export async function joinFinzGroup(
   return { status: result.status, group: result.group };
 }
 
-export async function setFinzGroupPick(
-  id: string,
-  pick: FinzPartyPick,
-  opts: { force?: boolean } = {},
-): Promise<{ status: "ok" | "not-found" | "not-full"; group?: FinzGroup }> {
-  if (!isFinzGroupId(id)) return { status: "not-found" };
-  const redis = getClient();
-  if (!redis) return { status: "not-found" };
-
-  const current = parseGroup(await redis.get(groupKey(id)));
-  if (!current) return { status: "not-found" };
-  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
-
-  // compare-and-skip: 두 멤버가 동시에 "열기"를 눌러도 이미 픽이 있으면 덮어쓰지 않는다
-  // (둘째 호출의 낭비 쓰기·flicker 방지, force 면 갱신).
-  if (current.pick && !opts.force) return { status: "ok", group: current };
-
-  const next: FinzGroup = { ...current, pick };
-  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
-  return { status: "ok", group: next };
-}
-
-// 순수 함수 — 포지션 upsert(멤버별 1개, memberId 로 교체/추가). 멤버가 아니면 not-member.
-// 포지션이 바뀌면 기존 요약을 무효화(제거)해 stale 요약이 안 남게 한다.
-export function applyPositionUpsert(
-  group: FinzGroup,
-  position: FinzPartyPosition,
-): { status: "ok" | "not-member"; group: FinzGroup } {
-  if (!group.members.some((m) => m.memberId === position.memberId)) {
-    return { status: "not-member", group };
-  }
-  const positions = [...(group.positions ?? []).filter((p) => p.memberId !== position.memberId), position];
-  const next: FinzGroup = { ...group, positions };
-  delete next.summary;
-  return { status: "ok", group: next };
-}
-
-export async function setFinzGroupPosition(
-  id: string,
-  input: { memberId: string; stance: FinzPartyStance; note: string },
-): Promise<{ status: "ok" | "not-found" | "not-full" | "not-member"; group?: FinzGroup }> {
-  if (!isFinzGroupId(id)) return { status: "not-found" };
-  const redis = getClient();
-  if (!redis) return { status: "not-found" };
-
-  const current = parseGroup(await redis.get(groupKey(id)));
-  if (!current) return { status: "not-found" };
-  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
-
-  const position: FinzPartyPosition = {
-    memberId: input.memberId,
-    stance: input.stance,
-    note: input.note.trim().slice(0, MAX_NOTE_LENGTH),
-    createdAt: new Date().toISOString(),
-  };
-  const result = applyPositionUpsert(current, position);
-  if (result.status === "not-member") return { status: "not-member" };
-
-  await redis.set(groupKey(id), JSON.stringify(result.group), { ex: FINZ_GROUP_TTL_SECONDS });
-  return { status: "ok", group: result.group };
-}
-
-export async function setFinzGroupSummary(
-  id: string,
-  summary: FinzPartySummary,
-): Promise<{ status: "ok" | "not-found" | "not-full"; group?: FinzGroup }> {
-  if (!isFinzGroupId(id)) return { status: "not-found" };
-  const redis = getClient();
-  if (!redis) return { status: "not-found" };
-
-  const current = parseGroup(await redis.get(groupKey(id)));
-  if (!current) return { status: "not-found" };
-  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
-
-  // compare-and-skip: 이미 요약이 있으면 덮어쓰지 않는다(동시 생성 낭비 방지).
-  // 포지션이 바뀌면 applyPositionUpsert 가 summary 를 지우므로 자연히 재생성된다(별도 force 불필요).
-  if (current.summary) return { status: "ok", group: current };
-
-  const next: FinzGroup = { ...current, summary };
-  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
-  return { status: "ok", group: next };
-}
-
 export function isFinzGroupMember(value: unknown): value is FinzGroupMember {
   if (!value || typeof value !== "object") return false;
   const m = value as Partial<FinzGroupMember>;
@@ -277,21 +185,9 @@ export function parseGroup(raw: unknown): FinzGroup | null {
   const members = parsed.members.filter(isFinzGroupMember);
   if (members.length === 0 || members.length > MAX_MEMBERS) return null;
 
-  // 픽·포지션·요약 모두 관용적으로 — 깨진 것은 드롭하되 파티 자체는 유효하게 유지.
-  const pick = isFinzPartyPick(parsed.pick) ? (parsed.pick as FinzPartyPick) : undefined;
-  const positions = Array.isArray(parsed.positions)
-    ? parsed.positions.filter(isFinzPartyPosition)
-    : [];
-  const summary = isFinzPartySummary(parsed.summary) ? (parsed.summary as FinzPartySummary) : undefined;
-  return {
-    id,
-    members,
-    createdAt,
-    expiresAt,
-    ...(pick ? { pick } : {}),
-    ...(positions.length ? { positions } : {}),
-    ...(summary ? { summary } : {}),
-  };
+  // 레거시 blob 의 pick/positions/summary 필드는 무시한다(대화는 채팅 LIST 로 이동).
+  // 이런 옛 필드가 있어도 거절하지 않고 신원만 뽑아 유효한 그룹으로 돌려준다.
+  return { id, members, createdAt, expiresAt };
 }
 
 function generateGroupId(): string {
@@ -303,7 +199,9 @@ function generateGroupId(): string {
   return out;
 }
 
-function parseJsonSafe(raw: unknown): Record<string, unknown> | null {
+// Upstash 1.37 은 자동 역직렬화가 켜져 있어 get/lrange 가 객체를 돌려줄 수 있다 — 객체면 그대로,
+// 문자열이면 JSON.parse. finz-chat-store 가 LIST 원소 파싱에 그대로 재사용한다.
+export function parseJsonSafe(raw: unknown): Record<string, unknown> | null {
   if (raw == null) return null;
   if (typeof raw === "object") return raw as Record<string, unknown>;
   if (typeof raw !== "string") return null;
