@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { buildFinzProfile } from "@/lib/common/services/finz";
+import { buildFinzProfile, type FinzPartyPick } from "@/lib/common/services/finz";
 import {
   getOrCreateMemberId,
   getRememberedMemberId,
@@ -10,9 +10,10 @@ import {
 } from "@/lib/common/finz-party-id";
 import { FinzCharacterBuilder } from "./finz-character-builder";
 import { FinzCharacterCard } from "./finz-character-card";
+import { FinzPartyPickResult } from "./finz-party-pick-result";
 
 type Member = { memberId: string; displayName: string; selectedCardIds: string[]; joinedAt: string };
-type Group = { id: string; members: Member[]; createdAt: string; expiresAt: string };
+type Group = { id: string; members: Member[]; createdAt: string; expiresAt: string; pick?: FinzPartyPick };
 
 const MAX_MEMBERS = 2;
 
@@ -23,6 +24,8 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [opening, setOpening] = useState(false);
+  const [pickError, setPickError] = useState<string | null>(null);
 
   useEffect(() => {
     setMyMemberId(getRememberedMemberId(initialGroup.id));
@@ -32,6 +35,8 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   const isMember = myMemberId != null && group.members.some((m) => m.memberId === myMemberId);
   const full = group.members.length >= MAX_MEMBERS;
   const canJoin = !isMember && !full;
+  // 친구 합류(빈 자리) 또는 파티 픽(가득 찼는데 아직 픽 없음)을 기다리는 동안 폴링.
+  const shouldPoll = (isMember && !full) || (full && group.pick == null);
 
   const refetch = useCallback(async () => {
     try {
@@ -44,12 +49,17 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
     }
   }, [initialGroup.id]);
 
-  // 멤버이고 아직 빈 자리가 있으면 친구 합류를 폴링. 가득 차면 멈춘다.
   useEffect(() => {
-    if (!isMember || full) return;
-    const timer = setInterval(refetch, 5000);
+    if (!shouldPoll) return;
+    let count = 0;
+    const MAX_POLLS = 40; // ~3.3분. AI가 영구 장애로 픽이 저장되지 않을 때 무한 폴링 방지.
+    const timer = setInterval(() => {
+      count += 1;
+      void refetch();
+      if (count >= MAX_POLLS) clearInterval(timer);
+    }, 5000);
     return () => clearInterval(timer);
-  }, [isMember, full, refetch]);
+  }, [shouldPoll, refetch]);
 
   async function join(selectedCardIds: string[], displayName: string) {
     setJoining(true);
@@ -71,6 +81,27 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
       setError(e instanceof Error ? e.message : "합류하지 못했어요.");
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function openPick(force: boolean) {
+    setOpening(true);
+    setPickError(null);
+    try {
+      const res = await fetch(`/api/finz/party/${initialGroup.id}/pick`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      const json = (await res.json()) as { status: string; group?: Group };
+      if (!res.ok || json.status !== "ok" || !json.group) {
+        throw new Error("오늘의 우정주를 열지 못했어요. 잠시 뒤 다시 시도해주세요.");
+      }
+      setGroup(json.group);
+    } catch (e) {
+      setPickError(e instanceof Error ? e.message : "오늘의 우정주를 열지 못했어요.");
+    } finally {
+      setOpening(false);
     }
   }
 
@@ -145,16 +176,48 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
         </section>
       )}
 
-      {!isMember && full && (
-        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          이 파티는 이미 2명으로 가득 찼어요. 새 파티를 만들어보세요.
-        </p>
-      )}
-
       {full && (
-        <p className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-900">
-          파티 완성! 두 캐릭터가 모였어요. (오늘의 우정주 대화는 다음 단계에서 열려요.)
-        </p>
+        <section className="space-y-4">
+          {group.pick ? (
+            <>
+              <FinzPartyPickResult pick={group.pick} />
+              {isMember && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => openPick(true)}
+                    disabled={opening}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-wait"
+                  >
+                    <Sparkles className="h-4 w-4" aria-hidden />
+                    {opening ? "다시 뽑는 중" : "다른 우정주로 다시 뽑기"}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : isMember ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-300 bg-emerald-50/60 p-6 text-center">
+              <p className="text-sm font-semibold text-emerald-900">파티 완성! 두 캐릭터가 모였어요.</p>
+              <p className="text-sm text-[var(--muted)]">이 조합에 맞는 오늘의 우정주를 열어보세요.</p>
+              <button
+                type="button"
+                onClick={() => openPick(false)}
+                disabled={opening}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:bg-emerald-300"
+              >
+                <Sparkles className="h-4 w-4" aria-hidden />
+                {opening ? "오늘의 우정주 여는 중" : "오늘의 우정주 열기"}
+              </button>
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+              파티가 가득 찼어요. 친구가 오늘의 우정주를 여는 중이에요. 잠시만요.
+            </p>
+          )}
+          {pickError && (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{pickError}</p>
+          )}
+        </section>
       )}
     </div>
   );
