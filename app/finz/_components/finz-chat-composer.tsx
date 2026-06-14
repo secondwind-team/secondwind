@@ -128,7 +128,7 @@ export function FinzChatComposer({
                 }
               }}
               rows={1}
-              placeholder="메시지 보내기"
+              placeholder="메시지 보내기 · @finz 로 질문"
               className="fz-input max-h-28 min-h-11 flex-1 resize-none py-2.5"
             />
             <button

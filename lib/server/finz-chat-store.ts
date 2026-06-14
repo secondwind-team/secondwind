@@ -45,6 +45,9 @@ function summaryLockKey(id: string): string {
 function rerollLockKey(id: string): string {
   return `${chatKey(id)}:reroll-lock`;
 }
+function askLockKey(id: string): string {
+  return `${chatKey(id)}:ask-lock`;
+}
 
 function newId(): string {
   return crypto.randomUUID();
@@ -210,6 +213,23 @@ export async function appendSummaryMessage(
   return appendChatMessage(id, stored);
 }
 
+// @finz 질문에 대한 답변 — finz 의 자유 텍스트 메시지.
+export async function appendAnswerMessage(
+  id: string,
+  text: string,
+): Promise<{ status: "ok" | "not-found"; message?: FinzStoredChatMessage }> {
+  const stored: FinzStoredChatMessage = {
+    id: newId(),
+    role: "finz",
+    authorId: "finz",
+    authorName: "FINZ",
+    kind: "text",
+    text,
+    createdAt: new Date().toISOString(),
+  };
+  return appendChatMessage(id, stored);
+}
+
 // 내부: 꼬리 N개를 파싱된 FinzChatMessage(seq 포함)로. 레이트 리밋/요약 조회용.
 async function readWindow(id: string, count: number): Promise<FinzChatMessage[]> {
   const redis = getClient();
@@ -280,4 +300,17 @@ export async function acquireSummaryLock(id: string): Promise<boolean> {
 export async function releaseSummaryLock(id: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.del(summaryLockKey(id));
+}
+
+// @finz 답변 동시·연속 호출 방지(그라운딩 LLM 은 비용↑). 짧은 NX 락.
+export async function acquireAskLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(askLockKey(id), "1", { nx: true, ex: 20 });
+  return res === "OK";
+}
+
+export async function releaseAskLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(askLockKey(id));
 }

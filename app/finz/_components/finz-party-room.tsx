@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
 import {
   computeNextNudge,
+  mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
   type FinzChatMemberLite,
@@ -55,6 +56,7 @@ export function FinzPartyRoom({
   const [pending, setPending] = useState<PendingText[]>([]);
   const [pickBusy, setPickBusy] = useState(false);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  const [askBusy, setAskBusy] = useState(false);
   const [positionSubmitting, setPositionSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -196,8 +198,31 @@ export function FinzPartyRoom({
       await refetch();
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200); // 상대 응답을 빠르게 당겨오기
+      // @finz 멘션이면 AI 가 질문에 답한다(그라운딩).
+      if (mentionsFinz(text)) void ask(text);
     } catch {
       setPending((p) => p.map((x) => (x.tempId === tempId ? { ...x, status: "failed" } : x)));
+    }
+  }
+
+  async function ask(question: string) {
+    setAskBusy(true);
+    setActionError(null);
+    bumpStick();
+    try {
+      const memberId = getOrCreateMemberId();
+      const res = await fetch(`/api/finz/party/${groupId}/ask`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId, question }),
+      });
+      if (!res.ok) setActionError("finz 가 답하지 못했어. 잠시 뒤 다시 @finz 로 물어봐줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 @finz 로 물어봐줘.");
+    } finally {
+      setAskBusy(false);
+      bumpStick();
     }
   }
 
@@ -326,7 +351,7 @@ export function FinzPartyRoom({
         pending={pending}
         myMemberId={myMemberId}
         nudge={nudge}
-        aiBusy={pickBusy || summaryBusy}
+        aiBusy={pickBusy || summaryBusy || askBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}

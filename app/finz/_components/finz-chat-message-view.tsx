@@ -71,6 +71,21 @@ export function FinzChatMessageView({
     );
   }
 
+  // finz 의 자유 텍스트 답변(@finz 질문에 대한 응답) — 봇 말풍선으로.
+  if (message.kind === "text" && message.role === "finz") {
+    return (
+      <div className="flex items-start gap-2">
+        <FinzAvatar />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="px-1 text-xs font-semibold text-[var(--fz-coral-ink)]">FINZ</p>
+          <div className="fz-bubble max-w-full whitespace-pre-wrap break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
+            {message.text}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const mine = message.authorId === myMemberId;
 
   if (message.kind === "position") {

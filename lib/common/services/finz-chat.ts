@@ -106,6 +106,11 @@ export function isFinzNudgeCta(value: unknown): value is FinzNudgeCta {
   return value === "invite" || value === "pick" || value === "position" || value === "summary";
 }
 
+// 메시지가 finz 를 호출하는지(@finz / @핀즈). 호출 시 그라운딩 LLM 이 질문에 답한다.
+export function mentionsFinz(text: string): boolean {
+  return /@\s*(finz|핀즈)/i.test(text);
+}
+
 // ── 순수 셀렉터(I/O 없음, 단위 테스트 대상). messages 는 seq 오름차순 가정. ──
 
 export function selectLatestPick(messages: FinzChatMessage[]): FinzChatPickMessage | null {
