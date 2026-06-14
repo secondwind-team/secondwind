@@ -9,7 +9,16 @@
 
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
-import { buildFinzProfile, isFinzPartyPick, type FinzPartyPick } from "@/lib/common/services/finz";
+import {
+  buildFinzProfile,
+  isFinzPartyPick,
+  isFinzPartyPosition,
+  isFinzPartySummary,
+  type FinzPartyPick,
+  type FinzPartyPosition,
+  type FinzPartyStance,
+  type FinzPartySummary,
+} from "@/lib/common/services/finz";
 
 export const FINZ_GROUP_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const MAX_MEMBERS = 2;
@@ -17,6 +26,7 @@ const ID_LENGTH = 6;
 const MAX_ID_ATTEMPTS = 12;
 const ID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_NAME_LENGTH = 24;
+const MAX_NOTE_LENGTH = 80;
 
 export type FinzGroupMember = {
   memberId: string;
@@ -32,6 +42,9 @@ export type FinzGroup = {
   expiresAt: string;
   // 파티 우정주 픽(MVP-04). 2명이 다 모인 뒤 생성. 깨진 픽은 parseGroup 에서 드롭(파티는 유지).
   pick?: FinzPartyPick;
+  // 멤버별 한 줄 포지션 + AI 1-shot 요약(MVP-05). 둘 다 optional — 옛 blob 도 파싱되게.
+  positions?: FinzPartyPosition[];
+  summary?: FinzPartySummary;
 };
 
 export type JoinResult =
@@ -173,6 +186,67 @@ export async function setFinzGroupPick(
   return { status: "ok", group: next };
 }
 
+// 순수 함수 — 포지션 upsert(멤버별 1개, memberId 로 교체/추가). 멤버가 아니면 not-member.
+// 포지션이 바뀌면 기존 요약을 무효화(제거)해 stale 요약이 안 남게 한다.
+export function applyPositionUpsert(
+  group: FinzGroup,
+  position: FinzPartyPosition,
+): { status: "ok" | "not-member"; group: FinzGroup } {
+  if (!group.members.some((m) => m.memberId === position.memberId)) {
+    return { status: "not-member", group };
+  }
+  const positions = [...(group.positions ?? []).filter((p) => p.memberId !== position.memberId), position];
+  const next: FinzGroup = { ...group, positions };
+  delete next.summary;
+  return { status: "ok", group: next };
+}
+
+export async function setFinzGroupPosition(
+  id: string,
+  input: { memberId: string; stance: FinzPartyStance; note: string },
+): Promise<{ status: "ok" | "not-found" | "not-full" | "not-member"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
+
+  const position: FinzPartyPosition = {
+    memberId: input.memberId,
+    stance: input.stance,
+    note: input.note.trim().slice(0, MAX_NOTE_LENGTH),
+    createdAt: new Date().toISOString(),
+  };
+  const result = applyPositionUpsert(current, position);
+  if (result.status === "not-member") return { status: "not-member" };
+
+  await redis.set(groupKey(id), JSON.stringify(result.group), { ex: FINZ_GROUP_TTL_SECONDS });
+  return { status: "ok", group: result.group };
+}
+
+export async function setFinzGroupSummary(
+  id: string,
+  summary: FinzPartySummary,
+): Promise<{ status: "ok" | "not-found" | "not-full"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
+
+  // compare-and-skip: 이미 요약이 있으면 덮어쓰지 않는다(동시 생성 낭비 방지).
+  // 포지션이 바뀌면 applyPositionUpsert 가 summary 를 지우므로 자연히 재생성된다(별도 force 불필요).
+  if (current.summary) return { status: "ok", group: current };
+
+  const next: FinzGroup = { ...current, summary };
+  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
+  return { status: "ok", group: next };
+}
+
 export function isFinzGroupMember(value: unknown): value is FinzGroupMember {
   if (!value || typeof value !== "object") return false;
   const m = value as Partial<FinzGroupMember>;
@@ -203,9 +277,21 @@ export function parseGroup(raw: unknown): FinzGroup | null {
   const members = parsed.members.filter(isFinzGroupMember);
   if (members.length === 0 || members.length > MAX_MEMBERS) return null;
 
-  // 픽은 관용적으로 — 깨졌으면 드롭하되 파티 자체는 유효하게 유지(파티가 픽 때문에 죽지 않게).
+  // 픽·포지션·요약 모두 관용적으로 — 깨진 것은 드롭하되 파티 자체는 유효하게 유지.
   const pick = isFinzPartyPick(parsed.pick) ? (parsed.pick as FinzPartyPick) : undefined;
-  return { id, members, createdAt, expiresAt, ...(pick ? { pick } : {}) };
+  const positions = Array.isArray(parsed.positions)
+    ? parsed.positions.filter(isFinzPartyPosition)
+    : [];
+  const summary = isFinzPartySummary(parsed.summary) ? (parsed.summary as FinzPartySummary) : undefined;
+  return {
+    id,
+    members,
+    createdAt,
+    expiresAt,
+    ...(pick ? { pick } : {}),
+    ...(positions.length ? { positions } : {}),
+    ...(summary ? { summary } : {}),
+  };
 }
 
 function generateGroupId(): string {

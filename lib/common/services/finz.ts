@@ -62,6 +62,38 @@ export type FinzPartyPick = {
   caveats: string[];
 };
 
+// MVP-05: 멤버별 한 줄 포지션(stance + 코멘트)과 AI 1-shot 파티 요약.
+export type FinzPartyStance =
+  | "매력 있음"
+  | "관망"
+  | "회의적"
+  | "모르지만 끌림"
+  | "너무 비싸지만 계속 보게 됨"
+  | "친구 말 듣고 다시 봄";
+
+export const FINZ_PARTY_STANCES: readonly FinzPartyStance[] = [
+  "매력 있음",
+  "관망",
+  "회의적",
+  "모르지만 끌림",
+  "너무 비싸지만 계속 보게 됨",
+  "친구 말 듣고 다시 봄",
+] as const;
+
+export type FinzPartyPosition = {
+  memberId: string;
+  stance: FinzPartyStance;
+  note: string;
+  createdAt: string;
+};
+
+// 진행자 1-shot 요약. 2필드만 — "무엇에 기울고 무엇이 덜 방어됐나"는 summary 한 줄에 녹인다
+// (대시보드화 회피). nextNudge 는 "다음 주제도 해보자" 훅.
+export type FinzPartySummary = {
+  summary: string;
+  nextNudge: string;
+};
+
 type CharacterArchetype = FinzCharacter & {
   tagWeights: Record<string, number>;
 };
@@ -479,6 +511,46 @@ export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
   );
 }
 
+// AI 요약 실패 시 deterministic 파티 요약. 중립적 — stance 를 강세/약세로 분류하지 않고 그대로 인용.
+export function buildFinzPartySummaryFallback(
+  members: Array<{ memberId: string; name: string }>,
+  positions: FinzPartyPosition[],
+): FinzPartySummary {
+  const nameOf = (id: string) => members.find((m) => m.memberId === id)?.name ?? "친구";
+  const lines = positions.map((p) => `${nameOf(p.memberId)}님은 "${p.stance}"`);
+  const summary =
+    positions.length > 0
+      ? `${lines.join(", ")} 쪽으로 봤어요. 가격이나 리스크를 누가 더 짚었는지 다시 이야기해봐도 좋아요.`
+      : "두 사람의 관점을 모아봤어요. 가볍게 한 줄씩 더 나눠보세요.";
+  return {
+    summary,
+    nextNudge: "내일은 다른 테마로도 한 번 해볼래요?",
+  };
+}
+
+export function isFinzPartyPosition(value: unknown): value is FinzPartyPosition {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Partial<FinzPartyPosition>;
+  return (
+    typeof p.memberId === "string" &&
+    p.memberId.length > 0 &&
+    typeof p.stance === "string" &&
+    (FINZ_PARTY_STANCES as readonly string[]).includes(p.stance) &&
+    typeof p.note === "string" &&
+    typeof p.createdAt === "string"
+  );
+}
+
+export function isFinzPartyPositionArray(value: unknown): value is FinzPartyPosition[] {
+  return Array.isArray(value) && value.every(isFinzPartyPosition);
+}
+
+export function isFinzPartySummary(value: unknown): value is FinzPartySummary {
+  if (!value || typeof value !== "object") return false;
+  const s = value as Partial<FinzPartySummary>;
+  return typeof s.summary === "string" && typeof s.nextNudge === "string";
+}
+
 export function isFinzPartyPick(value: unknown): value is FinzPartyPick {
   if (!value || typeof value !== "object") return false;
   const pick = value as Partial<FinzPartyPick>;
@@ -624,4 +696,20 @@ export const FINZ_PARTY_PICK_SCHEMA = {
     "conversationSeeds",
     "caveats",
   ],
+} as const;
+
+// 파티 요약(진행자 1-shot) responseSchema. enum 가드는 없지만(요약엔 티커 위험 적음) maxTokens 를 작게 쓴다.
+export const FINZ_PARTY_SUMMARY_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: {
+      type: "string",
+      description: "두 사람이 무엇에 기울었고 무엇이 덜 방어됐는지 균형 있게 짚는 한 줄. 매수/매도/추천 표현 금지.",
+    },
+    nextNudge: {
+      type: "string",
+      description: "다음 주제도 가볍게 해보자고 권하는 한 줄",
+    },
+  },
+  required: ["summary", "nextNudge"],
 } as const;

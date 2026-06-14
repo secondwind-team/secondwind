@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   buildFinzFallbackPick,
   buildFinzPartyFallbackPick,
+  buildFinzPartySummaryFallback,
   buildFinzProfile,
   getSelectedTasteCards,
   isFinzDailyPick,
   isFinzPartyPick,
+  isFinzPartyPosition,
+  isFinzPartySummary,
   summarizeTasteTags,
   summonFinzCharacter,
+  type FinzPartyPosition,
 } from "./finz";
 
 describe("summonFinzCharacter", () => {
@@ -149,5 +153,44 @@ describe("buildFinzPartyFallbackPick", () => {
     const rp1 = pick.rolePrompts[1];
     if (!rp1) throw new Error("rolePrompt 없음");
     expect(rp1.memberName).toBe("태훈");
+  });
+});
+
+describe("isFinzPartyPosition / isFinzPartySummary", () => {
+  const pos = { memberId: "m1", stance: "매력 있음", note: "", createdAt: "2026-06-14T00:00:00Z" };
+  it("유효 포지션 통과(빈 note 허용)", () => {
+    expect(isFinzPartyPosition(pos)).toBe(true);
+  });
+  it("잘못된 stance 거절", () => {
+    expect(isFinzPartyPosition({ ...pos, stance: "사세요" })).toBe(false);
+  });
+  it("memberId 비면 거절", () => {
+    expect(isFinzPartyPosition({ ...pos, memberId: "" })).toBe(false);
+  });
+  it("요약 2필드 통과, 필드 빠지면 거절", () => {
+    expect(isFinzPartySummary({ summary: "a", nextNudge: "b" })).toBe(true);
+    expect(isFinzPartySummary({ summary: "a" })).toBe(false);
+  });
+});
+
+describe("buildFinzPartySummaryFallback", () => {
+  const positions: FinzPartyPosition[] = [
+    { memberId: "a", stance: "매력 있음", note: "", createdAt: "t1" },
+    { memberId: "b", stance: "회의적", note: "비싸 보임", createdAt: "t2" },
+  ];
+  it("두 포지션 → 양쪽 이름 인용, isFinzPartySummary 통과", () => {
+    const s = buildFinzPartySummaryFallback(
+      [
+        { memberId: "a", name: "지헌" },
+        { memberId: "b", name: "태훈" },
+      ],
+      positions,
+    );
+    expect(isFinzPartySummary(s)).toBe(true);
+    expect(s.summary).toContain("지헌");
+    expect(s.summary).toContain("태훈");
+  });
+  it("포지션이 없어도 유효한 요약", () => {
+    expect(isFinzPartySummary(buildFinzPartySummaryFallback([], []))).toBe(true);
   });
 });

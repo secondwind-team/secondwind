@@ -2,7 +2,13 @@
 
 import { Check, Copy, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { buildFinzProfile, type FinzPartyPick } from "@/lib/common/services/finz";
+import {
+  buildFinzProfile,
+  type FinzPartyPick,
+  type FinzPartyPosition,
+  type FinzPartyStance,
+  type FinzPartySummary,
+} from "@/lib/common/services/finz";
 import {
   getOrCreateMemberId,
   getRememberedMemberId,
@@ -11,9 +17,19 @@ import {
 import { FinzCharacterBuilder } from "./finz-character-builder";
 import { FinzCharacterCard } from "./finz-character-card";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
+import { FinzPartyPositions } from "./finz-party-positions";
+import { FinzPartySummaryCard } from "./finz-party-summary";
 
 type Member = { memberId: string; displayName: string; selectedCardIds: string[]; joinedAt: string };
-type Group = { id: string; members: Member[]; createdAt: string; expiresAt: string; pick?: FinzPartyPick };
+type Group = {
+  id: string;
+  members: Member[];
+  createdAt: string;
+  expiresAt: string;
+  pick?: FinzPartyPick;
+  positions?: FinzPartyPosition[];
+  summary?: FinzPartySummary;
+};
 
 const MAX_MEMBERS = 2;
 
@@ -26,6 +42,10 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   const [shareUrl, setShareUrl] = useState("");
   const [opening, setOpening] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [submittingPosition, setSubmittingPosition] = useState(false);
+  const [positionError, setPositionError] = useState<string | null>(null);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     setMyMemberId(getRememberedMemberId(initialGroup.id));
@@ -35,8 +55,14 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   const isMember = myMemberId != null && group.members.some((m) => m.memberId === myMemberId);
   const full = group.members.length >= MAX_MEMBERS;
   const canJoin = !isMember && !full;
-  // 친구 합류(빈 자리) 또는 파티 픽(가득 찼는데 아직 픽 없음)을 기다리는 동안 폴링.
-  const shouldPoll = (isMember && !full) || (full && group.pick == null);
+  const positionsComplete =
+    (group.positions?.length ?? 0) >= MAX_MEMBERS &&
+    group.members.every((m) => (group.positions ?? []).some((p) => p.memberId === m.memberId));
+  // 친구 합류 / 픽 / 상대 포지션 / 요약을 기다리는 동안 폴링(상한 40회로 무한 방지).
+  const shouldPoll =
+    (isMember && !full) ||
+    (full && group.pick == null) ||
+    (full && group.pick != null && (!positionsComplete || group.summary == null));
 
   const refetch = useCallback(async () => {
     try {
@@ -102,6 +128,49 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
       setPickError(e instanceof Error ? e.message : "오늘의 우정주를 열지 못했어요.");
     } finally {
       setOpening(false);
+    }
+  }
+
+  async function submitPosition(stance: FinzPartyStance, note: string) {
+    setSubmittingPosition(true);
+    setPositionError(null);
+    try {
+      const memberId = getOrCreateMemberId();
+      const res = await fetch(`/api/finz/party/${initialGroup.id}/position`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId, stance, note }),
+      });
+      const json = (await res.json()) as { status: string; group?: Group };
+      if (!res.ok || json.status !== "ok" || !json.group) {
+        throw new Error("포지션을 저장하지 못했어요. 잠시 뒤 다시 시도해주세요.");
+      }
+      setGroup(json.group);
+    } catch (e) {
+      setPositionError(e instanceof Error ? e.message : "포지션을 저장하지 못했어요.");
+    } finally {
+      setSubmittingPosition(false);
+    }
+  }
+
+  async function openSummary() {
+    setGeneratingSummary(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch(`/api/finz/party/${initialGroup.id}/pick/summary`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const json = (await res.json()) as { status: string; group?: Group };
+      if (!res.ok || json.status !== "ok" || !json.group) {
+        throw new Error("파티 요약을 만들지 못했어요. 잠시 뒤 다시 시도해주세요.");
+      }
+      setGroup(json.group);
+    } catch (e) {
+      setSummaryError(e instanceof Error ? e.message : "파티 요약을 만들지 못했어요.");
+    } finally {
+      setGeneratingSummary(false);
     }
   }
 
@@ -194,6 +263,40 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
                   </button>
                 </div>
               )}
+
+              <FinzPartyPositions
+                members={group.members}
+                positions={group.positions ?? []}
+                myMemberId={myMemberId}
+                submitting={submittingPosition}
+                error={positionError}
+                onSubmit={submitPosition}
+              />
+
+              {positionsComplete &&
+                (group.summary ? (
+                  <FinzPartySummaryCard summary={group.summary} />
+                ) : isMember ? (
+                  <div className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50/60 p-5 text-center">
+                    <p className="text-sm text-[var(--muted)]">둘 다 포지션을 남겼어요. AI 파티 요약을 만들어볼까요?</p>
+                    <button
+                      type="button"
+                      onClick={openSummary}
+                      disabled={generatingSummary}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:bg-emerald-300"
+                    >
+                      <Sparkles className="h-4 w-4" aria-hidden />
+                      {generatingSummary ? "요약 만드는 중" : "AI 파티 요약 만들기"}
+                    </button>
+                    {summaryError && (
+                      <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{summaryError}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+                    친구가 파티 요약을 만드는 중이에요. 잠시만요.
+                  </p>
+                ))}
             </>
           ) : isMember ? (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-300 bg-emerald-50/60 p-6 text-center">
