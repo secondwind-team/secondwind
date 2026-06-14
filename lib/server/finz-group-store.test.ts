@@ -107,3 +107,35 @@ describe("isFinzGroupMember", () => {
     expect(isFinzGroupMember({ memberId: "a", displayName: "x", selectedCardIds: [], joinedAt: "t" })).toBe(false);
   });
 });
+
+describe("parseGroup — pick 관용 처리 (MVP-04)", () => {
+  const VALID_PICK = {
+    name: "구독 경제",
+    kind: "theme",
+    oneLine: "y",
+    whyThisParty: ["a"],
+    rolePrompts: [
+      { memberName: "A", role: "r", prompt: "p" },
+      { memberName: "B", role: "r", prompt: "p" },
+    ],
+    debatePoint: "d",
+    openingQuestions: ["q"],
+    conversationSeeds: ["s"],
+    caveats: ["투자 조언이 아니라 대화 소재"],
+  };
+
+  it("유효한 pick 은 round-trip 으로 보존", () => {
+    const g = { ...group([member("a"), member("b")]), pick: VALID_PICK };
+    expect(parseGroup(g)?.pick?.name).toBe("구독 경제");
+  });
+  it("깨진 pick 은 드롭하되 파티(멤버)는 유지", () => {
+    const g = { ...group([member("a"), member("b")]), pick: { name: "broken" } };
+    const parsed = parseGroup(g);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.pick).toBeUndefined();
+    expect(parsed?.members).toHaveLength(2);
+  });
+  it("pick 없는 그룹도 그대로 파싱", () => {
+    expect(parseGroup(group([member("a")]))?.pick).toBeUndefined();
+  });
+});

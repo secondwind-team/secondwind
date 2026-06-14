@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.16.0] - 2026-06-14
+
+### Added
+- **FINZ 파티 우정주 (FINZ-MVP-04)** — 2명이 모인 파티에서 "오늘의 우정주 열기"를 누르면, 두 캐릭터 조합을 Gemini에 보내 파티-shape 우정주를 생성한다(`whyThisParty[]`, 멤버별 `rolePrompts[{memberName, role, prompt}]`, `debatePoint`, 첫 질문·대화 소재). 환각 방어로 **theme-only**(스키마 `enum:["theme"]` + 프롬프트 + `kind` 강제, 실 Gemini 로 누수 0 검증), AI 실패 시 deterministic 파티 fallback, 동시 생성은 compare-and-skip. 픽은 그룹 KV blob 에 저장돼 두 멤버가 함께 본다. 새 API `POST /api/finz/party/[groupId]/pick`. 한 줄 포지션·대화형 진행자는 다음 단계(FINZ-MVP-05).
+
 ## [0.1.15.0] - 2026-06-14
 
 ### Added
