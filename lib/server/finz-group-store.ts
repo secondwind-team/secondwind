@@ -9,7 +9,7 @@
 
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
-import { buildFinzProfile } from "@/lib/common/services/finz";
+import { buildFinzProfile, isFinzPartyPick, type FinzPartyPick } from "@/lib/common/services/finz";
 
 export const FINZ_GROUP_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const MAX_MEMBERS = 2;
@@ -30,6 +30,8 @@ export type FinzGroup = {
   members: FinzGroupMember[];
   createdAt: string;
   expiresAt: string;
+  // 파티 우정주 픽(MVP-04). 2명이 다 모인 뒤 생성. 깨진 픽은 parseGroup 에서 드롭(파티는 유지).
+  pick?: FinzPartyPick;
 };
 
 export type JoinResult =
@@ -149,6 +151,28 @@ export async function joinFinzGroup(
   return { status: result.status, group: result.group };
 }
 
+export async function setFinzGroupPick(
+  id: string,
+  pick: FinzPartyPick,
+  opts: { force?: boolean } = {},
+): Promise<{ status: "ok" | "not-found" | "not-full"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+  if (current.members.length < MAX_MEMBERS) return { status: "not-full" };
+
+  // compare-and-skip: 두 멤버가 동시에 "열기"를 눌러도 이미 픽이 있으면 덮어쓰지 않는다
+  // (둘째 호출의 낭비 쓰기·flicker 방지, force 면 갱신).
+  if (current.pick && !opts.force) return { status: "ok", group: current };
+
+  const next: FinzGroup = { ...current, pick };
+  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
+  return { status: "ok", group: next };
+}
+
 export function isFinzGroupMember(value: unknown): value is FinzGroupMember {
   if (!value || typeof value !== "object") return false;
   const m = value as Partial<FinzGroupMember>;
@@ -179,7 +203,9 @@ export function parseGroup(raw: unknown): FinzGroup | null {
   const members = parsed.members.filter(isFinzGroupMember);
   if (members.length === 0 || members.length > MAX_MEMBERS) return null;
 
-  return { id, members, createdAt, expiresAt };
+  // 픽은 관용적으로 — 깨졌으면 드롭하되 파티 자체는 유효하게 유지(파티가 픽 때문에 죽지 않게).
+  const pick = isFinzPartyPick(parsed.pick) ? (parsed.pick as FinzPartyPick) : undefined;
+  return { id, members, createdAt, expiresAt, ...(pick ? { pick } : {}) };
 }
 
 function generateGroupId(): string {

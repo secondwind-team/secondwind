@@ -42,6 +42,26 @@ export type FinzDailyPick = {
   caveats: string[];
 };
 
+// 2인 파티 우정주 픽 (party shape). 단일 rolePrompt 대신 멤버별 rolePrompts[],
+// whyThisFits 대신 whyThisParty[]. V0 는 환각 방어로 kind 를 항상 "theme" 로 고정한다.
+export type FinzPartyRolePrompt = {
+  memberName: string;
+  role: string;
+  prompt: string;
+};
+
+export type FinzPartyPick = {
+  name: string;
+  kind: "stock" | "theme";
+  oneLine: string;
+  whyThisParty: string[];
+  rolePrompts: FinzPartyRolePrompt[];
+  debatePoint: string;
+  openingQuestions: string[];
+  conversationSeeds: string[];
+  caveats: string[];
+};
+
 type CharacterArchetype = FinzCharacter & {
   tagWeights: Record<string, number>;
 };
@@ -391,6 +411,58 @@ export function buildFinzFallbackPick(
   };
 }
 
+// 파티 AI 생성 실패 시(또는 멤버 카드가 카탈로그 변경으로 깨졌을 때) 쓰는 deterministic 폴백.
+// 멤버 profile 이 null(카탈로그 드리프트)이어도 견디게 — resolve 된 멤버를 driver 로 쓰고,
+// 안 되는 멤버는 일반 role 로 채운다. 항상 theme.
+export function buildFinzPartyFallbackPick(
+  members: Array<{ name: string; profile: Pick<FinzProfile, "character" | "selectedTags"> | null }>,
+): FinzPartyPick {
+  const driver = members.find((m) => m.profile)?.profile ?? null;
+  const theme = driver
+    ? FINZ_FALLBACK_THEMES[driver.character.classId] ?? FINZ_FALLBACK_DEFAULT
+    : FINZ_FALLBACK_DEFAULT;
+
+  const whyThisParty: string[] = [theme.why];
+  members.forEach((m) => {
+    if (!m.profile) return;
+    const tags = m.profile.selectedTags.slice(0, 3);
+    whyThisParty.push(
+      tags.length > 0
+        ? `${m.name}의 취향(${tags.join(", ")})과도 자연스럽게 이어지는 주제예요.`
+        : `${m.name}의 취향과도 어울리는 주제예요.`,
+    );
+  });
+  whyThisParty.push("정답을 맞히는 게 아니라 서로의 관점을 꺼내보는 게 목적이에요.");
+
+  const rolePrompts: FinzPartyRolePrompt[] = members.map((m) =>
+    m.profile
+      ? { memberName: m.name, role: m.profile.character.className, prompt: m.profile.character.roleMission }
+      : { memberName: m.name, role: "파티원", prompt: "이 테마에 대한 솔직한 첫인상을 먼저 나눠보세요." },
+  );
+
+  return {
+    name: theme.name,
+    kind: "theme",
+    oneLine: "두 사람이 가볍게 이야기 나눠볼 오늘의 소재예요.",
+    whyThisParty,
+    rolePrompts,
+    debatePoint: theme.debate,
+    openingQuestions: [
+      "둘 중 누가 이 테마에 더 끌려? 이유는?",
+      "지금 들어가는 건 늦은 걸까, 아직 기회일까?",
+    ],
+    conversationSeeds: [
+      "최근에 이 테마로 눈에 띈 뉴스가 있었어?",
+      "둘이 생각하는 '대장' 회사가 같아, 달라?",
+      "10년 뒤에도 살아남을 회사는 어디일 것 같아?",
+    ],
+    caveats: [
+      "FINZ는 투자 조언이나 매매 추천이 아니라, 친구들과 이야기할 대화 소재를 만드는 실험이에요.",
+      "지금은 AI 생성이 잘 안 돼 기본 소재로 보여주고 있어요. 잠시 뒤 다시 생성하면 더 맞춤된 우정주를 받을 수 있어요.",
+    ],
+  };
+}
+
 export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
   if (!value || typeof value !== "object") return false;
   const pick = value as Partial<FinzDailyPick>;
@@ -404,6 +476,34 @@ export function isFinzDailyPick(value: unknown): value is FinzDailyPick {
     stringArray(pick.conversationSeeds) &&
     typeof pick.rolePrompt === "string" &&
     stringArray(pick.caveats)
+  );
+}
+
+export function isFinzPartyPick(value: unknown): value is FinzPartyPick {
+  if (!value || typeof value !== "object") return false;
+  const pick = value as Partial<FinzPartyPick>;
+  return (
+    typeof pick.name === "string" &&
+    (pick.kind === "stock" || pick.kind === "theme") &&
+    typeof pick.oneLine === "string" &&
+    stringArray(pick.whyThisParty) &&
+    isPartyRolePromptArray(pick.rolePrompts) &&
+    typeof pick.debatePoint === "string" &&
+    stringArray(pick.openingQuestions) &&
+    stringArray(pick.conversationSeeds) &&
+    stringArray(pick.caveats)
+  );
+}
+
+function isPartyRolePromptArray(value: unknown): value is FinzPartyRolePrompt[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((x) => {
+      if (!x || typeof x !== "object") return false;
+      const r = x as Partial<FinzPartyRolePrompt>;
+      return typeof r.memberName === "string" && typeof r.role === "string" && typeof r.prompt === "string";
+    })
   );
 }
 
@@ -459,6 +559,69 @@ export const FINZ_DAILY_PICK_SCHEMA = {
     "openingQuestions",
     "conversationSeeds",
     "rolePrompt",
+    "caveats",
+  ],
+} as const;
+
+// 파티 픽 Gemini responseSchema. kind 는 enum ["theme"] 로 제약해 constrained decoding 단계에서
+// 실종목 픽을 원천 차단(검증 완료). rolePrompts 는 멤버별 객체 배열.
+export const FINZ_PARTY_PICK_SCHEMA = {
+  type: "object",
+  properties: {
+    name: {
+      type: "string",
+      description: "두 사람이 함께 이야기할 상위 테마/섹터명. 실제 상장사명·티커 금지.",
+    },
+    kind: {
+      type: "string",
+      enum: ["theme"],
+    },
+    oneLine: {
+      type: "string",
+      description: "매수 추천이 아니라 대화 소재임을 드러내는 한 줄",
+    },
+    whyThisParty: {
+      type: "array",
+      items: { type: "string" },
+      description: "두 사람 각각의 취향을 언급하고 어떻게 만나는지",
+    },
+    rolePrompts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          memberName: { type: "string" },
+          role: { type: "string" },
+          prompt: { type: "string" },
+        },
+        required: ["memberName", "role", "prompt"],
+      },
+    },
+    debatePoint: {
+      type: "string",
+    },
+    openingQuestions: {
+      type: "array",
+      items: { type: "string" },
+    },
+    conversationSeeds: {
+      type: "array",
+      items: { type: "string" },
+    },
+    caveats: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: [
+    "name",
+    "kind",
+    "oneLine",
+    "whyThisParty",
+    "rolePrompts",
+    "debatePoint",
+    "openingQuestions",
+    "conversationSeeds",
     "caveats",
   ],
 } as const;
