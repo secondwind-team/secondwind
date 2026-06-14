@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.17.0] - 2026-06-14
+
+### Added
+- **FINZ 한 줄 포지션 + 파티 요약 (FINZ-MVP-05)** — 파티 우정주(MVP-04)에 대해 각 멤버가 6종 stance(매력 있음/관망/회의적/모르지만 끌림/너무 비싸지만 계속 보게 됨/친구 말 듣고 다시 봄) 중 하나 + 한 줄 코멘트를 남기고, 둘 다 남기면 **AI 진행자 1-shot 파티 요약**(`{summary, nextNudge}`)이 두 포지션을 균형 있게 정리한다. 새 API `POST /api/finz/party/[groupId]/position`(즉시·LLM 없음), `POST /api/finz/party/[groupId]/pick/summary`(1-shot). 포지션 변경 시 기존 요약 자동 무효화(재생성), 요약은 compare-and-skip(force 없음). 요약 프롬프트는 note 를 데이터로만 전달(프롬프트 인젝션 방어, 실 Gemini 로 검증). 자유 채팅·다회 진행자는 범위 밖. ⚠️ 멤버 간 포지션 덮어쓰기는 2인 신뢰 파티 기준 수용(서버 발급 토큰 하드닝은 후속).
+
 ## [0.1.16.0] - 2026-06-14
 
 ### Added
