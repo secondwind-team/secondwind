@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.18.0] - 2026-06-14
+
+### Changed
+- **FINZ UI/UX 전면 개편 — "따뜻한 채팅" 디자인 시스템.** secondwind/travel 의 밝은 emerald 대시보드와 **완전히 독립**된 finz 전용 시스템으로 재구축: `--fz-*` 토큰 네임스페이스 + 전용 폰트(Cabinet Grotesk / Pretendard) + 전용 레이아웃 셸(`app/finz/`, 공용 nav 미상속). KakaoTalk × 토스 라이트 톤 — 크림 배경 #FBF7F0, 코랄 액센트 #FF6B5C, 큰 말풍선, 바운시 모션. 캐릭터=프로필 카드, 오늘의 우정주=진행자 말풍선, 한 줄 포지션=카톡식 채팅 정렬, AI 요약=앰버 말풍선, stance=이모지 칩. 라우트는 `/finz` 그대로(route group 이동이라 URL 불변), 로직·API·검증 전부 보존(테스트 124 그대로 통과). 디자인 시스템 문서: `docs/finz/DESIGN.md`.
+
 ## [0.1.17.0] - 2026-06-14
 
 ### Added

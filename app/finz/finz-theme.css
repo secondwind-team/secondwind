@@ -1,0 +1,246 @@
+/* FINZ 전용 디자인 시스템 — "따뜻한 채팅". docs/finz/DESIGN.md 참조.
+   secondwind/travel 공용 토큰(--ink/--muted/--line/--accent)·emerald 와 완전 분리.
+   모든 토큰은 --fz-* 네임스페이스, .finz-root 스코프 안에서만 정의/사용. */
+
+@import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700,800&display=swap");
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
+.finz-root {
+  --fz-bg: #fbf7f0;
+  --fz-surface: #ffffff;
+  --fz-surface-2: #fff3ec;
+  --fz-ink: #2b2622;
+  --fz-muted: #8a7f76;
+  --fz-line: #efe7db;
+  --fz-coral: #ff6b5c;
+  --fz-coral-ink: #c8412f;
+  --fz-coral-tint: #ffede9;
+  --fz-amber: #ffc24b;
+  --fz-amber-tint: #fff6e4;
+  --fz-amber-ink: #b6791b;
+  --fz-error: #e05b4b;
+  --fz-display: "Cabinet Grotesk", "Pretendard Variable", Pretendard, sans-serif;
+  --fz-body: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --fz-r-sm: 14px;
+  --fz-r: 20px;
+  --fz-r-lg: 28px;
+  --fz-r-full: 999px;
+  --fz-shadow: 0 8px 24px -12px rgb(120 80 40 / 0.22);
+  --fz-shadow-sm: 0 3px 10px -6px rgb(120 80 40 / 0.25);
+
+  min-height: 100svh;
+  background: var(--fz-bg);
+  color: var(--fz-ink);
+  font-family: var(--fz-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 타이포 */
+.fz-display {
+  font-family: var(--fz-display);
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+.fz-seclabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fz-coral-ink);
+}
+.fz-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 카드 / 말풍선 */
+.fz-card {
+  background: var(--fz-surface);
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r-lg);
+  box-shadow: var(--fz-shadow-sm);
+}
+.fz-bubble {
+  background: var(--fz-surface);
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r-lg);
+  box-shadow: var(--fz-shadow-sm);
+  animation: fzPop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fz-bubble--pick {
+  border-color: #fbd9cf;
+  background: linear-gradient(180deg, #fff, #fff8f5);
+}
+.fz-bubble--amber {
+  background: var(--fz-amber-tint);
+  border-color: #fbe6bd;
+}
+
+/* 채팅 메시지 정렬(카톡식): 기본 왼쪽 흰색, --me 는 오른쪽 코랄 */
+.fz-msg {
+  max-width: 80%;
+  border-radius: var(--fz-r-lg);
+  border: 1px solid var(--fz-line);
+  background: var(--fz-surface);
+  box-shadow: var(--fz-shadow-sm);
+  padding: 10px 14px;
+  font-size: 14px;
+  animation: fzPop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fz-msg--me {
+  background: var(--fz-coral);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* 칩 (stance/태그 선택) */
+.fz-chip {
+  font-family: var(--fz-body);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1.5px solid var(--fz-line);
+  background: var(--fz-surface);
+  color: var(--fz-ink);
+  border-radius: var(--fz-r-full);
+  padding: 9px 14px;
+  transition: transform 0.09s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.fz-chip:hover:not(:disabled) {
+  border-color: var(--fz-coral);
+}
+.fz-chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.fz-chip[aria-pressed="true"],
+.fz-chip--on {
+  background: var(--fz-coral);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 16px -8px rgb(255 107 92 / 0.7);
+}
+
+/* 버튼 */
+.fz-btn {
+  font-family: var(--fz-body);
+  font-weight: 700;
+  font-size: 14px;
+  border: none;
+  border-radius: var(--fz-r-full);
+  padding: 12px 20px;
+  background: var(--fz-coral);
+  color: #fff;
+  box-shadow: 0 8px 18px -8px rgb(255 107 92 / 0.75);
+  transition: transform 0.09s ease, background 0.15s ease, opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.fz-btn:hover:not(:disabled) {
+  background: #ff5746;
+}
+.fz-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.fz-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+  box-shadow: none;
+}
+.fz-btn--ghost {
+  background: var(--fz-surface);
+  color: var(--fz-ink);
+  border: 1.5px solid var(--fz-line);
+  box-shadow: none;
+}
+.fz-btn--ghost:hover:not(:disabled) {
+  background: var(--fz-surface);
+  border-color: var(--fz-coral);
+  color: var(--fz-coral-ink);
+}
+
+/* 스탯바 */
+.fz-statbar {
+  height: 7px;
+  border-radius: var(--fz-r-full);
+  background: var(--fz-surface-2);
+  overflow: hidden;
+}
+.fz-statbar > i {
+  display: block;
+  height: 100%;
+  border-radius: var(--fz-r-full);
+  background: var(--fz-coral);
+}
+
+/* 아바타 */
+.fz-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--fz-coral), var(--fz-amber));
+  color: #fff;
+}
+
+/* 작은 태그 */
+.fz-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fz-coral-ink);
+  background: var(--fz-coral-tint);
+  border-radius: var(--fz-r-full);
+  padding: 3px 9px;
+}
+
+/* 입력 */
+.fz-input {
+  width: 100%;
+  font-family: var(--fz-body);
+  font-size: 14px;
+  color: var(--fz-ink);
+  background: var(--fz-surface);
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r);
+  padding: 10px 14px;
+}
+.fz-input:focus {
+  outline: none;
+  border-color: var(--fz-coral);
+}
+.fz-input::placeholder {
+  color: var(--fz-muted);
+}
+
+/* 에러/알림 */
+.fz-alert {
+  font-size: 13px;
+  border-radius: var(--fz-r);
+  padding: 10px 14px;
+  background: var(--fz-coral-tint);
+  border: 1px solid #fbd9cf;
+  color: var(--fz-coral-ink);
+}
+
+@keyframes fzPop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fz-bubble,
+  .fz-msg {
+    animation: none;
+  }
+  .fz-chip,
+  .fz-btn {
+    transition: none;
+  }
+}

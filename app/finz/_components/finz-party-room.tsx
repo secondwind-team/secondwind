@@ -58,7 +58,6 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   const positionsComplete =
     (group.positions?.length ?? 0) >= MAX_MEMBERS &&
     group.members.every((m) => (group.positions ?? []).some((p) => p.memberId === m.memberId));
-  // 친구 합류 / 픽 / 상대 포지션 / 요약을 기다리는 동안 폴링(상한 40회로 무한 방지).
   const shouldPoll =
     (isMember && !full) ||
     (full && group.pick == null) ||
@@ -71,14 +70,14 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
       const json = (await res.json()) as { status: string; group?: Group };
       if (json.status === "ok" && json.group) setGroup(json.group);
     } catch {
-      // 일시적 네트워크 실패는 무시 — 다음 폴링에서 회복.
+      // 일시적 네트워크 실패는 무시.
     }
   }, [initialGroup.id]);
 
   useEffect(() => {
     if (!shouldPoll) return;
     let count = 0;
-    const MAX_POLLS = 40; // ~3.3분. AI가 영구 장애로 픽이 저장되지 않을 때 무한 폴링 방지.
+    const MAX_POLLS = 40;
     const timer = setInterval(() => {
       count += 1;
       void refetch();
@@ -186,8 +185,8 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2">
         {group.members.map((m) => {
           const profile = buildFinzProfile(m.selectedCardIds);
           if (!profile) return null;
@@ -204,28 +203,25 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
 
         {!full && (
           <div
-            className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 p-6 text-center"
+            className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-[28px] border-2 border-dashed border-[#fbd9cf] bg-[var(--fz-coral-tint)] p-6 text-center"
             aria-label="친구를 기다리는 중"
           >
-            <p className="text-sm font-semibold text-emerald-800">아직 빈 자리예요</p>
-            <p className="text-sm text-[var(--muted)]">
-              {isMember ? "친구에게 아래 링크를 보내 합류를 기다려보세요." : "아래에서 캐릭터를 만들고 합류하세요."}
+            <span className="text-3xl" aria-hidden>🪑</span>
+            <p className="text-sm font-semibold text-[var(--fz-coral-ink)]">아직 빈 자리예요</p>
+            <p className="text-sm text-[var(--fz-muted)]">
+              {isMember ? "친구에게 아래 링크를 보내봐." : "아래에서 캐릭터를 만들고 합류해."}
             </p>
           </div>
         )}
       </div>
 
       {isMember && !full && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="fz-card flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-[var(--ink)]">초대 링크</p>
-            <p className="mt-0.5 break-all text-xs text-[var(--muted)]">{shareUrl}</p>
+            <p className="text-sm font-semibold text-[var(--fz-ink)]">초대 링크</p>
+            <p className="mt-0.5 break-all text-xs text-[var(--fz-muted)]">{shareUrl}</p>
           </div>
-          <button
-            type="button"
-            onClick={copyLink}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
-          >
+          <button type="button" onClick={copyLink} className="fz-btn shrink-0">
             {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
             {copied ? "복사됨" : "링크 복사"}
           </button>
@@ -233,15 +229,13 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
       )}
 
       {canJoin && (
-        <section className="space-y-4 rounded-2xl border border-[var(--line)] bg-white p-5 shadow-[var(--shadow-soft)] sm:p-6">
+        <section className="fz-card space-y-4 p-5">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-[var(--ink)]">나도 캐릭터 만들고 합류하기</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">로그인 없이 취향 카드 3개만 고르면 이 파티에 합류해요.</p>
+            <h2 className="fz-display text-xl text-[var(--fz-ink)]">나도 캐릭터 만들고 합류하기</h2>
+            <p className="mt-1 text-sm text-[var(--fz-muted)]">로그인 없이 취향 카드 3개만 고르면 이 파티에 합류해.</p>
           </div>
           <FinzCharacterBuilder submitLabel="합류하기" pending={joining} onSubmit={join} />
-          {error && (
-            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</p>
-          )}
+          {error && <p className="fz-alert">{error}</p>}
         </section>
       )}
 
@@ -252,12 +246,7 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
               <FinzPartyPickResult pick={group.pick} />
               {isMember && (
                 <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => openPick(true)}
-                    disabled={opening}
-                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[var(--muted)] transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-wait"
-                  >
+                  <button type="button" onClick={() => openPick(true)} disabled={opening} className="fz-btn fz-btn--ghost">
                     <Sparkles className="h-4 w-4" aria-hidden />
                     {opening ? "다시 뽑는 중" : "다른 우정주로 다시 뽑기"}
                   </button>
@@ -277,49 +266,32 @@ export function FinzPartyRoom({ initialGroup }: { initialGroup: Group }) {
                 (group.summary ? (
                   <FinzPartySummaryCard summary={group.summary} />
                 ) : isMember ? (
-                  <div className="flex flex-col items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50/60 p-5 text-center">
-                    <p className="text-sm text-[var(--muted)]">둘 다 포지션을 남겼어요. AI 파티 요약을 만들어볼까요?</p>
-                    <button
-                      type="button"
-                      onClick={openSummary}
-                      disabled={generatingSummary}
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:bg-emerald-300"
-                    >
+                  <div className="fz-card flex flex-col items-center gap-2 p-5 text-center">
+                    <p className="text-sm text-[var(--fz-muted)]">둘 다 포지션을 남겼어요. AI 파티 요약을 만들어볼까?</p>
+                    <button type="button" onClick={openSummary} disabled={generatingSummary} className="fz-btn">
                       <Sparkles className="h-4 w-4" aria-hidden />
                       {generatingSummary ? "요약 만드는 중" : "AI 파티 요약 만들기"}
                     </button>
-                    {summaryError && (
-                      <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{summaryError}</p>
-                    )}
+                    {summaryError && <p className="fz-alert">{summaryError}</p>}
                   </div>
                 ) : (
-                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
-                    친구가 파티 요약을 만드는 중이에요. 잠시만요.
-                  </p>
+                  <p className="fz-card p-4 text-center text-sm text-[var(--fz-muted)]">친구가 파티 요약을 만드는 중이에요. 잠시만.</p>
                 ))}
             </>
           ) : isMember ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-300 bg-emerald-50/60 p-6 text-center">
-              <p className="text-sm font-semibold text-emerald-900">파티 완성! 두 캐릭터가 모였어요.</p>
-              <p className="text-sm text-[var(--muted)]">이 조합에 맞는 오늘의 우정주를 열어보세요.</p>
-              <button
-                type="button"
-                onClick={() => openPick(false)}
-                disabled={opening}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:bg-emerald-300"
-              >
+            <div className="fz-card flex flex-col items-center gap-3 bg-[var(--fz-coral-tint)] p-6 text-center">
+              <span className="text-3xl" aria-hidden>🎉</span>
+              <p className="text-sm font-semibold text-[var(--fz-coral-ink)]">파티 완성! 두 캐릭터가 모였어요.</p>
+              <p className="text-sm text-[var(--fz-muted)]">이 조합에 맞는 오늘의 우정주를 열어봐.</p>
+              <button type="button" onClick={() => openPick(false)} disabled={opening} className="fz-btn">
                 <Sparkles className="h-4 w-4" aria-hidden />
                 {opening ? "오늘의 우정주 여는 중" : "오늘의 우정주 열기"}
               </button>
             </div>
           ) : (
-            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
-              파티가 가득 찼어요. 친구가 오늘의 우정주를 여는 중이에요. 잠시만요.
-            </p>
+            <p className="fz-card p-4 text-center text-sm text-[var(--fz-muted)]">파티가 가득 찼어요. 친구가 오늘의 우정주를 여는 중이에요. 잠시만.</p>
           )}
-          {pickError && (
-            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{pickError}</p>
-          )}
+          {pickError && <p className="fz-alert">{pickError}</p>}
         </section>
       )}
     </div>

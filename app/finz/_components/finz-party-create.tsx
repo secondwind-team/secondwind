@@ -5,7 +5,7 @@ import { useState } from "react";
 import { getOrCreateMemberId, rememberPartyMembership } from "@/lib/common/finz-party-id";
 import { FinzCharacterBuilder } from "./finz-character-builder";
 
-// 파티 생성: 캐릭터를 만들고 → POST /api/finz/party → 발급된 룸으로 이동.
+// 파티 생성: 캐릭터 소환 → POST /api/finz/party → 발급된 룸으로 이동.
 export function FinzPartyCreate() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -38,11 +38,9 @@ export function FinzPartyCreate() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FinzCharacterBuilder submitLabel="파티 만들고 링크 받기" pending={pending} onSubmit={create} />
-      {error && (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</p>
-      )}
+      {error && <p className="fz-alert">{error}</p>}
     </div>
   );
 }
