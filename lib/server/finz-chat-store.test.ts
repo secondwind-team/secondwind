@@ -138,6 +138,14 @@ describe("appendTextMessage", () => {
     const r = await appendTextMessage("abc123", "a", "hi", "temp-uuid-1");
     expect(r.message?.id).toBe("temp-uuid-1");
   });
+  it("같은 clientId 재시도는 멱등 — KV 에 한 번만 저장하고 기존 것을 돌려준다", async () => {
+    const first = await appendTextMessage("abc123", "a", "hi", "dup-1");
+    expect(first.status).toBe("ok");
+    const retry = await appendTextMessage("abc123", "a", "hi", "dup-1");
+    expect(retry.status).toBe("ok");
+    expect(retry.message?.id).toBe("dup-1");
+    expect(h.lists.get(CHAT_KEY)).toHaveLength(1); // 물리적 중복 없음
+  });
 });
 
 describe("acquirePickLock", () => {

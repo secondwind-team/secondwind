@@ -110,8 +110,15 @@ export async function appendTextMessage(
   const trimmed = text.trim().slice(0, MAX_TEXT_LENGTH);
   if (trimmed.length === 0) return { status: "empty" };
 
-  // 레이트 리밋: 이 멤버의 마지막 텍스트가 너무 최근이면 거절(꼬리 일부만 확인).
   const recent = await readWindow(id, 24);
+
+  // 멱등: 같은 clientId 가 이미 있으면(응답 유실 후 재시도) 다시 쓰지 않고 기존 것을 돌려준다.
+  if (clientId && clientId.length > 0) {
+    const dup = recent.find((m) => m.id === clientId);
+    if (dup) return { status: "ok", message: dup };
+  }
+
+  // 레이트 리밋: 이 멤버의 마지막 텍스트가 너무 최근이면 거절(꼬리 일부만 확인).
   const myLastText = [...recent].reverse().find((m) => m.kind === "text" && m.authorId === memberId);
   if (myLastText) {
     const last = Date.parse(myLastText.createdAt);

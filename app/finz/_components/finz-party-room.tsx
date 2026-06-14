@@ -114,10 +114,17 @@ export function FinzPartyRoom({
       const incoming = json.messages ?? [];
       if (incoming.length) {
         setMessages((prev) => {
-          const seen = new Set(prev.map((m) => m.id));
-          const adds = incoming.filter((m) => !seen.has(m.id));
-          if (!adds.length) return prev;
-          return [...prev, ...adds].sort((a, b) => a.seq - b.seq);
+          // id 로 dedup — 배치 내 중복(같은 clientId 재시도)·재수신 모두 합친다(중복 React key 방지).
+          const byId = new Map(prev.map((m) => [m.id, m]));
+          let changed = false;
+          for (const m of incoming) {
+            if (!byId.has(m.id)) {
+              byId.set(m.id, m);
+              changed = true;
+            }
+          }
+          if (!changed) return prev;
+          return [...byId.values()].sort((a, b) => a.seq - b.seq);
         });
       }
       if (typeof json.cursor === "number" && json.cursor > cursorRef.current) {
