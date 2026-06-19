@@ -21,7 +21,7 @@
 |---|---|---:|---|---|
 | `TRAVEL` | 여행 계획 서비스 | `live` | 목적지, 기간, 요청사항을 받아 하나의 여행 계획을 만든다. | `app/(site)/travel`, `lib/common/services/travel*` |
 | `DIARY` | 다이어리 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/diary/page.tsx` |
-| `FINZ` | 친구 기반 투자 대화 실험 | `partial` | **현재 코드는 1인(솔로) 흐름까지만 동작**: 취향 카드 → 캐릭터 소환 → 로그인 사용자 1인의 오늘의 우정주 생성. 비전의 친구 그룹/파티/레이드는 미구현. 다음 단계는 2인 사회적 루프. | `docs/plans/2026-06-13-finz-mvp2-social-loop-plan.md` (현행 기준), `docs/plans/2026-05-24-finz-mvp1-plan.md` (기획-코드 갈라짐), `app/(site)/finz` |
+| `FINZ` | 친구 기반 투자 대화 메신저 | `live` | **계정·핸들 기반 4탭 메신저**(친구·대화·피드·프로필). 대화방에서 캐릭터로 만나 우정주·한 줄 입장·AI 요약을 나누고, 각 방의 AI 봇(`@AI`)이 질문 답변·선제 개입. 기존 1인 솔로·파티 흐름은 메신저로 흡수. | `app/finz/`, `lib/server/finz-*`, `lib/common/services/finz*`, `docs/finz/DESIGN.md` (IA·아키텍처) |
 | `EXPERIMENT-3` | 세 번째 실험 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/experiment-3/page.tsx` |
 | `COMMON-UI` | 공통 UI/레이아웃 | `live` | 홈, 사이트 레이아웃, 공통 카드. | `app/(site)`, `components/common` |
 | `LLM-PLATFORM` | LLM 프록시/모델 운영 | `ops` | Gemini 호출, fallback, quota, prompt version. | `app/api/gemini/route.ts`, `lib/common/llm.ts` |
@@ -150,18 +150,60 @@
 | `DIARY-CORE-02` | AI 요약/회고 | `placeholder` | secondwind 의 다른 서비스와 연결 가능. | 여행 계획과 이어지는 기록인가? |
 | `DIARY-CORE-03` | 공유/비공개 설정 | `placeholder` | 민감한 개인 데이터가 될 수 있음. | 저장소와 privacy 기준은? |
 
-## FINZ MVP 1 후보 목록
+## FINZ 기능 목록
 
-| Feature ID | 기능 | 상태 | 설명 | 다음 질문 |
-|---|---|---:|---|---|
-| `FINZ-MVP-01` | 시작 화면과 취향 카드 선택 | `live` | `/finz`에서 FINZ의 목적을 짧게 보여주고, 사용자가 추상 취향 카드를 3개 이상 고른다. | 캐릭터 소환 CTA 이후 `FINZ-MVP-02`로 연결 |
-| `FINZ-MVP-02` | 개인 투자 캐릭터 소환 | `live` | 선택한 카드 태그로 미래기술 딜러, 배당 힐러 등 캐릭터와 스탯을 생성한다. | AI 문장 생성 없이 deterministic fallback으로 구현 완료 |
-| `FINZ-MVP-02A` | 로그인한 개인 우정주 생성 | `live` | Google 로그인 사용자의 취향 카드와 캐릭터를 Neon DB에 저장하고, Gemini로 오늘 이야기할 우정주/테마 1개와 질문 소재를 생성한다. ⚠️ 1인(솔로) 흐름 — 비전의 파티 기반과 다름. 로그인 **필수**는 plan의 "로그인 미룸/localStorage" 결정과 상충. | 유지보수: Gemini 실패 시 deterministic fallback 부재, `UNIQUE(user_email,pick_date)` vs `profile_key` 클로버링, mid-flow 로그인 벽, 자동 force-save 부작용, 안 읽히는 `character` JSONB. (`2026-06-13` plan §6) |
-| `FINZ-MVP-03` | 링크 기반 2인 파티 구성 *(재정의)* | `planned` | 초대 **링크 1개**로 친구가 합류해 두 캐릭터가 한 파티 화면에 모인다. 그룹 id를 URL/KV에 실어 복원(실시간 인프라 없음), 로그인은 선택. "두 번째 사람"을 들이는 핵심 PR. | 링크 합류를 OAuth 뒤에 두지 말 것 (Q3). 2명만 지원해도 사회적 가설 증명. (`2026-06-13` plan §4·§7) |
-| `FINZ-MVP-04` | 파티 기반 우정주 + AI 진행자 1-shot *(재정의)* | `planned` | 2인 파티 조합을 Gemini에 보내 우정주 1개 + 싸울 포인트 + 캐릭터별 역할(`whyThisParty[]`, 멤버별 `rolePrompts[]`)을 생성. facilitator는 무한 루프가 아니라 **1회 응답**. V0는 theme 기본 + fallback 픽. | 토큰 복리 비용·파티 해산 시점은 MVP에서 풀지 말고 1-shot으로 우회. 실명 종목은 그라운딩 전까지 보류 (Q4). |
-| `FINZ-MVP-05` | 한 줄 포지션과 파티 요약 | `planned` | 각 멤버가 매력 있음/관망/회의적 같은 포지션과 한 줄 의견을 남기고, 파티 요약을 본다. | 자유 채팅 없이 구조화 입력만으로 대화가 시작되는가? |
-| `FINZ-MVP-06` | 2인 Dogfooding 피드백 루프 | `planned` | 친구 2명 기준으로 파티 합류·캐릭터 공유·우정주 반응·재방문 의향을 기록한다. | travel feedback 시스템 재사용 vs 문서 체크리스트? 성공 기준은 `2026-06-13` plan §8. |
-| `FINZ-RAID-01` | 투자 레이드 (보스/역할 미션) | `planned` | 우정주를 보스로 두고 캐릭터별 역할 미션으로 대화를 게임화. | 게임 톤 유지/제거(Q2)를 데모로 결판낸 **뒤에만** 구현. 미결 시 캐릭터의 "다음 레이드 역할" 카피는 유물. |
+> 2026-06-20 갱신: finz 가 **계정·핸들 기반 4탭 메신저**로 ship 됨(PR #107·#109). 아래는 그 기준의 기능 목록(Travel 과 동일한 7열 포맷). 옛 `FINZ-MVP-01~06` 계획 ID(2026-05-24·2026-06-13 plan)는 이 목록으로 **대체**됨 — 매핑은 각 행 끝에 표기. IA·아키텍처는 `docs/finz/DESIGN.md`.
+
+### 계정·온보딩
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-ACCT-01` | 계정·핸들 (finz 소유) | `live` | Google 로그인은 인증만, 핸들·프로필은 finz 가 관리. 친구가 `@핸들`로 나를 찾는다. provider-agnostic(추후 다른 로그인 귀속). | `lib/server/finz-account-store.ts`(Neon `finz_accounts`/`finz_auth_links`), `lib/server/finz-account.ts`, `app/api/finz/account/route.ts` (+`/handle`) | 다른 로그인(카카오·애플) 추가 | 핸들 변경 히스토리, 계정 삭제/탈퇴 |
+| `FINZ-ACCT-02` | 온보딩 + 게이트 | `live` | 첫 로그인 → 핸들(+표시이름)만 정하면 시작. 미로그인/계정없음/정상을 게이트가 분기. | `finz-onboarding`, `finz-app-gate`, `finz-account-context`, `finz-login-view` | 핸들 추천, 프로필 사진 | store 미설정/네트워크 실패 graceful |
+
+### 친구
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-FRIEND-01` | 핸들로 친구 추가·요청·수락 | `live` | `@핸들`로 친구 요청, 상대도 보내면 즉시 친구. 받은/보낸 요청·목록. 친구 행에서 1:1 대화 시작. | `app/finz/(tabs)/friends/page.tsx`, `app/api/finz/friends/route.ts`, `finz-account-store`(`finz_friendships`) | 친구 검색·추천, 차단 | 요청 스팸 제한, 상대 계정 삭제 시 정리 |
+
+### 대화
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-CHAT-01` | 대화방 목록 + 새 대화(1:1/그룹) | `live` | 내 대화방을 최근 활동순으로 보고, 친구와 1:1 또는 그룹방을 만든다. (기존 "파티" 흡수.) | `app/finz/(tabs)/chats/page.tsx`, `finz-new-chat-sheet`, `app/api/finz/rooms/route.ts`, `finz-group-store`(방 인덱스 ZSET) | 검색·핀·읽음 표시 | 목록 로딩 성능(병렬화 완료), 1:1 중복방 dedup |
+| `FINZ-CHAT-02` | 대화방 타임라인 | `live` | append-only 채팅(텍스트·우정주·입장·요약·시스템). 폴링(보임 3s/숨김 8s)·낙관적 전송. | `app/finz/party/[groupId]`, `finz-party-room`, `finz-chat-*`, `app/api/finz/party/[groupId]/{message,chat}`, `finz-chat-store` (`FINZ-MVP-03`) | 실시간(SSE/WS), 첫 데이터 SSR | LTRIM 도입 시 incr-seq 전환, 400 ceiling |
+| `FINZ-CHAT-03` | 친구 초대 / 링크 합류 | `live` | 방에서 친구를 골라 초대하거나 링크로 누구나 합류(원탭, 취향 재선택 없음). | `app/api/finz/rooms/[groupId]/{invite,join}`, `finz-invite-sheet`, `finz-room-join-view`, `finz-room-full-notice` | 초대 권한·승인, QR | memberId(=accountId) 위조 방어 강화 |
+| `FINZ-CHAT-04` | 나와의 채팅 (self) | `live` | 계정당 1개 혼자 방 — 메모 + `@AI`·선제 개입 솔로 테스트(사람 안 모아도 됨). | `app/api/finz/rooms/self/route.ts`, `finz-group-store`(`getOrCreateSelfRoom`, `sw:finz:self:<id>`) | self 에서도 가능한 콘텐츠 확대 | 우정주는 2인 필요라 비활성(의도) |
+
+### 피드·프로필
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-FEED-01` | 친구 활동 피드 | `live` | 친구의 활동(가입·캐릭터 소환·우정주 생성·방 개설)을 SNS 타임라인처럼 본다. | `app/finz/(tabs)/feed/page.tsx`, `finz-feed-list`, `app/api/finz/feed/route.ts`, `finz-account-store`(`finz_feed_events`, fan-in) | 좋아요·댓글, 챌린지 이벤트 | 친구 많아지면 fan-in→fan-out, 이벤트 보존기간 |
+| `FINZ-PROFILE-01` | 프로필 (캐릭터·편집·이력) | `live` | 캐릭터 카드 + 핸들·이름·소개·취향 편집 + 가입 이력 + 로그아웃. 캐릭터 없으면 소환 CTA. | `app/finz/(tabs)/profile/page.tsx`, `finz-profile-view`, `finz-character-card` | 활동 통계, 캐릭터 성장 | 편집 검증(핸들 0개/3+개 캐릭터) |
+
+### 캐릭터·콘텐츠 (대화방 안 부가기능)
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-CHAR-01` | 취향 카드 → 캐릭터 소환 | `live` | 취향 카드 3개+로 미래기술 딜러·배당 힐러 등 캐릭터·스탯을 deterministic 생성(가입 후 프로필에서). | `lib/common/services/finz.ts`(`summonFinzCharacter`·`FINZ_TASTE_CARDS`), `finz-character-builder` (`FINZ-MVP-01·02`) | AI 문장 다듬기, 아바타 이미지 | 카탈로그 변경 내성(렌더 시 재구성) |
+| `FINZ-PICK-01` | 우정주 생성 (파티 픽) | `live` | 방 멤버 조합으로 오늘 이야기할 테마 1개 + 싸울 포인트 + 역할을 Gemini 생성. theme-only 환각 방어 + fallback. | `app/api/finz/party/[groupId]/pick`(+`/summary`), `FINZ_PARTY_PICK_SCHEMA`, `finz-party-pick-result` (`FINZ-MVP-04`) | 실명 종목(그라운딩 후), 재추첨 변수 | 토큰 비용, 동시 호출 락 |
+| `FINZ-POSITION-01` | 한 줄 입장 + AI 요약 | `live` | 각 멤버가 stance(매력 있음/관망/…)+코멘트를 남기면 AI 가 1회 요약. | `app/api/finz/party/[groupId]/{position,pick/summary}`, `finz-position-input`, `finz-party-summary` (`FINZ-MVP-05`) | N인 방 요약 일반화 | "둘 다 입장" 게이트의 N인 의미 |
+| `FINZ-RAID-01` | 투자 레이드 (보스/역할 미션) | `planned` | 우정주를 보스로 두고 캐릭터별 역할 미션으로 대화를 게임화. | 콘텐츠 훅만 존재(피드 `raid_started` 타입), 전용 UI 미구현 | 대화방 안 레이드 세션 | 게임 톤 데모로 검증 후 깊이 결정 |
+
+### AI 봇
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-AI-01` | `@AI` 멘션 답변 (그라운딩) | `live` | `@AI`(또는 `@finz`/`@핀즈`) 멘션 시 오늘 주가·뉴스까지 Google Search 그라운딩으로 답(출처·면책). | `app/api/finz/party/[groupId]/ask`, `lib/common/llm.ts`(grounded) | 답변 품질 eval, 다국어 | 그라운딩 비용·ask-lock, 인젝션 가드 |
+| `FINZ-AI-02` | AI 선제 개입 | `live` | 멤버 대화가 쌓이고 AI 가 한동안 말 안 했을 때 맥락 읽고 1회 끼어들어 건전한 투자 대화 유도. | `app/api/finz/party/[groupId]/proactive`, `finz-chat.ts`(`shouldFinzProactivelySpeak`), 쿨다운 락 | 트리거 정교화(과열·근거없음 감지) | 빈도/스팸 톤, 비용(쿨다운 90s) |
+
+### 운영/dogfooding
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-OPS-01` | dogfooding 피드백 루프 | `planned` | 친구들이 실제로 친구 추가·대화·우정주·재방문하는지 기록·분석. | travel feedback 시스템 재사용 검토 | travel `TRAVEL-FEEDBACK-01` 패턴 이식 | 성공 기준(`2026-06-13` plan §8) (`FINZ-MVP-06`) |
 
 ## Experiment-3 후보 목록
 
