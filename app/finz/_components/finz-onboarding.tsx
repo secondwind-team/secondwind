@@ -99,7 +99,7 @@ export function FinzOnboarding({ onDone }: { onDone: (account: FinzAccount) => v
             autoCorrect="off"
             spellCheck={false}
             placeholder="jiheon"
-            className="fz-input pl-9"
+            className="fz-input fz-input--icon"
             aria-label="핸들"
           />
         </div>

@@ -215,6 +215,12 @@
 .fz-input::placeholder {
   color: var(--fz-muted);
 }
+/* 왼쪽 아이콘(@ 등)이 있는 입력 — 아이콘과 placeholder/텍스트가 겹치지 않게 왼쪽 패딩 확보.
+   .fz-input 의 shorthand padding 이 Tailwind pl-* 유틸을 (로드 순서상) 덮으므로, 같은 finz-theme
+   안에서 .fz-input 뒤에 정의해 안전하게 padding-left 만 재정의한다. */
+.fz-input--icon {
+  padding-left: 2.5rem;
+}
 
 /* 에러/알림 */
 .fz-alert {

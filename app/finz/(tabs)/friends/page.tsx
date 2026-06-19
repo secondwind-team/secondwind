@@ -131,7 +131,7 @@ export default function FinzFriendsPage() {
               autoCorrect="off"
               spellCheck={false}
               placeholder="친구 핸들"
-              className="fz-input pl-9"
+              className="fz-input fz-input--icon"
               aria-label="친구 핸들"
             />
           </div>
