@@ -56,21 +56,30 @@ export async function POST(req: Request) {
     : [];
   const bio = typeof body.bio === "string" ? body.bio : "";
 
-  // 캐릭터 유효성 — 취향 카드 3개 이상이어야 캐릭터가 소환된다.
-  if (!buildFinzProfile(selectedCardIds)) {
+  // 캐릭터는 선택 — 계정은 캐릭터 없이도 만들고(온보딩), 캐릭터는 나중에 프로필에서 소환한다.
+  // 카드를 골랐다면(>0) 3개 이상이어야 캐릭터가 소환된다. 1~2개만 invalid.
+  const hasCharacter = selectedCardIds.length >= 3;
+  if (selectedCardIds.length > 0 && !buildFinzProfile(selectedCardIds)) {
     return NextResponse.json({ status: "invalid", reason: "character" }, { status: 400 });
   }
 
   try {
     const existing = await resolveAccount();
     if (existing.status === "ok") {
-      // 프로필 편집.
+      // 프로필 편집(핸들·이름·소개·캐릭터).
+      const hadCharacter = existing.account.selectedCardIds.length >= 3;
       const res = await updateAccount(existing.account.accountId, { handle, displayName, selectedCardIds, bio });
-      if (res.status === "ok") return NextResponse.json({ status: "ok", account: res.account });
+      if (res.status === "ok") {
+        // 캐릭터를 "처음" 소환했을 때 피드 이벤트(재소환은 스팸 방지로 제외).
+        if (!hadCharacter && hasCharacter) {
+          void pushFeedEvent({ actorId: res.account.accountId, type: "character_summoned" }).catch(() => {});
+        }
+        return NextResponse.json({ status: "ok", account: res.account });
+      }
       return NextResponse.json({ status: res.status }, { status: res.status === "handle-taken" ? 409 : 400 });
     }
 
-    // 온보딩(계정 생성).
+    // 온보딩(계정 생성) — 핸들만으로 충분. 캐릭터는 프로필에서.
     const res = await createAccountForAuth({
       provider: auth.provider,
       providerId: auth.providerId,
@@ -80,9 +89,10 @@ export async function POST(req: Request) {
       bio,
     });
     if (res.status === "ok") {
-      // 피드: "핀즈 시작" + "캐릭터 소환" — 친구들이 활동을 본다(best-effort).
       void pushFeedEvent({ actorId: res.account.accountId, type: "account_created" }).catch(() => {});
-      void pushFeedEvent({ actorId: res.account.accountId, type: "character_summoned" }).catch(() => {});
+      if (hasCharacter) {
+        void pushFeedEvent({ actorId: res.account.accountId, type: "character_summoned" }).catch(() => {});
+      }
       return NextResponse.json({ status: "ok", account: res.account });
     }
     return NextResponse.json({ status: res.status }, { status: res.status === "handle-taken" ? 409 : 400 });

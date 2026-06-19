@@ -355,8 +355,10 @@ export function FinzPartyRoom({
     : new Map<string, LatestPosition>();
   const everyonePositioned = full && members.every((m) => positions.has(m.memberId));
   const myPos = positions.get(myMemberId);
-  const nudge = computeNextNudge(messages, members, myMemberId);
+  const isSelf = initialKind === "self";
   const isGroup = initialKind === "group";
+  // 나와의 채팅에선 "친구 초대/우정주" 코칭이 어색하니 nudge 생략(자유 대화·@AI 만).
+  const nudge = isSelf ? null : computeNextNudge(messages, members, myMemberId);
 
   return (
     <div
@@ -367,9 +369,9 @@ export function FinzPartyRoom({
         members={members}
         myMemberId={myMemberId}
         themeName={latestPick?.payload.name ?? null}
-        roomTitle={isGroup ? initialTitle : null}
+        roomTitle={isSelf ? "나와의 채팅" : isGroup ? initialTitle : null}
         full={full}
-        onInvite={() => setInviteOpen(true)}
+        onInvite={isSelf ? undefined : () => setInviteOpen(true)}
       />
       <FinzChatTimeline
         messages={messages}

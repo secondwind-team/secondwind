@@ -20,7 +20,7 @@ export function FinzChatHeader({
   themeName: string | null;
   roomTitle: string | null;
   full: boolean;
-  onInvite: () => void;
+  onInvite?: () => void; // 없으면 초대 버튼 숨김(나와의 채팅 등)
 }) {
   // 그룹은 방 이름, 1:1 은 멤버 이름 나열을 제목으로.
   const title = roomTitle || members.map((m) => m.displayName).join(" · ") || "대화방";
@@ -58,10 +58,12 @@ export function FinzChatHeader({
             <p className="truncate text-xs text-[var(--fz-muted)]">{stateLabel}</p>
           </div>
         </div>
-        <button type="button" onClick={onInvite} className="fz-btn fz-btn--ghost shrink-0 px-3 py-1.5 text-xs">
-          <UserPlus className="h-3.5 w-3.5" aria-hidden />
-          초대
-        </button>
+        {onInvite && (
+          <button type="button" onClick={onInvite} className="fz-btn fz-btn--ghost shrink-0 px-3 py-1.5 text-xs">
+            <UserPlus className="h-3.5 w-3.5" aria-hidden />
+            초대
+          </button>
+        )}
       </div>
     </div>
   );

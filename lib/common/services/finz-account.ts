@@ -110,7 +110,8 @@ export function isFinzFeedType(value: unknown): value is FinzFeedType {
 }
 
 // ── 대화방 요약(목록용) ──
-export type FinzRoomKind = "1on1" | "group";
+// self = "나와의 채팅"(혼자, 메모/테스트용 — @AI 도 혼자 테스트 가능).
+export type FinzRoomKind = "1on1" | "group" | "self";
 
 export type FinzRoomSummary = {
   roomId: string;
