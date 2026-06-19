@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { FinzRoomSummary } from "@/lib/common/services/finz-account";
 import { requireAccount } from "@/lib/server/finz-account";
 import {
   getAccount,
@@ -32,16 +33,19 @@ export async function GET() {
   if (!me) return NextResponse.json({ status: "needs-account" }, { status: 401 });
   try {
     const ids = await listRoomIdsForAccount(me.accountId);
-    const rooms = [];
-    for (const id of ids) {
-      const group = await getFinzGroup(id);
-      if (!group) {
-        void removeRoomFromAccountIndex(me.accountId, id).catch(() => {});
-        continue;
-      }
-      const last = await getRoomLastMessage(id);
-      rooms.push(buildRoomSummary(group, me.accountId, last));
-    }
+    // 방마다 group + 마지막 메시지를 병렬로 — 순차 await(N×2 왕복)는 방이 늘면 느려진다.
+    // ids 는 최근활동순이고 Promise.all 이 순서를 보존하므로 정렬도 유지된다.
+    const settled = await Promise.all(
+      ids.map(async (id) => {
+        const [group, last] = await Promise.all([getFinzGroup(id), getRoomLastMessage(id)]);
+        if (!group) {
+          void removeRoomFromAccountIndex(me.accountId, id).catch(() => {});
+          return null;
+        }
+        return buildRoomSummary(group, me.accountId, last);
+      }),
+    );
+    const rooms = settled.filter((r): r is FinzRoomSummary => r !== null);
     return NextResponse.json({ status: "ok", rooms });
   } catch (e) {
     console.error("[finz/rooms] GET 실패", e);

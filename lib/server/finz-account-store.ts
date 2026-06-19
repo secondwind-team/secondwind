@@ -41,46 +41,49 @@ async function ensureSchema() {
   if (!schemaReady) {
     const sql = getSql();
     schemaReady = (async () => {
-      await sql`
-        CREATE TABLE IF NOT EXISTS finz_accounts (
-          account_id TEXT PRIMARY KEY,
-          handle TEXT UNIQUE NOT NULL,
-          display_name TEXT NOT NULL,
-          selected_card_ids JSONB NOT NULL,
-          bio TEXT NOT NULL DEFAULT '',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS finz_auth_links (
-          provider TEXT NOT NULL,
-          provider_id TEXT NOT NULL,
-          account_id TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (provider, provider_id)
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS finz_friendships (
-          requester TEXT NOT NULL,
-          addressee TEXT NOT NULL,
-          status TEXT NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (requester, addressee)
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS finz_feed_events (
-          id TEXT PRIMARY KEY,
-          actor_id TEXT NOT NULL,
-          type TEXT NOT NULL,
-          title TEXT,
-          room_id TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
+      // 독립적인 4개 테이블은 병렬 생성(콜드스타트 DDL 왕복 단축). 인덱스만 feed 테이블 뒤에.
+      await Promise.all([
+        sql`
+          CREATE TABLE IF NOT EXISTS finz_accounts (
+            account_id TEXT PRIMARY KEY,
+            handle TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            selected_card_ids JSONB NOT NULL,
+            bio TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `,
+        sql`
+          CREATE TABLE IF NOT EXISTS finz_auth_links (
+            provider TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (provider, provider_id)
+          )
+        `,
+        sql`
+          CREATE TABLE IF NOT EXISTS finz_friendships (
+            requester TEXT NOT NULL,
+            addressee TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (requester, addressee)
+          )
+        `,
+        sql`
+          CREATE TABLE IF NOT EXISTS finz_feed_events (
+            id TEXT PRIMARY KEY,
+            actor_id TEXT NOT NULL,
+            type TEXT NOT NULL,
+            title TEXT,
+            room_id TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `,
+      ]);
       await sql`
         CREATE INDEX IF NOT EXISTS finz_feed_actor_idx
         ON finz_feed_events (actor_id, created_at DESC)
