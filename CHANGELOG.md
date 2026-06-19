@@ -2,6 +2,23 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.21.0] - 2026-06-19
+
+### Changed
+- **FINZ 를 계정·핸들 기반 메신저로 전면 개편 — 하단 4탭(친구·대화·피드·프로필).** 그동안의 단계별 화면(취향카드 시작 페이지·단독 파티 생성)을 보류하고, 모든 기능을 메신저 안 부가기능으로 흡수했다. `/finz` 진입 = 메신저.
+  - **계정·핸들(finz 소유, provider-agnostic)**: Google 로그인은 인증만 담당하고, 핸들(`@xxx`)·캐릭터·프로필은 finz 가 직접 관리한다. `authlink(provider, providerId) → accountId` 로 연결해 추후 다른 로그인(카카오·애플 등)도 같은 계정에 귀속 가능. 첫 로그인 → 핸들+캐릭터 온보딩 → 메신저. 신원 계층은 Neon(`finz_accounts`/`finz_auth_links`/`finz_friendships`/`finz_feed_events`, 런타임 지연 스키마)으로 영구 저장.
+  - **친구 탭**: `@핸들`로 친구 추가·요청·수락, 친구 옆 버튼으로 1:1 대화 바로 시작.
+  - **대화 탭**: 내 대화방 목록(최근 활동순), 1:1·그룹방 생성, 방 안에서 친구 초대 / 링크로 불특정 다수 합류. 기존 "파티" 개념을 대화방으로 흡수 — 우정주 뽑기·한 줄 입장·AI 요약은 방 안 `+` 부가기능.
+  - **피드 탭**: 친구 활동 SNS 타임라인(가입·캐릭터 소환·우정주 생성·방 개설). fan-in 조회.
+  - **프로필 탭**: 핸들·표시이름·소개·캐릭터(취향 재선택) 편집, 이력, 로그아웃.
+  - **대화방 AI 봇**: `@AI`(또는 `@finz`/`@핀즈`) 멘션 시 기존 그라운딩 답변 + **선제 개입** — 멤버 대화가 쌓이고 AI 가 한동안 말 안 했을 때 1회 끼어들어 건전한 투자 대화를 잇는다(90초 쿨다운으로 빈도 제한, 면책 서버 불변식·인젝션 가드 유지, 그라운딩 없음).
+
+### Reused / Internal
+- 검증된 append-only 채팅 LIST·적응 폴링·동시성 락·디자인 토큰(`--fz-*`)을 그대로 재사용. `group` 을 `room` 으로 일반화(`MAX_ROOM_MEMBERS=12`, `kind`/`title`, 계정별 방 인덱스 ZSET, TTL 7일→30일). 채팅 코어는 거의 무변경.
+- 민감 작업(계정·친구·피드·방 생성·초대)은 NextAuth 세션으로 서버 인증, 방 안 채팅은 기존 `memberId=accountId` 신뢰 모델 유지.
+- 신규 API: `/api/finz/account`(+`/handle`), `/api/finz/friends`, `/api/finz/feed`, `/api/finz/rooms`(+`/[groupId]/invite`·`/join`), `/api/finz/party/[groupId]/proactive`.
+- 검증: typecheck·lint·build 통과, 단위테스트 65 통과(그룹 N멤버·`@AI` 멘션·선제개입 판단 추가). OAuth 로그인 뒤 전체 UX 는 배포 env 에서 수동 QA.
+
 ## [0.1.20.0] - 2026-06-15
 
 ### Added

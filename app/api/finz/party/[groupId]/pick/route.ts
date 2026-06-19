@@ -12,6 +12,7 @@ import { callLlm } from "@/lib/common/llm";
 import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { acquirePickLock, appendPickMessage, getChatTail, releasePickLock } from "@/lib/server/finz-chat-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { pushFeedEvent } from "@/lib/server/finz-account-store";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
           await releasePickLock(groupId); // append 실패 → 락 풀어 재시도 가능하게
           return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
         }
+        // 피드: "우정주를 만들었어요" — 친구들이 활동을 본다(best-effort, 메신저 계정 멤버만 유효).
+        void pushFeedEvent({ actorId: memberId, type: "pick_created", title: pick.name, roomId: groupId }).catch(() => {});
         return NextResponse.json({ status: "ok", message: appended.message });
       }
       console.warn("[finz/party/pick] LLM 응답 파싱/스키마 실패 — fallback 사용");
@@ -106,6 +109,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     await releasePickLock(groupId);
     return NextResponse.json({ status: "error", reason: "append-failed" }, { status: 503 });
   }
+  void pushFeedEvent({ actorId: memberId, type: "pick_created", title: fallbackPick.name, roomId: groupId }).catch(() => {});
   return NextResponse.json({ status: "ok", fallback: true, message: appended.message });
 }
 

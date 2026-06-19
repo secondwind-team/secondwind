@@ -11,15 +11,17 @@ import {
 } from "@/lib/common/services/finz";
 import { FinzCharacterCard } from "./finz-character-card";
 
-// 취향 카드 → 캐릭터 소환 → 이름 → 제출. 파티 생성/합류 공용. onSubmit 으로 동작만 교체.
+// 취향 카드 → 캐릭터 소환 → 이름 → 제출. 파티 생성/합류/온보딩 공용. onSubmit 으로 동작만 교체.
 export function FinzCharacterBuilder({
   submitLabel,
   pending,
   onSubmit,
+  nameLabel = "파티에서 보일 이름 (선택)",
 }: {
   submitLabel: string;
   pending?: boolean;
   onSubmit: (selectedCardIds: string[], displayName: string) => void;
+  nameLabel?: string;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [name, setName] = useState("");
@@ -97,7 +99,7 @@ export function FinzCharacterBuilder({
           <FinzCharacterCard character={character} tags={tags} />
           <div className="flex flex-col gap-2 rounded-[20px] border border-[var(--fz-line)] bg-[var(--fz-surface-2)] p-4 sm:flex-row sm:items-end">
             <label className="flex-1 text-sm">
-              <span className="font-semibold text-[var(--fz-ink)]">파티에서 보일 이름 (선택)</span>
+              <span className="font-semibold text-[var(--fz-ink)]">{nameLabel}</span>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}

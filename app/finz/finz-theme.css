@@ -27,6 +27,7 @@
   --fz-r-full: 999px;
   --fz-shadow: 0 8px 24px -12px rgb(120 80 40 / 0.22);
   --fz-shadow-sm: 0 3px 10px -6px rgb(120 80 40 / 0.25);
+  --fz-tab-h: 58px;
 
   min-height: 100svh;
   display: flex;
@@ -243,6 +244,158 @@
 }
 .fz-typing > i:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+/* ── 메신저 셸 (하단 탭바 / 리스트 행 / 피드 / 프로필) ── */
+
+/* 하단 탭바 — 4탭. 모바일 safe-area 고려. */
+.fz-tabbar {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--fz-line);
+  background: var(--fz-surface);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.fz-tabbar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--fz-tab-h);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fz-muted);
+  transition: color 0.15s ease, transform 0.09s ease;
+}
+.fz-tabbar__item:active {
+  transform: scale(0.94);
+}
+.fz-tabbar__item--on {
+  color: var(--fz-coral-ink);
+}
+
+/* 리스트 행 — 친구/대화방 목록 공용. */
+.fz-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  background: transparent;
+  border-bottom: 1px solid var(--fz-line);
+  transition: background 0.15s ease;
+}
+.fz-list-row:hover {
+  background: var(--fz-surface-2);
+}
+.fz-list-row:active {
+  background: var(--fz-coral-tint);
+}
+.fz-list-row__body {
+  min-width: 0;
+  flex: 1;
+}
+.fz-list-row__title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--fz-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fz-list-row__sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--fz-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fz-list-row__meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--fz-muted);
+  text-align: right;
+}
+
+/* 카운트 배지(친구 요청 수 등). */
+.fz-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  background: var(--fz-coral);
+  border-radius: var(--fz-r-full);
+}
+
+/* 피드 카드 — SNS 타임라인 1줄. */
+.fz-feed-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--fz-line);
+}
+.fz-feed-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 프로필 헤더 — 따뜻한 그라데이션 배너. */
+.fz-profile-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 28px 20px 22px;
+  background: linear-gradient(160deg, var(--fz-coral-tint), var(--fz-surface-2));
+  border-bottom: 1px solid var(--fz-line);
+}
+
+/* 둥근 아이콘 버튼(헤더 액션·FAB). */
+.fz-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  border-radius: var(--fz-r-full);
+  background: var(--fz-surface);
+  border: 1px solid var(--fz-line);
+  color: var(--fz-ink);
+  box-shadow: var(--fz-shadow-sm);
+  transition: transform 0.09s ease, border-color 0.15s ease;
+}
+.fz-iconbtn:hover:not(:disabled) {
+  border-color: var(--fz-coral);
+  color: var(--fz-coral-ink);
+}
+.fz-iconbtn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+/* 빈 상태 안내. */
+.fz-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 24px;
+  color: var(--fz-muted);
+}
+.fz-empty__emoji {
+  font-size: 40px;
 }
 
 @keyframes fzPop {

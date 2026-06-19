@@ -1,29 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
+import type { FinzRoomKind } from "@/lib/common/services/finz-account";
 import {
   computeNextNudge,
   mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
+  stripFinzMention,
   type FinzChatMemberLite,
   type FinzChatMessage,
   type FinzNudge,
   type LatestPosition,
 } from "@/lib/common/services/finz-chat";
-import {
-  getOrCreateMemberId,
-  getRememberedMemberId,
-  rememberPartyMembership,
-} from "@/lib/common/finz-party-id";
+import { useFinzAccount } from "./finz-account-context";
 import { FinzChatComposer } from "./finz-chat-composer";
 import { FinzChatHeader } from "./finz-chat-header";
 import { FinzChatTimeline, type PendingText } from "./finz-chat-timeline";
-import { FinzJoinView } from "./finz-join-view";
 import { FinzRoomFullNotice } from "./finz-room-full-notice";
+import { FinzRoomJoinView } from "./finz-room-join-view";
+import { FinzInviteSheet } from "./finz-invite-sheet";
 
-const MAX_MEMBERS = 2;
+// 그룹방 정원(서버 MAX_ROOM_MEMBERS 와 동일). 이 이상이면 비멤버는 못 들어옴.
+const ROOM_CAPACITY = 12;
 
 // 멤버 집합이 실질적으로 같은지(id + 표시이름) — 폴링 리렌더 억제용.
 function sameMembers(a: FinzChatMemberLite[], b: FinzChatMemberLite[]): boolean {
@@ -37,22 +37,27 @@ export function FinzPartyRoom({
   initialMessages,
   initialCursor,
   initialFull,
+  initialKind,
+  initialTitle,
 }: {
   groupId: string;
   initialMembers: FinzChatMemberLite[];
   initialMessages: FinzChatMessage[];
   initialCursor: number;
   initialFull: boolean;
+  initialKind: FinzRoomKind;
+  initialTitle: string;
 }) {
+  // 메신저: 방 멤버 = 로그인 계정. memberId 는 곧 내 accountId(게이트 통과 → 항상 존재).
+  const account = useFinzAccount();
+  const myMemberId = account.accountId;
+
   const [members, setMembers] = useState<FinzChatMemberLite[]>(initialMembers);
-  const [full, setFull] = useState(initialFull);
+  const [full, setFull] = useState(initialFull); // 서버 의미: 2명 이상(파티 준비)
   const [messages, setMessages] = useState<FinzChatMessage[]>(initialMessages);
   const cursorRef = useRef(initialCursor);
 
-  const [idResolved, setIdResolved] = useState(false);
-  const [myMemberId, setMyMemberId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
-
   const [pending, setPending] = useState<PendingText[]>([]);
   const [pickBusy, setPickBusy] = useState(false);
   const [summaryBusy, setSummaryBusy] = useState(false);
@@ -64,25 +69,24 @@ export function FinzPartyRoom({
   const [stickSignal, setStickSignal] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [viewportH, setViewportH] = useState<number | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const bumpStick = useCallback(() => setStickSignal((s) => s + 1), []);
 
+  const isMember = members.some((m) => m.memberId === myMemberId);
+  const atCapacity = members.length >= ROOM_CAPACITY;
+
   useEffect(() => {
-    setMyMemberId(getRememberedMemberId(groupId));
-    setIdResolved(true);
     if (typeof window !== "undefined") setShareUrl(window.location.href);
   }, [groupId]);
 
-  const isMember = myMemberId != null && members.some((m) => m.memberId === myMemberId);
-
-  // 모바일 키보드 대응: visualViewport 높이에 채팅방을 맞춰 하단 입력바가 키보드 뒤로 숨지 않게.
-  // visualViewport 가 없으면(데스크톱) flex 로 채운다(viewportH=null).
+  // 모바일 키보드 대응: visualViewport 높이에 맞춰 입력바가 키보드 뒤로 숨지 않게.
   useEffect(() => {
     if (!isMember || typeof window === "undefined" || !window.visualViewport) return;
     const vv = window.visualViewport;
     function sync() {
       setViewportH(vv.height);
-      bumpStick(); // 키보드 열림/닫힘 때 최신 메시지·입력창을 위로
+      bumpStick();
     }
     sync();
     vv.addEventListener("resize", sync);
@@ -105,8 +109,6 @@ export function FinzPartyRoom({
         cursor?: number;
       };
       if (json.status !== "ok") return;
-      // 폴링마다 새 배열 참조로 setMembers 하면 매 틱 부모 리렌더 → nudge 재계산·스크롤 흔들림.
-      // 실제 변화가 있을 때만 갱신한다.
       if (json.members) {
         const next = json.members;
         setMembers((prev) => (sameMembers(prev, next) ? prev : next));
@@ -116,7 +118,6 @@ export function FinzPartyRoom({
       const incoming = json.messages ?? [];
       if (incoming.length) {
         setMessages((prev) => {
-          // id 로 dedup — 배치 내 중복(같은 clientId 재시도)·재수신 모두 합친다(중복 React key 방지).
           const byId = new Map(prev.map((m) => [m.id, m]));
           let changed = false;
           for (const m of incoming) {
@@ -133,11 +134,11 @@ export function FinzPartyRoom({
         cursorRef.current = json.cursor;
       }
     } catch {
-      // 일시적 네트워크 실패는 무시 — 다음 틱에서 재시도.
+      // 일시적 네트워크 실패 무시 — 다음 틱 재시도.
     }
   }, [groupId]);
 
-  // 가시성 적응 폴링(멤버일 때만). 보일 때 3s, 숨김 8s. 탭 복귀 시 즉시 1회.
+  // 가시성 적응 폴링(멤버일 때만). 보일 때 3s, 숨김 8s.
   useEffect(() => {
     if (!isMember) return;
     let timer: ReturnType<typeof setInterval>;
@@ -158,51 +159,46 @@ export function FinzPartyRoom({
     };
   }, [isMember, refetch]);
 
-  async function join(selectedCardIds: string[], displayName: string) {
+  // 세션 인증 원탭 합류 — 취향 재선택 없이 계정 캐릭터로 들어간다(불특정 다수도 링크로).
+  async function join() {
     setJoining(true);
     setJoinError(null);
     try {
-      const memberId = getOrCreateMemberId();
-      const res = await fetch(`/api/finz/party/${groupId}/join`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId, displayName, selectedCardIds }),
-      });
-      const json = (await res.json()) as { status: string; group?: { members?: FinzChatMemberLite[] } };
-      if (res.status === 409) throw new Error("이 파티는 이미 2명으로 가득 찼어요.");
-      if (!res.ok || json.status !== "ok") throw new Error("합류하지 못했어요. 잠시 뒤 다시 시도해주세요.");
-      rememberPartyMembership(groupId, memberId);
-      if (json.group?.members) setMembers(json.group.members);
-      setMyMemberId(memberId);
+      const res = await fetch(`/api/finz/rooms/${groupId}/join`, { method: "POST" });
+      const json = (await res.json()) as { status: string };
+      if (res.status === 409) throw new Error("이 대화방은 정원이 가득 찼어요.");
+      if (!res.ok || json.status !== "ok") throw new Error("들어가지 못했어요. 잠시 뒤 다시 시도해주세요.");
       await refetch();
     } catch (e) {
-      setJoinError(e instanceof Error ? e.message : "합류하지 못했어요.");
+      setJoinError(e instanceof Error ? e.message : "들어가지 못했어요.");
     } finally {
       setJoining(false);
     }
   }
 
   async function sendText(text: string, reuseId?: string) {
-    const memberId = getOrCreateMemberId();
-    const tempId = reuseId ?? crypto.randomUUID(); // 재시도는 같은 id 재사용 → 서버 dedup 이 합침
+    const tempId = reuseId ?? crypto.randomUUID();
     setPending((p) => [...p, { tempId, text, status: "sending" }]);
     bumpStick();
     try {
       const res = await fetch(`/api/finz/party/${groupId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId, text, id: tempId }),
+        body: JSON.stringify({ memberId: myMemberId, text, id: tempId }),
       });
       const json = (await res.json()) as { status: string };
       if (!res.ok || json.status !== "ok") throw new Error("send-failed");
       await refetch();
       setPending((p) => p.filter((x) => x.tempId !== tempId));
-      setTimeout(() => void refetch(), 1200); // 상대 응답을 빠르게 당겨오기
-      // @finz 멘션이면 멘션 토큰을 떼고 실제 질문으로 답을 받는다. 토큰만 있으면 안내.
+      setTimeout(() => void refetch(), 1200);
       if (mentionsFinz(text)) {
-        const q = text.replace(/@\s*(finz|핀즈)/gi, "").trim();
+        // @AI / @finz 멘션 → 그라운딩 답변.
+        const q = stripFinzMention(text);
         if (q) void ask(q);
-        else setActionError("@finz 뒤에 궁금한 걸 적어줘.");
+        else setActionError("@AI 뒤에 궁금한 걸 적어줘.");
+      } else {
+        // 멘션이 아니면 finz 가 선제 개입할 맥락인지 서버가 판단(조건·쿨다운 통과 시에만 발화).
+        void triggerProactive();
       }
     } catch {
       setPending((p) => p.map((x) => (x.tempId === tempId ? { ...x, status: "failed" } : x)));
@@ -214,21 +210,35 @@ export function FinzPartyRoom({
     setActionError(null);
     bumpStick();
     try {
-      const memberId = getOrCreateMemberId();
       const res = await fetch(`/api/finz/party/${groupId}/ask`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId, question }),
+        body: JSON.stringify({ memberId: myMemberId, question }),
       });
       const json = (await res.json().catch(() => ({}))) as { busy?: boolean };
-      if (!res.ok) setActionError("finz 가 답하지 못했어. 잠시 뒤 다시 @finz 로 물어봐줘.");
-      else if (json.busy) setActionError("finz 가 아직 답하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
+      if (!res.ok) setActionError("AI 가 답하지 못했어. 잠시 뒤 다시 @AI 로 물어봐줘.");
+      else if (json.busy) setActionError("AI 가 아직 답하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
       await refetch();
     } catch {
-      setActionError("연결이 잠깐 끊겼어. 다시 @finz 로 물어봐줘.");
+      setActionError("연결이 잠깐 끊겼어. 다시 @AI 로 물어봐줘.");
     } finally {
       setAskBusy(false);
       bumpStick();
+    }
+  }
+
+  // 선제 개입 트리거(백그라운드). 서버가 조건/쿨다운 미충족이면 조용히 no-op. 곧 폴링으로 뜬다.
+  async function triggerProactive() {
+    try {
+      await fetch(`/api/finz/party/${groupId}/proactive`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId }),
+      });
+      setTimeout(() => void refetch(), 1500);
+      setTimeout(() => void refetch(), 4000);
+    } catch {
+      // 무시 — 선제 개입은 best-effort.
     }
   }
 
@@ -242,13 +252,12 @@ export function FinzPartyRoom({
   async function openPick(force: boolean) {
     setPickBusy(true);
     setActionError(null);
-    bumpStick(); // 타이핑 버블을 바로 화면에
+    bumpStick();
     try {
-      const memberId = getOrCreateMemberId();
       const res = await fetch(`/api/finz/party/${groupId}/pick`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ force, memberId }),
+        body: JSON.stringify({ force, memberId: myMemberId }),
       });
       if (!res.ok) setActionError("우정주를 뽑지 못했어. 잠시 뒤 다시 시도해줘.");
       await refetch();
@@ -263,11 +272,10 @@ export function FinzPartyRoom({
   async function submitPosition(stance: FinzPartyStance, note: string) {
     setPositionSubmitting(true);
     try {
-      const memberId = getOrCreateMemberId();
       const res = await fetch(`/api/finz/party/${groupId}/position`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId, stance, note }),
+        body: JSON.stringify({ memberId: myMemberId, stance, note }),
       });
       if (res.ok) {
         await refetch();
@@ -286,11 +294,10 @@ export function FinzPartyRoom({
     setActionError(null);
     bumpStick();
     try {
-      const memberId = getOrCreateMemberId();
       const res = await fetch(`/api/finz/party/${groupId}/pick/summary`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId }),
+        body: JSON.stringify({ memberId: myMemberId }),
       });
       if (!res.ok) setActionError("요약을 만들지 못했어. 잠시 뒤 다시 시도해줘.");
       await refetch();
@@ -302,27 +309,37 @@ export function FinzPartyRoom({
     }
   }
 
-  function copyShareLink() {
-    if (!shareUrl || typeof navigator === "undefined" || !navigator.clipboard) return;
-    void navigator.clipboard.writeText(shareUrl).catch(() => {});
+  async function inviteFriends(accountIds: string[]) {
+    if (accountIds.length === 0) return;
+    try {
+      await fetch(`/api/finz/rooms/${groupId}/invite`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accountIds }),
+      });
+      await refetch();
+    } catch {
+      // 무시
+    } finally {
+      setInviteOpen(false);
+    }
   }
 
   function onNudgeCta(cta: FinzNudge["cta"]) {
-    if (cta === "invite") copyShareLink();
+    if (cta === "invite") setInviteOpen(true);
     else if (cta === "pick") void openPick(false);
     else if (cta === "position") setStanceMode(true);
     else if (cta === "summary") void openSummary();
   }
 
-  // ── 분기: id 해석 전엔 로딩, 비멤버는 조인/풀 안내, 멤버는 풀블리드 메신저 ──
-  if (!idResolved) {
-    return <div className="px-4 py-10 text-center text-sm text-[var(--fz-muted)]">채팅방을 여는 중…</div>;
-  }
-  if (!isMember && full) return <FinzRoomFullNotice />;
+  // ── 분기: 비멤버는 정원초과 안내 또는 합류 뷰, 멤버는 풀블리드 메신저 ──
+  if (!isMember && atCapacity) return <FinzRoomFullNotice />;
   if (!isMember) {
     return (
-      <FinzJoinView
-        inviterName={members[0]?.displayName ?? null}
+      <FinzRoomJoinView
+        kind={initialKind}
+        title={initialTitle}
+        members={members}
         joining={joining}
         error={joinError}
         onJoin={join}
@@ -336,9 +353,10 @@ export function FinzPartyRoom({
   const positions: Map<string, LatestPosition> = latestPick
     ? selectLatestPositionsByMember(messages, latestPick.seq)
     : new Map<string, LatestPosition>();
-  const bothPositioned = full && members.every((m) => positions.has(m.memberId));
-  const myPos = myMemberId ? positions.get(myMemberId) : undefined;
+  const everyonePositioned = full && members.every((m) => positions.has(m.memberId));
+  const myPos = positions.get(myMemberId);
   const nudge = computeNextNudge(messages, members, myMemberId);
+  const isGroup = initialKind === "group";
 
   return (
     <div
@@ -349,8 +367,9 @@ export function FinzPartyRoom({
         members={members}
         myMemberId={myMemberId}
         themeName={latestPick?.payload.name ?? null}
-        shareUrl={shareUrl}
+        roomTitle={isGroup ? initialTitle : null}
         full={full}
+        onInvite={() => setInviteOpen(true)}
       />
       <FinzChatTimeline
         messages={messages}
@@ -371,7 +390,7 @@ export function FinzPartyRoom({
       <FinzChatComposer
         full={full}
         hasPick={hasPick}
-        canSummarize={bothPositioned}
+        canSummarize={everyonePositioned}
         sending={false}
         pickBusy={pickBusy}
         summaryBusy={summaryBusy}
@@ -385,6 +404,14 @@ export function FinzPartyRoom({
         onPosition={submitPosition}
         onSummary={openSummary}
       />
+      {inviteOpen && (
+        <FinzInviteSheet
+          shareUrl={shareUrl}
+          existingMemberIds={members.map((m) => m.memberId)}
+          onInvite={inviteFriends}
+          onClose={() => setInviteOpen(false)}
+        />
+      )}
     </div>
   );
 }

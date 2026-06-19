@@ -5,6 +5,8 @@ import {
   mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
+  shouldFinzProactivelySpeak,
+  stripFinzMention,
   type FinzChatMemberLite,
   type FinzChatMessage,
 } from "./finz-chat";
@@ -103,10 +105,43 @@ describe("mentionsFinz", () => {
     expect(mentionsFinz("@핀즈 안녕")).toBe(true);
     expect(mentionsFinz("@finz야 이거 봐")).toBe(true);
   });
+  it("@AI / @ai / @에이아이 별칭도 감지(메신저 봇 호출)", () => {
+    expect(mentionsFinz("@AI 오늘 테슬라 주가 알려줘")).toBe(true);
+    expect(mentionsFinz("@ai 안녕")).toBe(true);
+    expect(mentionsFinz("@에이아이 뉴스")).toBe(true);
+    expect(mentionsFinz("@AI야 알려줘")).toBe(true); // 뒤에 한글 조사 OK
+  });
   it("멘션 없으면 false", () => {
     expect(mentionsFinz("그냥 대화")).toBe(false);
     expect(mentionsFinz("finz 좋다")).toBe(false); // @ 없음
     expect(mentionsFinz("email@finance.com")).toBe(false);
+    expect(mentionsFinz("@airline 예약했어")).toBe(false); // 'ai' 라틴 연속은 봇 호출 아님
+    expect(mentionsFinz("@aim 좋아")).toBe(false);
+  });
+});
+
+describe("stripFinzMention", () => {
+  it("멘션 토큰만 떼고 질문을 남긴다", () => {
+    expect(stripFinzMention("@AI 오늘 테슬라 주가 알려줘")).toBe("오늘 테슬라 주가 알려줘");
+    expect(stripFinzMention("@finz 뉴스 정리해줘")).toBe("뉴스 정리해줘");
+    expect(stripFinzMention("@핀즈")).toBe("");
+  });
+});
+
+describe("shouldFinzProactivelySpeak", () => {
+  it("멤버 텍스트가 threshold(3) 이상 쌓이고 마지막이 멤버 발화면 true", () => {
+    expect(shouldFinzProactivelySpeak([text(0, "a"), text(1, "b"), text(2, "a")])).toBe(true);
+  });
+  it("멤버 텍스트가 모자라면 false", () => {
+    expect(shouldFinzProactivelySpeak([text(0, "a"), text(1, "b")])).toBe(false);
+    expect(shouldFinzProactivelySpeak([])).toBe(false);
+  });
+  it("마지막이 finz(또는 비-텍스트)면 false — 멤버 발화 직후에만 끼어든다", () => {
+    expect(shouldFinzProactivelySpeak([text(0, "a"), text(1, "b"), text(2, "a"), pick(3)])).toBe(false);
+  });
+  it("카운트는 마지막 finz 발화 이후만 — 직전 발화 뒤 새로 쌓인 멤버 텍스트 기준", () => {
+    expect(shouldFinzProactivelySpeak([pick(0), text(1, "a"), text(2, "b"), text(3, "a")])).toBe(true);
+    expect(shouldFinzProactivelySpeak([pick(0), text(1, "a"), text(2, "b")])).toBe(false);
   });
 });
 

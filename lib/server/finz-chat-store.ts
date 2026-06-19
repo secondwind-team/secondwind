@@ -15,6 +15,7 @@ import {
   getFinzGroup,
   groupKey,
   parseJsonSafe,
+  touchRoomActivity,
 } from "./finz-group-store";
 import {
   isFinzStoredChatMessage,
@@ -85,6 +86,8 @@ async function appendChatMessage(
 
   await redis.rpush(chatKey(id), JSON.stringify(stored));
   await refreshTtls(id);
+  // 방을 멤버들의 "대화" 목록 상단으로(최근 활동순). best-effort — 실패해도 메시지는 저장됨.
+  await touchRoomActivity(group).catch(() => {});
   return { status: "ok", message: stored };
 }
 
@@ -269,6 +272,37 @@ export async function getChatTail(
   return { messages, cursor: total - 1, total };
 }
 
+// 대화방 목록 미리보기 — 마지막 메시지 1개만 읽어 텍스트/시각을 도출(cheap: lrange -1 -1).
+export async function getRoomLastMessage(id: string): Promise<{ text: string; createdAt: string } | null> {
+  const redis = getClient();
+  if (!redis) return null;
+  const raw = await redis.lrange(chatKey(id), -1, -1);
+  if (!raw || raw.length === 0) return null;
+  const obj = parseJsonSafe(raw[0]);
+  if (!obj || !isFinzStoredChatMessage(obj)) return null;
+  let text: string;
+  switch (obj.kind) {
+    case "text":
+      text = obj.role === "finz" ? `🤖 ${obj.text}` : obj.text;
+      break;
+    case "system":
+      text = obj.text;
+      break;
+    case "pick":
+      text = `🍷 우정주 · ${obj.payload.name}`;
+      break;
+    case "summary":
+      text = `📝 ${obj.payload.summary}`;
+      break;
+    case "position":
+      text = `💬 ${obj.payload.stance}${obj.payload.note ? " · " + obj.payload.note : ""}`;
+      break;
+    default:
+      return null;
+  }
+  return { text: text.slice(0, 80), createdAt: obj.createdAt };
+}
+
 // 픽/요약 LLM 동시·중복 호출 방지 — 진짜 원자적 락(SET NX). 실패하면 호출부가 기존 결과를 반환.
 // force(재추첨)는 del-then-set 이 아니라, 짧은 reroll-lock(NX)으로 동시 재추첨을 하나로 합류시킨다
 // (del-then-set 은 두 force 가 끼어들면 한쪽이 상대의 갓 잡은 락을 지워 둘 다 통과하는 레이스).
@@ -316,4 +350,21 @@ export async function acquireAskLock(id: string): Promise<boolean> {
 export async function releaseAskLock(id: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.del(askLockKey(id));
+}
+
+// 선제 개입 쿨다운 락 — finz 가 스스로 끼어드는 빈도를 제한(스팸 방지). 쿨다운이므로
+// 성공 시 풀지 않고 TTL 로 자연 만료시킨다. 생성 실패 시에만 풀어 다음 기회를 준다.
+const PROACTIVE_COOLDOWN_SECONDS = 90;
+function proactiveLockKey(id: string): string {
+  return `${chatKey(id)}:proactive-lock`;
+}
+export async function acquireProactiveLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(proactiveLockKey(id), "1", { nx: true, ex: PROACTIVE_COOLDOWN_SECONDS });
+  return res === "OK";
+}
+export async function releaseProactiveLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(proactiveLockKey(id));
 }
