@@ -213,7 +213,7 @@ export function parseGroup(raw: unknown): FinzGroup | null {
   if (members.length === 0 || members.length > MAX_ROOM_MEMBERS) return null;
 
   // kind/title 은 메신저 메타. 레거시 blob(없음)은 기본값으로 — 2인이면 1on1, 그 이상이면 group.
-  const kind: FinzRoomKind = parsed.kind === "group" || parsed.kind === "1on1"
+  const kind: FinzRoomKind = parsed.kind === "group" || parsed.kind === "1on1" || parsed.kind === "self"
     ? parsed.kind
     : members.length > 2
       ? "group"
@@ -344,4 +344,31 @@ export async function listRoomIdsForAccount(accountId: string): Promise<string[]
 export async function removeRoomFromAccountIndex(accountId: string, roomId: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.zrem(roomsIndexKey(accountId), roomId);
+}
+
+// "나와의 채팅" — 계정당 1개의 혼자 방(메모·AI 테스트용). 포인터로 dedup, 없으면 생성.
+// 캐릭터가 없으면 멤버를 못 만들어 null(호출부가 캐릭터 소환 유도).
+function selfRoomKey(accountId: string): string {
+  return `sw:finz:self:${accountId}`;
+}
+export async function getOrCreateSelfRoom(account: {
+  accountId: string;
+  handle: string;
+  displayName: string;
+  selectedCardIds: string[];
+}): Promise<{ id: string; group: FinzGroup } | null> {
+  const redis = getClient();
+  if (!redis) return null;
+  const existing = await redis.get(selfRoomKey(account.accountId));
+  if (typeof existing === "string" && isFinzGroupId(existing)) {
+    const group = await getFinzGroup(existing);
+    if (group) return { id: existing, group };
+    // 포인터는 있는데 방이 만료/소멸 → 새로 만든다.
+  }
+  const member = buildRoomMemberFromAccount(account);
+  if (!member) return null;
+  const created = await createFinzRoom({ members: [member], kind: "self", title: "나와의 채팅" });
+  if (!created) return null;
+  await redis.set(selfRoomKey(account.accountId), created.id);
+  return created;
 }

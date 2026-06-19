@@ -186,7 +186,8 @@ export async function createAccountForAuth(input: {
   const handle = normalizeHandle(input.handle);
   if (!isValidHandle(handle)) return { status: "invalid" };
   const displayName = input.displayName.trim().slice(0, 24) || handle;
-  if (input.selectedCardIds.length < 3) return { status: "invalid" };
+  // 캐릭터는 나중에 프로필에서 소환 — 계정은 캐릭터 없이(빈 배열) 만들 수 있다. 1~2개만 invalid.
+  if (input.selectedCardIds.length > 0 && input.selectedCardIds.length < 3) return { status: "invalid" };
 
   const taken = await getAccountByHandle(handle);
   if (taken) return { status: "handle-taken" };
@@ -241,7 +242,8 @@ export async function updateAccount(
     patch.displayName !== undefined ? patch.displayName.trim().slice(0, 24) || handle : current.displayName;
   const selectedCardIds =
     patch.selectedCardIds !== undefined ? patch.selectedCardIds : current.selectedCardIds;
-  if (selectedCardIds.length < 3) return { status: "invalid" };
+  // 빈 배열(캐릭터 미소환) 또는 3개 이상만 유효. 1~2개는 invalid.
+  if (selectedCardIds.length > 0 && selectedCardIds.length < 3) return { status: "invalid" };
   const bio = patch.bio !== undefined ? patch.bio.slice(0, 120) : current.bio;
 
   await getSql()`

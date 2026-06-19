@@ -42,6 +42,8 @@ export async function GET() {
           void removeRoomFromAccountIndex(me.accountId, id).catch(() => {});
           return null;
         }
+        // "나와의 채팅"(self)은 목록에서 제외 — 대화 탭 상단에 따로 고정 노출한다.
+        if (group.kind === "self") return null;
         return buildRoomSummary(group, me.accountId, last);
       }),
     );

@@ -91,6 +91,10 @@ export default function FinzFriendsPage() {
 
   async function startChat(friend: FinzAccountSummary) {
     if (startingChatWith) return;
+    if (me.selectedCardIds.length < 3) {
+      setNotice({ tone: "err", text: "대화하려면 프로필에서 캐릭터를 먼저 소환해줘." });
+      return;
+    }
     setStartingChatWith(friend.accountId);
     try {
       const res = await fetch("/api/finz/rooms", {

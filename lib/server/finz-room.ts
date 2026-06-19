@@ -11,8 +11,9 @@ export function memberToSummary(m: FinzGroupMember): FinzAccountSummary {
   };
 }
 
-// 목록에 보일 방 제목: 그룹은 title 또는 상대 이름 나열, 1on1 은 상대 displayName.
+// 목록에 보일 방 제목: self 는 "나와의 채팅", 그룹은 title/상대 이름 나열, 1on1 은 상대 displayName.
 export function roomTitle(group: FinzGroup, meAccountId: string): string {
+  if (group.kind === "self") return group.title || "나와의 채팅";
   const others = group.members.filter((m) => m.memberId !== meAccountId);
   if (group.kind === "group") {
     if (group.title) return group.title;

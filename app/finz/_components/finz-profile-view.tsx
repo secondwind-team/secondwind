@@ -79,7 +79,20 @@ export function FinzProfileView({ account }: { account: FinzAccount }) {
               {character ? (
                 <FinzCharacterCard character={character} tags={tags} />
               ) : (
-                <p className="fz-alert">취향 카드를 3개 이상 골라야 캐릭터가 소환돼. 프로필을 편집해줘.</p>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="fz-bubble fz-bubble--pick w-full p-5 text-left"
+                >
+                  <p className="fz-display text-lg text-[var(--fz-ink)]">아직 캐릭터가 없어요 ✨</p>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--fz-muted)]">
+                    취향 카드 3개로 투자 캐릭터를 소환해봐. 대화방에 들어가려면 캐릭터가 필요해.
+                  </p>
+                  <span className="fz-btn mt-3 inline-flex">
+                    <Sparkles className="h-4 w-4" aria-hidden />
+                    캐릭터 소환하기
+                  </span>
+                </button>
               )}
             </section>
 
@@ -176,11 +189,13 @@ function FinzProfileEditor({
     setError(null);
   }
 
-  const canSave = enoughCards && (!handleChanged || handleState === "available") && !saving;
+  // 카드는 비워두거나(캐릭터 없음) 3개 이상. 1~2개만 불가.
+  const cardsOk = selectedIds.length === 0 || enoughCards;
+  const canSave = cardsOk && (!handleChanged || handleState === "available") && !saving;
 
   async function save() {
-    if (!enoughCards) {
-      setError(`취향 카드를 ${FINZ_MIN_SELECTIONS}개 이상 골라줘.`);
+    if (!cardsOk) {
+      setError(`취향 카드는 비워두거나 ${FINZ_MIN_SELECTIONS}개 이상 골라줘.`);
       return;
     }
     if (handleChanged && handleState !== "available") {
