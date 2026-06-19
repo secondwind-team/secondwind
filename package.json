@@ -1,6 +1,6 @@
 {
   "name": "secondwind",
-  "version": "0.1.21.0",
+  "version": "0.1.21.1",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -96,6 +96,19 @@
   border-color: transparent;
 }
 
+/* 멘션 토큰(@finz 등) — 메신저식 강조 칩. 흰 말풍선에선 코랄, 내 코랄 말풍선에선 반투명 흰색. */
+.fz-mention {
+  font-weight: 700;
+  color: var(--fz-coral-ink);
+  background: var(--fz-coral-tint);
+  border-radius: 7px;
+  padding: 0 4px;
+}
+.fz-msg--me .fz-mention {
+  color: #fff;
+  background: rgb(255 255 255 / 0.28);
+}
+
 /* 칩 (stance/태그 선택) */
 .fz-chip {
   font-family: var(--fz-body);

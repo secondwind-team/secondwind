@@ -121,6 +121,22 @@ export function stripFinzMention(text: string): string {
   return text.replace(new RegExp(FINZ_MENTION.source, "gi"), "").trim();
 }
 
+// 텍스트를 멘션/일반 세그먼트로 분해 — 메시지뷰가 멘션 토큰만 하이라이트 렌더하는 데 쓴다.
+export function splitByMention(text: string): Array<{ text: string; isMention: boolean }> {
+  const re = new RegExp(FINZ_MENTION.source, "gi");
+  const out: Array<{ text: string; isMention: boolean }> = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), isMention: false });
+    out.push({ text: m[0], isMention: true });
+    last = m.index + m[0].length;
+    if (re.lastIndex === m.index) re.lastIndex += 1; // zero-length 매치 안전장치(무한루프 방지)
+  }
+  if (last < text.length) out.push({ text: text.slice(last), isMention: false });
+  return out;
+}
+
 // ── 순수 셀렉터(I/O 없음, 단위 테스트 대상). messages 는 seq 오름차순 가정. ──
 
 export function selectLatestPick(messages: FinzChatMessage[]): FinzChatPickMessage | null {

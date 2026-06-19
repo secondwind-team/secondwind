@@ -193,10 +193,10 @@ export function FinzPartyRoom({
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200);
       if (mentionsFinz(text)) {
-        // @AI / @finz 멘션 → 그라운딩 답변.
+        // @finz / @핀즈 / @AI 멘션 → 그라운딩 답변.
         const q = stripFinzMention(text);
         if (q) void ask(q);
-        else setActionError("@AI 뒤에 궁금한 걸 적어줘.");
+        else setActionError("@finz 뒤에 궁금한 걸 적어줘.");
       } else {
         // 멘션이 아니면 finz 가 선제 개입할 맥락인지 서버가 판단(조건·쿨다운 통과 시에만 발화).
         void triggerProactive();
@@ -217,11 +217,11 @@ export function FinzPartyRoom({
         body: JSON.stringify({ memberId: myMemberId, question }),
       });
       const json = (await res.json().catch(() => ({}))) as { busy?: boolean };
-      if (!res.ok) setActionError("AI 가 답하지 못했어. 잠시 뒤 다시 @AI 로 물어봐줘.");
-      else if (json.busy) setActionError("AI 가 아직 답하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
+      if (!res.ok) setActionError("finz 가 답하지 못했어. 잠시 뒤 다시 @finz 로 물어봐줘.");
+      else if (json.busy) setActionError("finz 가 아직 답하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
       await refetch();
     } catch {
-      setActionError("연결이 잠깐 끊겼어. 다시 @AI 로 물어봐줘.");
+      setActionError("연결이 잠깐 끊겼어. 다시 @finz 로 물어봐줘.");
     } finally {
       setAskBusy(false);
       bumpStick();
@@ -358,7 +358,7 @@ export function FinzPartyRoom({
   const myPos = positions.get(myMemberId);
   const isSelf = initialKind === "self";
   const isGroup = initialKind === "group";
-  // 나와의 채팅에선 "친구 초대/우정주" 코칭이 어색하니 nudge 생략(자유 대화·@AI 만).
+  // 나와의 채팅에선 "친구 초대/우정주" 코칭이 어색하니 nudge 생략(자유 대화·@finz 만).
   const nudge = isSelf ? null : computeNextNudge(messages, members, myMemberId);
 
   return (

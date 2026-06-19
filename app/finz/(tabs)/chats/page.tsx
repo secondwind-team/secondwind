@@ -76,7 +76,7 @@ export default function FinzChatsPage() {
         </span>
         <div className="fz-list-row__body">
           <div className="fz-list-row__title">나와의 채팅</div>
-          <div className="fz-list-row__sub">{openingSelf ? "여는 중…" : "혼자 메모하고 @AI 에게 물어봐"}</div>
+          <div className="fz-list-row__sub">{openingSelf ? "여는 중…" : "혼자 메모하고 @finz 에게 물어봐"}</div>
         </div>
       </button>
 
