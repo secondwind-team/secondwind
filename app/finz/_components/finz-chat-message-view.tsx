@@ -1,10 +1,27 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import type { FinzChatMessage } from "@/lib/common/services/finz-chat";
+import { splitByMention, type FinzChatMessage } from "@/lib/common/services/finz-chat";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
 import { STANCE_EMOJI } from "./finz-position-input";
+
+// 메시지 본문 — @finz 같은 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
+function MessageBody({ text }: { text: string }) {
+  return (
+    <>
+      {splitByMention(text).map((seg, i) =>
+        seg.isMention ? (
+          <span key={i} className="fz-mention">
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 // finz 봇 아바타(코랄 점) — 왼쪽 픽/요약/시스템성 봇 말풍선 앞에.
 function FinzAvatar() {
@@ -79,7 +96,7 @@ export function FinzChatMessageView({
         <div className="min-w-0 flex-1 space-y-1">
           <p className="px-1 text-xs font-semibold text-[var(--fz-coral-ink)]">FINZ</p>
           <div className="fz-bubble max-w-full whitespace-pre-wrap break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
-            {message.text}
+            <MessageBody text={message.text} />
           </div>
         </div>
       </div>
@@ -113,7 +130,9 @@ export function FinzChatMessageView({
   return (
     <div className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
       {!mine && <span className="px-1 text-xs text-[var(--fz-muted)]">{message.authorName}</span>}
-      <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>{message.text}</div>
+      <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>
+        <MessageBody text={message.text} />
+      </div>
     </div>
   );
 }

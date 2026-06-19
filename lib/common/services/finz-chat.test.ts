@@ -6,6 +6,7 @@ import {
   selectLatestPick,
   selectLatestPositionsByMember,
   shouldFinzProactivelySpeak,
+  splitByMention,
   stripFinzMention,
   type FinzChatMemberLite,
   type FinzChatMessage,
@@ -125,6 +126,24 @@ describe("stripFinzMention", () => {
     expect(stripFinzMention("@AI 오늘 테슬라 주가 알려줘")).toBe("오늘 테슬라 주가 알려줘");
     expect(stripFinzMention("@finz 뉴스 정리해줘")).toBe("뉴스 정리해줘");
     expect(stripFinzMention("@핀즈")).toBe("");
+  });
+});
+
+describe("splitByMention", () => {
+  it("멘션 토큰만 isMention=true 세그먼트로 분해", () => {
+    expect(splitByMention("@finz 안녕")).toEqual([
+      { text: "@finz", isMention: true },
+      { text: " 안녕", isMention: false },
+    ]);
+    expect(splitByMention("야 @AI 봐줘")).toEqual([
+      { text: "야 ", isMention: false },
+      { text: "@AI", isMention: true },
+      { text: " 봐줘", isMention: false },
+    ]);
+  });
+  it("멘션 없으면 통째로 일반 세그먼트", () => {
+    expect(splitByMention("그냥 텍스트")).toEqual([{ text: "그냥 텍스트", isMention: false }]);
+    expect(splitByMention("@airline 예약")).toEqual([{ text: "@airline 예약", isMention: false }]);
   });
 });
 
