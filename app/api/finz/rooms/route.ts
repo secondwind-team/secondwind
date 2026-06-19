@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import type { FinzRoomSummary } from "@/lib/common/services/finz-account";
 import { requireAccount } from "@/lib/server/finz-account";
 import {
   getAccount,
@@ -13,12 +12,11 @@ import {
   getFinzGroup,
   isFinzPartyConfigured,
   listRoomIdsForAccount,
-  removeRoomFromAccountIndex,
   type FinzGroup,
   type FinzGroupMember,
 } from "@/lib/server/finz-group-store";
 import { appendSystemMessage, getRoomLastMessage } from "@/lib/server/finz-chat-store";
-import { buildRoomSummary } from "@/lib/server/finz-room";
+import { buildRoomSummary, listRoomsForAccount } from "@/lib/server/finz-room";
 
 export const runtime = "nodejs";
 
@@ -32,22 +30,7 @@ export async function GET() {
   const me = await requireAccount();
   if (!me) return NextResponse.json({ status: "needs-account" }, { status: 401 });
   try {
-    const ids = await listRoomIdsForAccount(me.accountId);
-    // 방마다 group + 마지막 메시지를 병렬로 — 순차 await(N×2 왕복)는 방이 늘면 느려진다.
-    // ids 는 최근활동순이고 Promise.all 이 순서를 보존하므로 정렬도 유지된다.
-    const settled = await Promise.all(
-      ids.map(async (id) => {
-        const [group, last] = await Promise.all([getFinzGroup(id), getRoomLastMessage(id)]);
-        if (!group) {
-          void removeRoomFromAccountIndex(me.accountId, id).catch(() => {});
-          return null;
-        }
-        // "나와의 채팅"(self)은 목록에서 제외 — 대화 탭 상단에 따로 고정 노출한다.
-        if (group.kind === "self") return null;
-        return buildRoomSummary(group, me.accountId, last);
-      }),
-    );
-    const rooms = settled.filter((r): r is FinzRoomSummary => r !== null);
+    const rooms = await listRoomsForAccount(me.accountId);
     return NextResponse.json({ status: "ok", rooms });
   } catch (e) {
     console.error("[finz/rooms] GET 실패", e);

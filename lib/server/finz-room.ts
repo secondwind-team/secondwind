@@ -1,6 +1,13 @@
-// 서버 전용: 대화방(group) → 메신저 목록용 요약(FinzRoomSummary) 변환. 라우트 공용.
+// 서버 전용: 대화방(group) → 메신저 목록용 요약(FinzRoomSummary) 변환. 라우트·SSR 공용.
 import type { FinzAccountSummary, FinzRoomSummary } from "@/lib/common/services/finz-account";
-import type { FinzGroup, FinzGroupMember } from "./finz-group-store";
+import {
+  getFinzGroup,
+  listRoomIdsForAccount,
+  removeRoomFromAccountIndex,
+  type FinzGroup,
+  type FinzGroupMember,
+} from "./finz-group-store";
+import { getRoomLastMessage } from "./finz-chat-store";
 
 export function memberToSummary(m: FinzGroupMember): FinzAccountSummary {
   return {
@@ -37,4 +44,22 @@ export function buildRoomSummary(
     lastActiveAt: last?.createdAt ?? group.createdAt,
     preview: last?.text,
   };
+}
+
+// 내 대화방 목록(최근 활동순, self 제외). API GET 과 SSR 페이지가 공용으로 쓴다.
+// 방마다 group + 마지막 메시지를 병렬 조회. 소멸한 방은 인덱스에서 self-heal.
+export async function listRoomsForAccount(meAccountId: string): Promise<FinzRoomSummary[]> {
+  const ids = await listRoomIdsForAccount(meAccountId);
+  const settled = await Promise.all(
+    ids.map(async (id) => {
+      const [group, last] = await Promise.all([getFinzGroup(id), getRoomLastMessage(id)]);
+      if (!group) {
+        void removeRoomFromAccountIndex(meAccountId, id).catch(() => {});
+        return null;
+      }
+      if (group.kind === "self") return null; // 나와의 채팅은 목록에서 제외(상단 고정)
+      return buildRoomSummary(group, meAccountId, last);
+    }),
+  );
+  return settled.filter((r): r is FinzRoomSummary => r !== null);
 }

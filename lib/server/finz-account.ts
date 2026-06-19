@@ -4,6 +4,7 @@
 // Google 은 "인증 제공자"일 뿐 — provider="google", providerId=google sub 으로 authlink 를 찾는다.
 // 나중에 다른 provider 를 붙여도 이 함수 시그니처는 그대로(authlink 한 줄 추가).
 
+import { cache } from "react";
 import type { FinzAccount } from "@/lib/common/services/finz-account";
 import { getCurrentUser } from "@/lib/server/auth";
 import { getAccountForAuth } from "@/lib/server/finz-account-store";
@@ -22,13 +23,15 @@ export type AccountResolution =
   | { status: "needs-onboarding"; auth: ResolvedAuth }
   | { status: "ok"; auth: ResolvedAuth; account: FinzAccount };
 
-export async function resolveAccount(): Promise<AccountResolution> {
+// React cache 로 요청 단위 메모이즈 — 같은 요청에서 layout(SSR seed)과 page(requireAccount)가
+// 각각 호출해도 세션 디코드 + Neon 조회가 1회만 돈다(이중 쿼리 제거).
+export const resolveAccount = cache(async (): Promise<AccountResolution> => {
   const auth = await resolveAuth();
   if (!auth) return { status: "anon" };
   const account = await getAccountForAuth(auth.provider, auth.providerId);
   if (!account) return { status: "needs-onboarding", auth };
   return { status: "ok", auth, account };
-}
+});
 
 // 보호 라우트용 — 계정이 있으면 반환, 아니면 null(라우트가 401/409 로 변환).
 export async function requireAccount(): Promise<FinzAccount | null> {
