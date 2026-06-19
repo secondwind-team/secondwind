@@ -165,8 +165,9 @@ export function FinzPartyRoom({
     setJoinError(null);
     try {
       const res = await fetch(`/api/finz/rooms/${groupId}/join`, { method: "POST" });
-      const json = (await res.json()) as { status: string };
+      const json = (await res.json()) as { status: string; reason?: string };
       if (res.status === 409) throw new Error("이 대화방은 정원이 가득 찼어요.");
+      if (json.reason === "my-character") throw new Error("프로필에서 캐릭터를 먼저 소환해야 들어갈 수 있어.");
       if (!res.ok || json.status !== "ok") throw new Error("들어가지 못했어요. 잠시 뒤 다시 시도해주세요.");
       await refetch();
     } catch (e) {
