@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_MEMBERS,
+  MAX_ROOM_MEMBERS,
   applyJoinToGroup,
   buildFinzGroupMember,
   isFinzGroupId,
@@ -24,6 +25,8 @@ function group(members: FinzGroupMember[]): FinzGroup {
     members,
     createdAt: "2026-06-14T00:00:00.000Z",
     expiresAt: "2026-06-21T00:00:00.000Z",
+    kind: members.length > 2 ? "group" : "1on1",
+    title: "",
   };
 }
 
@@ -89,10 +92,13 @@ describe("parseGroup", () => {
     expect(parseGroup(JSON.stringify(g))?.id).toBe("abc123");
     expect(parseGroup(g)?.members).toHaveLength(1);
   });
-  it("잘못된 id / 멤버 0개 / 정원 초과 / 깨진 타임스탬프 거절", () => {
+  it("잘못된 id / 멤버 0개 / 방 정원 초과 / 깨진 타임스탬프 거절", () => {
     expect(parseGroup({ ...group([member("a")]), id: "bad" })).toBeNull();
     expect(parseGroup({ ...group([]) })).toBeNull();
-    expect(parseGroup({ ...group([member("a"), member("b"), member("c")]) })).toBeNull();
+    // 그룹방 정원(12) 초과 = 13명이면 거절. 3명은 이제 유효(그룹방).
+    const tooMany = Array.from({ length: MAX_ROOM_MEMBERS + 1 }, (_, i) => member(`m${i}`));
+    expect(parseGroup({ ...group(tooMany) })).toBeNull();
+    expect(parseGroup({ ...group([member("a"), member("b"), member("c")]) })?.members).toHaveLength(3);
     expect(parseGroup({ ...group([member("a")]), createdAt: "nope" })).toBeNull();
   });
   it("null / 비객체 거절", () => {

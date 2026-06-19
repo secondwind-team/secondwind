@@ -106,9 +106,19 @@ export function isFinzNudgeCta(value: unknown): value is FinzNudgeCta {
   return value === "invite" || value === "pick" || value === "position" || value === "summary";
 }
 
-// 메시지가 finz 를 호출하는지(@finz / @핀즈). 호출 시 그라운딩 LLM 이 질문에 답한다.
+// AI 봇 멘션 정규식 — @finz / @핀즈 / @AI / @에이아이.
+// 짧은 'ai' 만 라틴 글자 연속(@airline 류)을 lookahead 로 배제. finz/핀즈/에이아이 는 충분히 distinctive 해
+// 뒤에 한글 조사가 붙어도(@finz야) 그대로 인식한다.
+const FINZ_MENTION = /@\s*(?:finz|핀즈|에이아이|ai(?![a-z]))/i;
+
+// 메시지가 AI 봇을 호출하는지. 호출 시 그라운딩 LLM 이 질문에 답한다.
 export function mentionsFinz(text: string): boolean {
-  return /@\s*(finz|핀즈)/i.test(text);
+  return FINZ_MENTION.test(text);
+}
+
+// 멘션 토큰을 떼고 실제 질문만 남긴다(클라이언트가 ask 로 보낼 질문 추출).
+export function stripFinzMention(text: string): string {
+  return text.replace(new RegExp(FINZ_MENTION.source, "gi"), "").trim();
 }
 
 // ── 순수 셀렉터(I/O 없음, 단위 테스트 대상). messages 는 seq 오름차순 가정. ──
@@ -145,6 +155,25 @@ function maxSummarySeq(messages: FinzChatMessage[], sincePickSeq: number): numbe
     if (m.kind === "summary" && m.seq > sincePickSeq && m.seq > max) max = m.seq;
   }
   return max;
+}
+
+// 마지막 finz 발화 이후 쌓인 멤버 텍스트 수.
+export function countMemberMessagesSinceFinz(messages: FinzChatMessage[]): number {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (!m || m.role === "finz") break;
+    if (m.role === "member" && m.kind === "text") count += 1;
+  }
+  return count;
+}
+
+// finz 가 스스로 끼어들어야 하나? — 멤버 발화 "직후"에, finz 가 한동안 말 안 했고(threshold 이상),
+// 멤버 대화가 충분히 쌓였을 때만. (멘션 답변과 별개의 선제 개입. 빈도는 서버 쿨다운 락이 추가로 제한.)
+export function shouldFinzProactivelySpeak(messages: FinzChatMessage[], threshold = 3): boolean {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "member" || last.kind !== "text") return false;
+  return countMemberMessagesSinceFinz(messages) >= threshold;
 }
 
 // "이제 뭐 할까" 코칭 — 현재 상태에서 단 하나(또는 없음)를 계산. 비저장. 상태가 진행되면 자연히 사라짐.

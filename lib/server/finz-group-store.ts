@@ -12,9 +12,14 @@
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
 import { buildFinzProfile } from "@/lib/common/services/finz";
+import type { FinzRoomKind } from "@/lib/common/services/finz-account";
 
-export const FINZ_GROUP_TTL_SECONDS = 7 * 24 * 60 * 60;
+// 메신저 시대: 대화방을 일주일 만에 잃지 않도록 TTL 을 30일로(기존 7일에서 상향).
+export const FINZ_GROUP_TTL_SECONDS = 30 * 24 * 60 * 60;
+// 1:1 방 정원(레거시 파티와 동일). applyJoinToGroup 의 기본 cap.
 export const MAX_MEMBERS = 2;
+// 그룹 대화방 정원(불특정 다수 포함). parseGroup 의 상한.
+export const MAX_ROOM_MEMBERS = 12;
 const ID_LENGTH = 6;
 const MAX_ID_ATTEMPTS = 12;
 const ID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -23,18 +28,22 @@ const MAX_NAME_LENGTH = 24;
 export const MAX_NOTE_LENGTH = 80;
 
 export type FinzGroupMember = {
-  memberId: string;
+  memberId: string; // 메신저: accountId. 레거시 익명 파티: 클라이언트 UUID.
   displayName: string;
   selectedCardIds: string[];
   joinedAt: string;
+  handle?: string; // 메신저 계정 멤버의 핸들(목록/프로필 표시용). 레거시 익명 멤버엔 없음.
 };
 
 // 신원 전용. 픽/포지션/요약은 채팅 LIST 로 이동했다(더 이상 여기 없음).
+// kind/title 은 메신저 대화방 메타(레거시 blob 엔 없을 수 있어 선택 — parseGroup 이 기본값을 채운다).
 export type FinzGroup = {
   id: string;
   members: FinzGroupMember[];
   createdAt: string;
   expiresAt: string;
+  kind: FinzRoomKind; // "1on1" | "group"
+  title: string; // 그룹방 이름(1on1 은 빈 문자열 — 표시명은 상대 이름으로 도출)
 };
 
 export type JoinResult =
@@ -89,6 +98,22 @@ export function buildFinzGroupMember(input: {
   };
 }
 
+// 메신저 계정 → 방 멤버. 캐릭터는 계정의 selectedCardIds 로 재구성(취향 재선택 없음). 핸들도 싣는다.
+export function buildRoomMemberFromAccount(account: {
+  accountId: string;
+  handle: string;
+  displayName: string;
+  selectedCardIds: string[];
+}): FinzGroupMember | null {
+  const m = buildFinzGroupMember({
+    memberId: account.accountId,
+    displayName: account.displayName,
+    selectedCardIds: account.selectedCardIds,
+  });
+  if (!m) return null;
+  return { ...m, handle: account.handle };
+}
+
 // 순수 함수 — join 상태머신. redis I/O 없이 단위 테스트 가능.
 // 동시 join 레이스는 2인 직렬 트래픽 기준 last-write-wins 로 의식적 수용(문서화).
 export function applyJoinToGroup(
@@ -121,6 +146,8 @@ export async function createFinzGroup(member: FinzGroupMember): Promise<{ id: st
       members: [member],
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + FINZ_GROUP_TTL_SECONDS * 1000).toISOString(),
+      kind: "1on1",
+      title: "",
     };
     await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
     return { id, group };
@@ -183,11 +210,19 @@ export function parseGroup(raw: unknown): FinzGroup | null {
 
   if (!Array.isArray(parsed.members)) return null;
   const members = parsed.members.filter(isFinzGroupMember);
-  if (members.length === 0 || members.length > MAX_MEMBERS) return null;
+  if (members.length === 0 || members.length > MAX_ROOM_MEMBERS) return null;
+
+  // kind/title 은 메신저 메타. 레거시 blob(없음)은 기본값으로 — 2인이면 1on1, 그 이상이면 group.
+  const kind: FinzRoomKind = parsed.kind === "group" || parsed.kind === "1on1"
+    ? parsed.kind
+    : members.length > 2
+      ? "group"
+      : "1on1";
+  const title = typeof parsed.title === "string" ? parsed.title.slice(0, 40) : "";
 
   // 레거시 blob 의 pick/positions/summary 필드는 무시한다(대화는 채팅 LIST 로 이동).
   // 이런 옛 필드가 있어도 거절하지 않고 신원만 뽑아 유효한 그룹으로 돌려준다.
-  return { id, members, createdAt, expiresAt };
+  return { id, members, createdAt, expiresAt, kind, title };
 }
 
 function generateGroupId(): string {
@@ -211,4 +246,102 @@ export function parseJsonSafe(raw: unknown): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+// ── 메신저 대화방 (group 일반화) ──
+//
+// 방 멤버십 = 계정(memberId = accountId). 생성/초대 시 서버가 계정 요약으로 멤버를 만든다
+// (취향 재선택 없음 — 캐릭터는 프로필 소유). "내 대화방 목록"은 계정별 ZSET 인덱스로 조회한다.
+
+function roomsIndexKey(accountId: string): string {
+  return `sw:finz:rooms:${accountId}`;
+}
+
+// 여러 멤버로 새 방을 만든다. kind/title 지정. 모든 멤버의 방 인덱스에 등록한다.
+export async function createFinzRoom(input: {
+  members: FinzGroupMember[];
+  kind: FinzRoomKind;
+  title: string;
+}): Promise<{ id: string; group: FinzGroup } | null> {
+  const redis = getClient();
+  if (!redis) return null;
+  if (input.members.length === 0) return null;
+
+  const now = Date.now();
+  for (let attempt = 0; attempt < MAX_ID_ATTEMPTS; attempt += 1) {
+    const id = generateGroupId();
+    const key = groupKey(id);
+    if (await redis.exists(key)) continue;
+
+    const group: FinzGroup = {
+      id,
+      members: input.members,
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + FINZ_GROUP_TTL_SECONDS * 1000).toISOString(),
+      kind: input.kind,
+      title: input.title.slice(0, 40),
+    };
+    await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
+    await indexRoomForMembers(group, now);
+    return { id, group };
+  }
+  throw new Error("finz-room-id-collision");
+}
+
+// 기존 방에 계정 멤버를 추가(초대/오픈조인). 그룹 정원은 MAX_ROOM_MEMBERS 까지.
+export async function addMemberToRoom(
+  id: string,
+  member: FinzGroupMember,
+): Promise<{ status: "ok" | "already-member" | "full" | "not-found"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+
+  const result = applyJoinToGroup(current, member, MAX_ROOM_MEMBERS);
+  if (result.status === "ok") {
+    // 3인 이상이 되면 1on1 → group 으로 승격(초대로 단톡이 됨).
+    const persisted: FinzGroup =
+      result.group.members.length > 2 && result.group.kind === "1on1"
+        ? { ...result.group, kind: "group" }
+        : result.group;
+    await redis.set(groupKey(id), JSON.stringify(persisted), { ex: FINZ_GROUP_TTL_SECONDS });
+    await indexRoomForMembers(persisted, Date.now());
+    return { status: "ok", group: persisted };
+  } else if (result.status === "already-member") {
+    // 이미 멤버여도 내 인덱스엔 보이도록 보강(드리프트 자기치유).
+    await indexRoomForMembers(result.group, Date.now());
+  }
+  return { status: result.status, group: result.group };
+}
+
+// 그룹의 모든 멤버 인덱스에 roomId 를 score=ts 로 등록/갱신.
+async function indexRoomForMembers(group: FinzGroup, scoreMs: number): Promise<void> {
+  const redis = getClient();
+  if (!redis) return;
+  const pipe = redis.pipeline();
+  for (const m of group.members) {
+    pipe.zadd(roomsIndexKey(m.memberId), { score: scoreMs, member: group.id });
+  }
+  await pipe.exec();
+}
+
+// 메시지 append 시 호출 — 방을 멤버들의 목록 상단으로 끌어올린다(최근 활동순 정렬).
+export async function touchRoomActivity(group: FinzGroup): Promise<void> {
+  await indexRoomForMembers(group, Date.now());
+}
+
+// 내 대화방 id 목록(최근 활동순). 만료/소멸한 방은 self-heal 로 인덱스에서 제거.
+export async function listRoomIdsForAccount(accountId: string): Promise<string[]> {
+  const redis = getClient();
+  if (!redis) return [];
+  const ids = (await redis.zrange(roomsIndexKey(accountId), 0, -1, { rev: true })) as string[];
+  return ids.filter((id) => typeof id === "string" && isFinzGroupId(id));
+}
+
+export async function removeRoomFromAccountIndex(accountId: string, roomId: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.zrem(roomsIndexKey(accountId), roomId);
 }
