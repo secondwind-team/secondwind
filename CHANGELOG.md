@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.21.2] - 2026-06-20
+
+### Changed
+- **대화 진입 속도 개선 — 초기 데이터 SSR 로 왕복 절감.** 함수가 us-east(iad1)에서 돌고 사용자는 서울(icn1)이라 동적 호출마다 태평양 왕복(~250ms+)이 비싼 게 주 병목(측정). 이를 줄이려고: ① finz 계정 상태를 레이아웃에서 SSR 로 해석해 클라이언트 컨텍스트에 시드 → 첫 `/api/finz/account` 왕복 제거(모든 finz 화면). ② 대화 탭 방 목록을 서버(SSR)에서 받아 시드 → `/api/finz/rooms` 왕복 제거. ③ `resolveAccount` 를 React `cache()` 로 요청 단위 메모이즈 → layout+page 이중 세션/Neon 조회 제거. (계정 SSR 로 finz 셸은 동적 렌더가 됨 — 의도된 트레이드오프.) 적대적 리뷰(15 에이전트)로 RSC/하이드레이션·인증 엣지 검증.
+
 ## [0.1.21.1] - 2026-06-20
 
 ### Changed

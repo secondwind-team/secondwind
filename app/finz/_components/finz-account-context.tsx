@@ -19,8 +19,14 @@ type Ctx = {
 
 const FinzAccountContext = createContext<Ctx | null>(null);
 
-export function FinzAccountProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<FinzAccountState>({ kind: "loading" });
+export function FinzAccountProvider({
+  children,
+  initialState,
+}: {
+  children: React.ReactNode;
+  initialState?: FinzAccountState; // 서버에서 SSR 로 미리 해석한 계정 상태(있으면 첫 클라이언트 fetch 생략 → 왕복 1회 절감)
+}) {
+  const [state, setState] = useState<FinzAccountState>(initialState ?? { kind: "loading" });
 
   const refresh = useCallback(async () => {
     try {
@@ -40,8 +46,10 @@ export function FinzAccountProvider({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // SSR 로 이미 해석된 상태가 있으면 첫 fetch 생략(서버가 같은 세션 쿠키로 정확히 해석함).
+    // SSR 누락(에러 폴백 등)일 때만 클라이언트가 직접 조회한다.
+    if (!initialState) void refresh();
+  }, [refresh, initialState]);
 
   const setAccount = useCallback((account: FinzAccount) => {
     setState({ kind: "ok", account });
