@@ -9,6 +9,8 @@ import {
   unsubscribeBriefing,
 } from "@/lib/server/finz-briefing-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { getFinzGroup } from "@/lib/server/finz-group-store";
+import { isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,8 +66,13 @@ export async function GET(req: Request) {
   for (const roomId of rooms) {
     try {
       const res = await appendAnswerMessage(roomId, message);
-      if (res.status === "ok" && res.message) posted += 1;
-      else if (res.status === "not-found") void unsubscribeBriefing(MORNING_ECONOMY_BRIEFING_ID, roomId).catch(() => {});
+      if (res.status === "ok" && res.message) {
+        posted += 1;
+        // 브리핑이 올라간 방의 멤버 전원에게 푸시(best-effort).
+        void notifyBriefingMembers(roomId, message).catch(() => {});
+      } else if (res.status === "not-found") {
+        void unsubscribeBriefing(MORNING_ECONOMY_BRIEFING_ID, roomId).catch(() => {});
+      }
     } catch (e) {
       console.warn(`[finz/cron/briefing] 방 ${roomId} 전송 실패`, e);
     }
@@ -106,4 +113,22 @@ function todayKstLabel(): string {
 // 멱등 키용 KST 날짜(YYYY-MM-DD). 같은 KST 날짜엔 한 번만 전송.
 function kstDateKey(): string {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// 브리핑이 올라간 방의 멤버 전원에게 푸시. body 는 시황 본문 앞부분 미리보기(헤더 줄 제외).
+async function notifyBriefingMembers(roomId: string, message: string): Promise<void> {
+  if (!isFinzPushConfigured()) return;
+  const group = await getFinzGroup(roomId);
+  if (!group) return;
+  const recipients = group.members.map((m) => m.memberId);
+  if (recipients.length === 0) return;
+  // message = "📈 오늘의 경제 시황 (날짜)\n\n본문..." → 본문 앞부분만 미리보기로.
+  const bodyText = message.split("\n\n").slice(1).join(" ").replace(/\s+/g, " ").trim();
+  const preview = bodyText.length > 90 ? `${bodyText.slice(0, 90)}…` : bodyText || "오늘의 시황이 도착했어요.";
+  await sendToAccounts(recipients, {
+    title: "📈 오늘의 경제 시황",
+    body: preview,
+    url: `/finz/party/${roomId}`,
+    tag: `finz-briefing-${roomId}`,
+  });
 }

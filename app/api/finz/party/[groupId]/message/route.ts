@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { isFinzGroupId } from "@/lib/server/finz-group-store";
+import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { appendTextMessage } from "@/lib/server/finz-chat-store";
+import { isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
 export const runtime = "nodejs";
 
@@ -35,5 +36,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   if (result.status === "empty")
     return NextResponse.json({ status: "error", reason: "empty" }, { status: 400 });
 
+  // 저장 성공 → 방의 다른 멤버 전원에게 푸시(best-effort — 저장 응답을 막지 않는다).
+  void notifyRoomMembers(groupId, memberId, text).catch(() => {});
   return NextResponse.json({ status: "ok", message: result.message });
+}
+
+// 새 멤버 메시지를 방의 다른 멤버(발신자 제외) 모든 기기로 푸시.
+// 대상은 group.members(서버 진실)에서 도출하므로 memberId 위조와 무관하다. self 방·혼자면 0명.
+async function notifyRoomMembers(groupId: string, senderId: string, text: string): Promise<void> {
+  if (!isFinzPushConfigured()) return;
+  const group = await getFinzGroup(groupId);
+  if (!group) return;
+  const recipients = group.members.filter((m) => m.memberId !== senderId).map((m) => m.memberId);
+  if (recipients.length === 0) return;
+  const senderName = group.members.find((m) => m.memberId === senderId)?.displayName ?? "친구";
+  const isGroup = group.kind === "group" && group.title.length > 0;
+  const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+  await sendToAccounts(recipients, {
+    title: isGroup ? group.title : senderName,
+    body: isGroup ? `${senderName}: ${preview}` : preview,
+    url: `/finz/party/${groupId}`,
+    tag: `finz-room-${groupId}`,
+  });
 }

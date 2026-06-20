@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import type { FinzAccount } from "@/lib/common/services/finz-account";
 import { requireAccount } from "@/lib/server/finz-account";
 import {
+  getAccountByHandle,
   getFriendsView,
   isFinzAccountStoreConfigured,
   requestFriendByHandle,
   respondToFriendRequest,
 } from "@/lib/server/finz-account-store";
+import { isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
 export const runtime = "nodejs";
 
@@ -44,7 +47,11 @@ export async function POST(req: Request) {
 
   try {
     const res = await requestFriendByHandle(me.accountId, handle);
-    if (res.status === "ok") return NextResponse.json({ status: "ok", state: res.state });
+    if (res.status === "ok") {
+      // 요청/상호수락을 대상 계정에 푸시(best-effort).
+      void notifyFriendRequest(handle, me, res.state).catch(() => {});
+      return NextResponse.json({ status: "ok", state: res.state });
+    }
     const code = res.status === "not-found" ? 404 : 409;
     return NextResponse.json({ status: res.status }, { status: code });
   } catch (e) {
@@ -77,4 +84,18 @@ export async function PATCH(req: Request) {
     console.error("[finz/friends] PATCH 실패", e);
     return NextResponse.json({ status: "error" }, { status: 503 });
   }
+}
+
+// 친구 요청/상호수락을 대상 계정의 모든 기기로 푸시. state 로 문구를 분기한다.
+async function notifyFriendRequest(handle: string, me: FinzAccount, state: "requested" | "accepted"): Promise<void> {
+  if (!isFinzPushConfigured()) return;
+  const target = await getAccountByHandle(handle);
+  if (!target) return;
+  const accepted = state === "accepted";
+  await sendToAccounts([target.accountId], {
+    title: accepted ? "친구가 됐어요 🎉" : "새 친구 요청 👋",
+    body: accepted ? `@${me.handle}님과 친구가 됐어요.` : `@${me.handle}님이 친구 요청을 보냈어요.`,
+    url: "/finz/friends",
+    tag: "finz-friend",
+  });
 }
