@@ -2,6 +2,16 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.24.0] - 2026-06-20
+
+### Added
+- **정기 브리핑 — 매일 아침 경제 시황을 채팅방에 자동 전송.** 방에서 "**@finz 매일 아침 시황 보내줘**" 라고 하면 구독되고, 매일 09:00 KST 에 그날의 경제 시황(300자 + 출처)이 finz 메시지로 온다. "**@finz 시황 그만 보내**" 로 해지.
+  - **트리거**: GitHub Actions 스케줄(`.github/workflows/daily-briefing.yml`, `0 0 * * *` UTC = 09:00 KST)이 보안 엔드포인트 `GET /api/finz/cron/briefing` 를 Bearer 토큰으로 호출(Vercel Hobby cron 제약 회피, 무료). 수동 테스트는 Actions "Run workflow".
+  - **생성**: 그라운딩 LLM 1회 호출(방 수 무관)로 실시간 시황+출처 생성, "정보 참고용" 면책 부착. 구독자 0이면 LLM 스킵.
+  - **하드닝**: `CRON_SECRET` Bearer 인증(미설정 시 503·불일치 시 401, LLM/DB 접근 전 차단), 날짜 기반 멱등 락(중복·중복 LLM 방어), 소멸 방 self-heal, members-guard 구독 토글, intent 라우터에 `briefing` 추가. 적대적 리뷰(11 에이전트)로 검증.
+
+> ⚙️ **설정 필요(수동)**: `CRON_SECRET` 을 ① Vercel 환경변수 ② GitHub 레포 Secret 양쪽에 같은 값으로 넣어야 동작. (안 넣으면 시황만 안 옴 — 앱은 정상.)
+
 ## [0.1.23.0] - 2026-06-20
 
 ### Added

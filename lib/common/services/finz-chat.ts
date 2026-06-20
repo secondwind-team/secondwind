@@ -133,11 +133,25 @@ export function stripFinzMention(text: string): string {
 }
 
 // @finz 멘션의 "의도" — 서버 LLM 분류 결과. 클라이언트가 이걸로 기능을 분기한다.
-//  pick=우정주 생성 / summary=AI 요약 / position=내 입장 남기기 / chart=종목 차트 / qa=그 외(그라운딩 Q&A, 기본).
-export type FinzMentionIntent = "pick" | "summary" | "position" | "chart" | "qa";
-export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = ["pick", "summary", "position", "chart", "qa"] as const;
+//  pick=우정주 / summary=AI 요약 / position=내 입장 / chart=종목 차트 / briefing=매일 아침 시황 구독·해지 / qa=그 외(기본).
+export type FinzMentionIntent = "pick" | "summary" | "position" | "chart" | "briefing" | "qa";
+export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = [
+  "pick",
+  "summary",
+  "position",
+  "chart",
+  "briefing",
+  "qa",
+] as const;
 export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent {
-  return value === "pick" || value === "summary" || value === "position" || value === "chart" || value === "qa";
+  return (
+    value === "pick" ||
+    value === "summary" ||
+    value === "position" ||
+    value === "chart" ||
+    value === "briefing" ||
+    value === "qa"
+  );
 }
 
 // LLM 이 추출한 종목 심볼(거래소:티커)을 TradingView 가 안전히 받도록 정규화. 허용 외 문자는 제거.
