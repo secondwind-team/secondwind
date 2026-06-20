@@ -6,6 +6,7 @@ import type { FinzRoomKind } from "@/lib/common/services/finz-account";
 import {
   computeNextNudge,
   mentionsFinz,
+  normalizeChartSymbol,
   selectLatestPick,
   selectLatestPositionsByMember,
   stripFinzMention,
@@ -218,14 +219,16 @@ export function FinzPartyRoom({
   async function handleMention(question: string) {
     setActionError(null);
     let intent: string = "qa";
+    let symbol: string | undefined;
     try {
       const res = await fetch(`/api/finz/party/${groupId}/intent`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ memberId: myMemberId, text: question }),
       });
-      const json = (await res.json().catch(() => ({}))) as { status?: string; intent?: string };
+      const json = (await res.json().catch(() => ({}))) as { status?: string; intent?: string; symbol?: string };
       if (json.status === "ok" && typeof json.intent === "string") intent = json.intent;
+      if (typeof json.symbol === "string") symbol = json.symbol;
     } catch {
       // 분류 호출 실패 → qa 폴백.
     }
@@ -259,8 +262,44 @@ export function FinzPartyRoom({
       setStanceMode(true);
       return;
     }
+    if (intent === "chart") {
+      // 심볼이 정규화되면 차트 메시지, 아니면 일반 질문으로 폴백(가짜 차트 방지).
+      const normalized = normalizeChartSymbol(symbol);
+      if (normalized) {
+        void openChart(normalized, question);
+        return;
+      }
+      void ask(question);
+      return;
+    }
     // qa(기본) — 기존 그라운딩 답변.
     void ask(question);
+  }
+
+  // @finz 차트 요청 → 서버에 chart 메시지 append, 폴링으로 TradingView 위젯이 뜬다.
+  async function openChart(symbol: string, label: string) {
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/chart`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, symbol, label }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { reason?: string };
+        setActionError(
+          json.reason === "invalid-symbol"
+            ? "그 종목을 못 찾았어. 종목명을 더 분명히 말해줘 (예: @finz 테슬라 차트)."
+            : "차트를 불러오지 못했어. 잠시 뒤 다시 시도해줘.",
+        );
+      }
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      bumpStick();
+    }
   }
 
   async function ask(question: string) {

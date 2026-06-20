@@ -112,6 +112,7 @@ function buildTranscript(messages: FinzChatMessage[], members: { memberId: strin
     if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
     else if (m.kind === "pick") turns.push({ speaker: "finz", text: `(우정주 테마 '${m.payload.name}' 를 뽑음)` });
     else if (m.kind === "summary") turns.push({ speaker: "finz", text: `(파티 요약) ${m.payload.summary}` });
+    else if (m.kind === "chart") turns.push({ speaker: "finz", text: `(${m.payload.label} 차트를 보여줌)` });
     else if (m.kind === "position")
       turns.push({ speaker: nameOf(m.authorId), text: `(입장) ${m.payload.stance}${m.payload.note ? " · " + m.payload.note : ""}` });
     // system 은 생략

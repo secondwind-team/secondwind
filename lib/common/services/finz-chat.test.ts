@@ -6,6 +6,7 @@ import {
   selectLatestPick,
   selectLatestPositionsByMember,
   isFinzMentionIntent,
+  normalizeChartSymbol,
   shouldFinzProactivelySpeak,
   splitByMention,
   stripFinzMention,
@@ -131,10 +132,11 @@ describe("stripFinzMention", () => {
 });
 
 describe("isFinzMentionIntent", () => {
-  it("4개 의도만 통과", () => {
+  it("5개 의도만 통과", () => {
     expect(isFinzMentionIntent("pick")).toBe(true);
     expect(isFinzMentionIntent("summary")).toBe(true);
     expect(isFinzMentionIntent("position")).toBe(true);
+    expect(isFinzMentionIntent("chart")).toBe(true);
     expect(isFinzMentionIntent("qa")).toBe(true);
   });
   it("모르는 값 거절(서버 분류 폴백 안전망)", () => {
@@ -143,6 +145,24 @@ describe("isFinzMentionIntent", () => {
     expect(isFinzMentionIntent(null)).toBe(false);
     expect(isFinzMentionIntent(undefined)).toBe(false);
     expect(isFinzMentionIntent(123)).toBe(false);
+  });
+});
+
+describe("normalizeChartSymbol", () => {
+  it("정상 심볼은 대문자로 통과", () => {
+    expect(normalizeChartSymbol("NASDAQ:TSLA")).toBe("NASDAQ:TSLA");
+    expect(normalizeChartSymbol("krx:005930")).toBe("KRX:005930");
+    expect(normalizeChartSymbol(" tsla ")).toBe("TSLA");
+  });
+  it("허용 외 문자 제거(위젯 안전)", () => {
+    expect(normalizeChartSymbol("TSLA<script>")).toBe("TSLASCRIPT");
+    expect(normalizeChartSymbol("삼성전자")).toBe(null); // 한글만 → 빈값 → null
+  });
+  it("비문자열/빈값은 null(차트 대신 qa 폴백)", () => {
+    expect(normalizeChartSymbol(null)).toBe(null);
+    expect(normalizeChartSymbol(undefined)).toBe(null);
+    expect(normalizeChartSymbol("")).toBe(null);
+    expect(normalizeChartSymbol(123)).toBe(null);
   });
 });
 
@@ -189,12 +209,15 @@ describe("isFinzStoredChatMessage", () => {
     expect(isFinzStoredChatMessage({ ...base, role: "finz", authorId: "finz", kind: "pick", payload: PICK })).toBe(true);
     expect(isFinzStoredChatMessage({ ...base, role: "finz", authorId: "finz", kind: "summary", payload: SUMMARY })).toBe(true);
     expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "position", payload: { stance: "관망", note: "" } })).toBe(true);
+    expect(isFinzStoredChatMessage({ ...base, role: "finz", authorId: "finz", kind: "chart", payload: { symbol: "NASDAQ:TSLA", label: "테슬라" } })).toBe(true);
   });
   it("모르는 kind / 깨진 페이로드 / 잘못된 stance 거절", () => {
     expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "wat", text: "x" })).toBe(false);
     expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "pick", payload: { name: "broken" } })).toBe(false);
     expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "position", payload: { stance: "사세요", note: "" } })).toBe(false);
     expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "text" })).toBe(false); // text 누락
+    expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { symbol: "", label: "x" } })).toBe(false); // 빈 심볼
+    expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { label: "x" } })).toBe(false); // symbol 누락
     expect(isFinzStoredChatMessage({ ...base, role: "bot", kind: "text", text: "x" })).toBe(false); // 잘못된 role
   });
 });
