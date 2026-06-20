@@ -21,6 +21,7 @@ import {
 } from "@/lib/common/services/finz";
 import { FinzCharacterCard, finzClassEmoji } from "./finz-character-card";
 import { useFinzAccountCtx } from "./finz-account-context";
+import { FinzNotificationSettings } from "./finz-notification-settings";
 
 type HandleState = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -109,6 +110,9 @@ export function FinzProfileView({ account }: { account: FinzAccount }) {
                 고른 취향 카드 <span className="fz-num font-semibold text-[var(--fz-ink)]">{account.selectedCardIds.length}</span>개
               </p>
             </section>
+
+            {/* ── 알림 설정(푸시 권한·구독·테스트) ── */}
+            <FinzNotificationSettings />
 
             {/* ── 안전 카피 + 로그아웃 ── */}
             <p className="px-1 text-center text-xs leading-relaxed text-[var(--fz-muted)]">

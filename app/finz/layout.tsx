@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./finz-theme.css";
 import { FinzAccountProvider, type FinzAccountState } from "./_components/finz-account-context";
 import { FinzAppGate } from "./_components/finz-app-gate";
+import { FinzPushRegister } from "./_components/finz-push-register";
 import { resolveAccount } from "@/lib/server/finz-account";
 import { isFinzAccountStoreConfigured } from "@/lib/server/finz-account-store";
 
@@ -35,6 +36,7 @@ export default async function FinzLayout({ children }: { children: React.ReactNo
     <div className="finz-root">
       <main className="mx-auto flex w-full max-w-xl flex-1 min-h-0 flex-col">
         <FinzAccountProvider initialState={initialState}>
+          <FinzPushRegister />
           <FinzAppGate>{children}</FinzAppGate>
         </FinzAccountProvider>
       </main>

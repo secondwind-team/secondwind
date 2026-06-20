@@ -2,6 +2,16 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.25.0] - 2026-06-21
+
+### Added
+- **finz 푸시 알림 — 앱을 닫아도 휴대폰으로 알림.** 프로필 탭에 **알림** 설정이 생겼다. 스위치를 켜면 권한을 요청하고, 켜진 뒤엔 **"테스트 알림 보내기"** 로 본인 휴대폰에 바로 알림을 보내 확인할 수 있다. (이 단계는 알림 인프라·설정·테스트까지 — 실제 새 메시지/친구요청/브리핑 연동은 후속 PR.)
+  - **받는 법 안내 내장**: 안드로이드(Chrome)는 바로 켜기, iPhone 은 Safari "홈 화면에 추가" → 홈 화면 앱으로 열어야 가능(iOS 제약)함을 설정 화면이 상태에 따라 단계별로 안내. 권한 거부·미지원 상태도 각각 안내.
+  - **기술**: Web Push(서비스 워커 `public/sw.js` scope `/`, Push API). 구독은 Neon `push_subscriptions`(기기별 `endpoint` PK·재구독 upsert, 만료 410/404 자동 정리, 기기 여러 대 지원). 신규 API `POST /api/finz/push/{subscribe,unsubscribe,test}` — 전부 세션 인증(클라가 보낸 accountId 불신). 발송은 `web-push`(VAPID 서명, Node 런타임). SW 는 `no-cache` 헤더로 항상 최신(`next.config.mjs`).
+  - **PWA 정체성을 finz 로 통일**: manifest 를 FINZ(코랄 브랜드 아이콘·`start_url:/finz`·크림 테마)로 전환하고, 설치·알림 아이콘 품질을 위해 192/512 PNG + `apple-touch-icon` 을 추가.
+
+> ⚙️ **설정 필요(수동)**: VAPID 키 3개를 Vercel 환경변수에 넣어야 운영에서 알림이 동작. `npx web-push generate-vapid-keys` 로 생성 → `NEXT_PUBLIC_VAPID_PUBLIC_KEY`(공개)·`VAPID_PRIVATE_KEY`(비밀, `NEXT_PUBLIC_` 금지)·`VAPID_SUBJECT`(`mailto:` 또는 URL). 안 넣으면 알림 기능만 비활성(앱은 정상). iOS 알림은 16.4+ & 홈 화면에 추가한 앱에서만 가능.
+
 ## [0.1.24.0] - 2026-06-20
 
 ### Added
