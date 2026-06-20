@@ -220,15 +220,22 @@ export function FinzPartyRoom({
     setActionError(null);
     let intent: string = "qa";
     let symbol: string | undefined;
+    let subscribe: boolean | undefined;
     try {
       const res = await fetch(`/api/finz/party/${groupId}/intent`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ memberId: myMemberId, text: question }),
       });
-      const json = (await res.json().catch(() => ({}))) as { status?: string; intent?: string; symbol?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        intent?: string;
+        symbol?: string;
+        subscribe?: boolean;
+      };
       if (json.status === "ok" && typeof json.intent === "string") intent = json.intent;
       if (typeof json.symbol === "string") symbol = json.symbol;
+      if (typeof json.subscribe === "boolean") subscribe = json.subscribe;
     } catch {
       // 분류 호출 실패 → qa 폴백.
     }
@@ -272,8 +279,32 @@ export function FinzPartyRoom({
       void ask(question);
       return;
     }
+    if (intent === "briefing") {
+      // 매일 아침 시황 구독/해지(기본 구독). 서버가 토글 + 확인 메시지 append.
+      void subscribeBriefing(subscribe !== false);
+      return;
+    }
     // qa(기본) — 기존 그라운딩 답변.
     void ask(question);
+  }
+
+  // @finz 매일 아침 시황 구독/해지 → 서버가 토글 + 확인 메시지 append, 폴링으로 뜬다.
+  async function subscribeBriefing(subscribe: boolean) {
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/briefing/subscribe`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, subscribe }),
+      });
+      if (!res.ok) setActionError("시황 구독 설정을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      bumpStick();
+    }
   }
 
   // @finz 차트 요청 → 서버에 chart 메시지 append, 폴링으로 TradingView 위젯이 뜬다.

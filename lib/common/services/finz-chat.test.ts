@@ -132,11 +132,12 @@ describe("stripFinzMention", () => {
 });
 
 describe("isFinzMentionIntent", () => {
-  it("5개 의도만 통과", () => {
+  it("6개 의도만 통과", () => {
     expect(isFinzMentionIntent("pick")).toBe(true);
     expect(isFinzMentionIntent("summary")).toBe(true);
     expect(isFinzMentionIntent("position")).toBe(true);
     expect(isFinzMentionIntent("chart")).toBe(true);
+    expect(isFinzMentionIntent("briefing")).toBe(true);
     expect(isFinzMentionIntent("qa")).toBe(true);
   });
   it("모르는 값 거절(서버 분류 폴백 안전망)", () => {
