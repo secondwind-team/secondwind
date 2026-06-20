@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { splitByMention, type FinzChatMessage } from "@/lib/common/services/finz-chat";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
+import { FinzChartBubble } from "./finz-chart-bubble";
 import { STANCE_EMOJI } from "./finz-position-input";
 
 // 메시지 본문 — @finz 같은 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
@@ -83,6 +84,18 @@ export function FinzChatMessageView({
         <div className="min-w-0 flex-1 space-y-1">
           <p className="px-1 text-xs font-semibold text-[var(--fz-amber-ink)]">FINZ · 파티 요약</p>
           <FinzPartySummaryCard summary={message.payload} />
+        </div>
+      </div>
+    );
+  }
+
+  if (message.kind === "chart") {
+    return (
+      <div className="flex items-start gap-2">
+        <FinzAvatar />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="px-1 text-xs font-semibold text-[var(--fz-coral-ink)]">FINZ · 차트</p>
+          <FinzChartBubble payload={message.payload} />
         </div>
       </div>
     );

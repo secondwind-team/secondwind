@@ -15,9 +15,11 @@ import {
 } from "./finz";
 
 export type FinzChatRole = "member" | "finz" | "system";
-export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary";
+export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary" | "chart";
 
 export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
+// 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
+export type FinzChartPayload = { symbol: string; label: string };
 
 // kind 별 페이로드/필수 필드를 base 제네릭으로 분기 — stored(저장형, seq 없음)와 message(읽기형, seq 있음)를
 // 같은 모양으로 한 번에 정의한다.
@@ -26,7 +28,8 @@ type FinzChatVariants<B> =
   | (B & { kind: "system"; text: string })
   | (B & { kind: "pick"; payload: FinzPartyPick })
   | (B & { kind: "position"; payload: FinzPositionPayload })
-  | (B & { kind: "summary"; payload: FinzPartySummary });
+  | (B & { kind: "summary"; payload: FinzPartySummary })
+  | (B & { kind: "chart"; payload: FinzChartPayload });
 
 type FinzStoredBase = {
   id: string; // crypto.randomUUID() — React key + 낙관적 전송 reconcile 의 유일 키
@@ -77,6 +80,12 @@ function isPositionPayload(value: unknown): value is FinzPositionPayload {
   );
 }
 
+function isChartPayload(value: unknown): value is FinzChartPayload {
+  if (!value || typeof value !== "object") return false;
+  const c = value as Partial<FinzChartPayload>;
+  return typeof c.symbol === "string" && c.symbol.length > 0 && typeof c.label === "string";
+}
+
 // KV 에서 읽은 값은 신뢰하지 않는다 — 기존 isFinz* 의 관용 검증 패턴을 그대로 따른다.
 // 모르는 kind / 페이로드 깨짐은 드롭(해당 메시지만), 타임라인 전체는 유지.
 export function isFinzStoredChatMessage(value: unknown): value is FinzStoredChatMessage {
@@ -97,6 +106,8 @@ export function isFinzStoredChatMessage(value: unknown): value is FinzStoredChat
       return isFinzPartySummary(m.payload);
     case "position":
       return isPositionPayload(m.payload);
+    case "chart":
+      return isChartPayload(m.payload);
     default:
       return false;
   }
@@ -122,11 +133,19 @@ export function stripFinzMention(text: string): string {
 }
 
 // @finz 멘션의 "의도" — 서버 LLM 분류 결과. 클라이언트가 이걸로 기능을 분기한다.
-//  pick=우정주 생성 / summary=AI 요약 / position=내 입장 남기기 / qa=그 외(그라운딩 Q&A, 기본).
-export type FinzMentionIntent = "pick" | "summary" | "position" | "qa";
-export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = ["pick", "summary", "position", "qa"] as const;
+//  pick=우정주 생성 / summary=AI 요약 / position=내 입장 남기기 / chart=종목 차트 / qa=그 외(그라운딩 Q&A, 기본).
+export type FinzMentionIntent = "pick" | "summary" | "position" | "chart" | "qa";
+export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = ["pick", "summary", "position", "chart", "qa"] as const;
 export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent {
-  return value === "pick" || value === "summary" || value === "position" || value === "qa";
+  return value === "pick" || value === "summary" || value === "position" || value === "chart" || value === "qa";
+}
+
+// LLM 이 추출한 종목 심볼(거래소:티커)을 TradingView 가 안전히 받도록 정규화. 허용 외 문자는 제거.
+// 형식 불명/빈 값이면 null → 호출부가 chart 대신 qa 로 폴백.
+export function normalizeChartSymbol(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.trim().toUpperCase().replace(/[^A-Z0-9:._-]/g, "").slice(0, 24);
+  return cleaned.length > 0 ? cleaned : null;
 }
 
 // 텍스트를 멘션/일반 세그먼트로 분해 — 메시지뷰가 멘션 토큰만 하이라이트 렌더하는 데 쓴다.

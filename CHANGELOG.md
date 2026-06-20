@@ -2,6 +2,14 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.23.0] - 2026-06-20
+
+### Added
+- **`@finz` 로 종목 차트 보여주기 (TradingView 임베드).** "**@finz 테슬라 차트 보여줘**" 처럼 말하면 대화방에 **실시간 주가 차트**가 뜬다. 의도 분류가 `chart` 를 인식하고 같은 호출에서 **티커 심볼**(예 NASDAQ:TSLA)까지 추출 → 새 메시지 `kind:"chart"`(심볼만 저장, append-only) → 타임라인에 **TradingView 미니 차트 위젯**으로 렌더(베이크된 이미지가 아니라 매번 라이브, 진짜 시세 데이터).
+  - **환각 방어**: 차트 데이터는 LLM 이 아니라 TradingView 가 제공(LLM 이 OHLC 를 지어내지 않음). 심볼은 `normalizeChartSymbol` 로 정규화(허용 외 문자 제거, 위젯 안전), 못 잡으면 `qa` 폴백. 차트엔 "정보 참고용" 면책 캡션.
+  - 새 API `POST /api/finz/party/[groupId]/chart` — members-guard + 서버 심볼 재검증. 스크립트 로드 실패·스크린리더 알림·invalid-symbol 안내 처리.
+  - 적대적 리뷰(12 에이전트)로 XSS(JSON.stringify 주입)·하이드레이션·새 kind 라운드트립·심볼 sanitization 검증.
+
 ## [0.1.22.0] - 2026-06-20
 
 ### Added

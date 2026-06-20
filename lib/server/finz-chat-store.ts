@@ -233,6 +233,24 @@ export async function appendAnswerMessage(
   return appendChatMessage(id, stored);
 }
 
+// @finz 차트 요청 — finz 가 종목 심볼/라벨을 담은 chart 메시지를 append(렌더는 클라가 TradingView 위젯으로).
+export async function appendChartMessage(
+  id: string,
+  symbol: string,
+  label: string,
+): Promise<{ status: "ok" | "not-found"; message?: FinzStoredChatMessage }> {
+  const stored: FinzStoredChatMessage = {
+    id: newId(),
+    role: "finz",
+    authorId: "finz",
+    authorName: "FINZ",
+    kind: "chart",
+    payload: { symbol, label: label.slice(0, 40) },
+    createdAt: new Date().toISOString(),
+  };
+  return appendChatMessage(id, stored);
+}
+
 // 내부: 꼬리 N개를 파싱된 FinzChatMessage(seq 포함)로. 레이트 리밋/요약 조회용.
 async function readWindow(id: string, count: number): Promise<FinzChatMessage[]> {
   const redis = getClient();
@@ -296,6 +314,9 @@ export async function getRoomLastMessage(id: string): Promise<{ text: string; cr
       break;
     case "position":
       text = `💬 ${obj.payload.stance}${obj.payload.note ? " · " + obj.payload.note : ""}`;
+      break;
+    case "chart":
+      text = `📈 ${obj.payload.label || obj.payload.symbol} 차트`;
       break;
     default:
       return null;
