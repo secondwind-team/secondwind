@@ -21,7 +21,7 @@
 |---|---|---:|---|---|
 | `TRAVEL` | 여행 계획 서비스 | `live` | 목적지, 기간, 요청사항을 받아 하나의 여행 계획을 만든다. | `app/(site)/travel`, `lib/common/services/travel*` |
 | `DIARY` | 다이어리 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/diary/page.tsx` |
-| `FINZ` | 친구 기반 투자 대화 메신저 | `live` | **계정·핸들 기반 4탭 메신저**(친구·대화·피드·프로필). 대화방에서 캐릭터로 만나 우정주·한 줄 입장·AI 요약을 나누고, 각 방의 AI 봇(`@AI`)이 질문 답변·선제 개입. 기존 1인 솔로·파티 흐름은 메신저로 흡수. | `app/finz/`, `lib/server/finz-*`, `lib/common/services/finz*`, `docs/finz/DESIGN.md` (IA·아키텍처) |
+| `FINZ` | 친구 기반 투자 대화 메신저 | `live` | **계정·핸들 기반 4탭 메신저**(친구·대화·피드·프로필). 대화방에서 캐릭터로 만나 우정주·한 줄 입장·AI 요약을 나누고, 각 방의 AI 봇 `@finz` 가 멘션을 **의도 분류**해 답변·차트·시황 브리핑·선제 개입을 실행. 기존 1인 솔로·파티 흐름은 메신저로 흡수. | `app/finz/`, `lib/server/finz-*`, `lib/common/services/finz*`, `docs/finz/DESIGN.md` (IA·아키텍처) |
 | `EXPERIMENT-3` | 세 번째 실험 서비스 | `placeholder` | 아직 제품 정의 전. | `app/(site)/experiment-3/page.tsx` |
 | `COMMON-UI` | 공통 UI/레이아웃 | `live` | 홈, 사이트 레이아웃, 공통 카드. | `app/(site)`, `components/common` |
 | `LLM-PLATFORM` | LLM 프록시/모델 운영 | `ops` | Gemini 호출, fallback, quota, prompt version. | `app/api/gemini/route.ts`, `lib/common/llm.ts` |
@@ -152,7 +152,7 @@
 
 ## FINZ 기능 목록
 
-> 2026-06-20 갱신: finz 가 **계정·핸들 기반 4탭 메신저**로 ship 됨(PR #107·#109). 아래는 그 기준의 기능 목록(Travel 과 동일한 7열 포맷). 옛 `FINZ-MVP-01~06` 계획 ID(2026-05-24·2026-06-13 plan)는 이 목록으로 **대체**됨 — 매핑은 각 행 끝에 표기. IA·아키텍처는 `docs/finz/DESIGN.md`.
+> 2026-06-20 갱신: finz 가 **계정·핸들 기반 4탭 메신저**로 ship 됨(PR #107·#109). 이어 `@finz` 가 **의도 분류 라우터**로 진화하고 **종목 차트(TradingView)**·**정기 브리핑(GH Actions cron)**·**대화 진입 성능(SSR·서울 리전)**이 추가됨(CHANGELOG `[0.1.21.1]~[0.1.24.0]`). 아래는 그 기준의 기능 목록(Travel 과 동일한 7열 포맷). 옛 `FINZ-MVP-01~06` 계획 ID(2026-05-24·2026-06-13 plan)는 이 목록으로 **대체**됨 — 매핑은 각 행 끝에 표기. IA·아키텍처는 `docs/finz/DESIGN.md`.
 
 ### 계정·온보딩
 
@@ -172,7 +172,7 @@
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
 |---|---|---:|---|---|---|---|
 | `FINZ-CHAT-01` | 대화방 목록 + 새 대화(1:1/그룹) | `live` | 내 대화방을 최근 활동순으로 보고, 친구와 1:1 또는 그룹방을 만든다. (기존 "파티" 흡수.) | `app/finz/(tabs)/chats/page.tsx`, `finz-new-chat-sheet`, `app/api/finz/rooms/route.ts`, `finz-group-store`(방 인덱스 ZSET) | 검색·핀·읽음 표시 | 목록 로딩 성능(병렬화 완료), 1:1 중복방 dedup |
-| `FINZ-CHAT-02` | 대화방 타임라인 | `live` | append-only 채팅(텍스트·우정주·입장·요약·시스템). 폴링(보임 3s/숨김 8s)·낙관적 전송. | `app/finz/party/[groupId]`, `finz-party-room`, `finz-chat-*`, `app/api/finz/party/[groupId]/{message,chat}`, `finz-chat-store` (`FINZ-MVP-03`) | 실시간(SSE/WS), 첫 데이터 SSR | LTRIM 도입 시 incr-seq 전환, 400 ceiling |
+| `FINZ-CHAT-02` | 대화방 타임라인 | `live` | append-only 채팅(텍스트·우정주·입장·요약·차트·시스템). 폴링(보임 3s/숨김 8s)·낙관적 전송. 방 목록은 SSR 시드(왕복 절감, `FINZ-OPS-02`). | `app/finz/party/[groupId]`, `finz-party-room`, `finz-chat-*`, `app/api/finz/party/[groupId]/{message,chat}`, `finz-chat-store` (`FINZ-MVP-03`) | 실시간(SSE/WS) | LTRIM 도입 시 incr-seq 전환, 400 ceiling |
 | `FINZ-CHAT-03` | 친구 초대 / 링크 합류 | `live` | 방에서 친구를 골라 초대하거나 링크로 누구나 합류(원탭, 취향 재선택 없음). | `app/api/finz/rooms/[groupId]/{invite,join}`, `finz-invite-sheet`, `finz-room-join-view`, `finz-room-full-notice` | 초대 권한·승인, QR | memberId(=accountId) 위조 방어 강화 |
 | `FINZ-CHAT-04` | 나와의 채팅 (self) | `live` | 계정당 1개 혼자 방 — 메모 + `@AI`·선제 개입 솔로 테스트(사람 안 모아도 됨). | `app/api/finz/rooms/self/route.ts`, `finz-group-store`(`getOrCreateSelfRoom`, `sw:finz:self:<id>`) | self 에서도 가능한 콘텐츠 확대 | 우정주는 2인 필요라 비활성(의도) |
 
@@ -196,14 +196,22 @@
 
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
 |---|---|---:|---|---|---|---|
-| `FINZ-AI-01` | `@AI` 멘션 답변 (그라운딩) | `live` | `@AI`(또는 `@finz`/`@핀즈`) 멘션 시 오늘 주가·뉴스까지 Google Search 그라운딩으로 답(출처·면책). | `app/api/finz/party/[groupId]/ask`, `lib/common/llm.ts`(grounded) | 답변 품질 eval, 다국어 | 그라운딩 비용·ask-lock, 인젝션 가드 |
+| `FINZ-AI-01` | `@finz` 멘션 답변 + 의도 분류 라우팅 | `live` | `@finz`(별칭 `@핀즈`/`@AI`) 멘션을 LLM 이 **의도로 분류**해 자연어로 기능 실행 — `pick`(우정주)·`summary`(요약)·`position`(입장)·`chart`(차트)·`briefing`(시황 구독)·`qa`(그라운딩 답변, 기본). qa 는 오늘 주가·뉴스까지 Google Search 그라운딩(출처·면책). 멘션 토큰은 강조 칩(`.fz-mention`). | `app/api/finz/party/[groupId]/{intent,ask}`, `lib/common/services/finz-chat.ts`(`splitByMention`), `lib/common/llm.ts`(grounded) | 의도 추가(알림·차트 비교), 답변 품질 eval | constrained enum 흔들림, qa 폴백 정확도, 그라운딩 비용·락, 인젝션 가드 |
 | `FINZ-AI-02` | AI 선제 개입 | `live` | 멤버 대화가 쌓이고 AI 가 한동안 말 안 했을 때 맥락 읽고 1회 끼어들어 건전한 투자 대화 유도. | `app/api/finz/party/[groupId]/proactive`, `finz-chat.ts`(`shouldFinzProactivelySpeak`), 쿨다운 락 | 트리거 정교화(과열·근거없음 감지) | 빈도/스팸 톤, 비용(쿨다운 90s) |
+| `FINZ-AI-03` | `@finz` 종목 차트 (TradingView) | `live` | "@finz 테슬라 차트 보여줘" → 대화방에 실시간 주가 차트. 의도 분류가 `chart` 인식 + 티커 추출 → `kind:"chart"` 메시지(심볼만 저장, append-only) → TradingView 미니 위젯 임베드(라이브, 베이크 이미지 아님). 데이터는 LLM 아닌 TradingView(환각 방어). | `app/api/finz/party/[groupId]/{intent,chart}`, `finz-chart-bubble`, `finz-chat.ts`(`normalizeChartSymbol`) | 차트 비교·기간 옵션, 캐싱 | 심볼 sanitization(XSS/위젯 안전), 못 잡으면 qa 폴백, 위젯 로드 실패 안내 |
+
+### 정기 브리핑
+
+| Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
+|---|---|---:|---|---|---|---|
+| `FINZ-BRIEFING-01` | 정기 브리핑 (매일 아침 시황) | `live` | "@finz 매일 아침 시황 보내줘" 로 방을 구독하면 매일 09:00 KST 그날의 경제 시황(300자+출처)이 finz 메시지로 온다. "@finz 시황 그만 보내" 로 해지. 트리거는 GitHub Actions cron(Vercel Hobby cron 제약 회피, 무료). | `app/api/finz/cron/briefing`, `app/api/finz/party/[groupId]/briefing/subscribe`, `lib/server/finz-briefing-store.ts`(`sw:finz:briefing:<id>:rooms` SET), `.github/workflows/daily-briefing.yml`(`0 0 * * *` UTC) | 시간대·종목별 구독, 사용자별 다이제스트 | **`CRON_SECRET` 수동 설정 필요**(Vercel+GitHub 양쪽 동일 값, 없으면 시황만 안 옴·앱은 정상). Bearer 인증·날짜 멱등 락·구독자 0 LLM 스킵·소멸 방 self-heal |
 
 ### 운영/dogfooding
 
 | Feature ID | 기능 | 상태 | 사용자 가치 | 코드 위치 | 신규 후보 | 유지보수 후보 |
 |---|---|---:|---|---|---|---|
 | `FINZ-OPS-01` | dogfooding 피드백 루프 | `planned` | 친구들이 실제로 친구 추가·대화·우정주·재방문하는지 기록·분석. | travel feedback 시스템 재사용 검토 | travel `TRAVEL-FEEDBACK-01` 패턴 이식 | 성공 기준(`2026-06-13` plan §8) (`FINZ-MVP-06`) |
+| `FINZ-OPS-02` | 대화 진입 성능 (SSR 시드·서울 리전) | `live` | 첫 대화 진입을 빠르게 — 계정·방 목록을 SSR 로 시드(왕복 절감), Vercel 함수 리전을 서울(`icn1`)로 정렬해 사용자-함수 왕복 단축. | `app/finz/layout.tsx`(SSR 시드), `lib/server/finz-account.ts`(`resolveAccount` React `cache()`), `vercel.json`(`regions:["icn1"]`) | edge·캐시 추가 최적화 | 계정 SSR 로 finz 셸 동적 렌더(의도된 트레이드오프), DB(Upstash 도쿄/Neon 싱가포르)와 함수 리전 거리 |
 
 ## Experiment-3 후보 목록
 
