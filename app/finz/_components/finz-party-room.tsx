@@ -73,6 +73,13 @@ export function FinzPartyRoom({
 
   const bumpStick = useCallback(() => setStickSignal((s) => s + 1), []);
 
+  // 폴링이 비동기로 state 를 바꾸므로, handleMention 이 분류 응답(~1s)을 기다린 뒤 가드할 때
+  // 클로저 옛값 대신 "최신 커밋된" 상태를 읽도록 ref 로 미러링한다(스테일 가드 메시지 방지).
+  const liveRef = useRef({ messages, members, full });
+  useEffect(() => {
+    liveRef.current = { messages, members, full };
+  }, [messages, members, full]);
+
   const isMember = members.some((m) => m.memberId === myMemberId);
   const atCapacity = members.length >= ROOM_CAPACITY;
 
@@ -193,9 +200,9 @@ export function FinzPartyRoom({
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200);
       if (mentionsFinz(text)) {
-        // @finz / @핀즈 / @AI 멘션 → 그라운딩 답변.
+        // @finz 멘션 → 의도 분류 후 분기(우정주/요약/입장/질문).
         const q = stripFinzMention(text);
-        if (q) void ask(q);
+        if (q) void handleMention(q);
         else setActionError("@finz 뒤에 궁금한 걸 적어줘.");
       } else {
         // 멘션이 아니면 finz 가 선제 개입할 맥락인지 서버가 판단(조건·쿨다운 통과 시에만 발화).
@@ -204,6 +211,56 @@ export function FinzPartyRoom({
     } catch {
       setPending((p) => p.map((x) => (x.tempId === tempId ? { ...x, status: "failed" } : x)));
     }
+  }
+
+  // @finz 멘션 → 서버에 의도 분류 요청 후 분기. 분류 실패/qa 면 기존 그라운딩 답변(ask)으로 폴백.
+  // pick/summary/position 은 기존 핸들러를 재사용하되, 전제조건(정원·픽·입장)을 먼저 가드해 친절히 안내.
+  async function handleMention(question: string) {
+    setActionError(null);
+    let intent: string = "qa";
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/intent`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, text: question }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { status?: string; intent?: string };
+      if (json.status === "ok" && typeof json.intent === "string") intent = json.intent;
+    } catch {
+      // 분류 호출 실패 → qa 폴백.
+    }
+
+    // 분류 대기 중 폴링으로 상태가 바뀌었을 수 있으니 최신 커밋 상태(ref)로 가드한다.
+    const live = liveRef.current;
+    if (intent === "pick") {
+      if (!live.full) {
+        setActionError("친구가 들어와야 우정주를 뽑을 수 있어. 먼저 초대해봐!");
+        return;
+      }
+      void openPick(false);
+      return;
+    }
+    if (intent === "summary") {
+      const latest = selectLatestPick(live.messages);
+      const pos = latest ? selectLatestPositionsByMember(live.messages, latest.seq) : new Map<string, LatestPosition>();
+      const ready = live.full && live.members.every((m) => pos.has(m.memberId));
+      if (!ready) {
+        setActionError("둘 다 입장을 남기면 AI 요약을 받을 수 있어.");
+        return;
+      }
+      void openSummary();
+      return;
+    }
+    if (intent === "position") {
+      if (!selectLatestPick(live.messages)) {
+        setActionError("먼저 우정주를 뽑아줘. 그 주제에 대한 입장을 남길 수 있어.");
+        return;
+      }
+      setStanceMode(true);
+      return;
+    }
+    // qa(기본) — 기존 그라운딩 답변.
+    void ask(question);
   }
 
   async function ask(question: string) {

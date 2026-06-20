@@ -121,6 +121,14 @@ export function stripFinzMention(text: string): string {
   return text.replace(new RegExp(FINZ_MENTION.source, "gi"), "").trim();
 }
 
+// @finz 멘션의 "의도" — 서버 LLM 분류 결과. 클라이언트가 이걸로 기능을 분기한다.
+//  pick=우정주 생성 / summary=AI 요약 / position=내 입장 남기기 / qa=그 외(그라운딩 Q&A, 기본).
+export type FinzMentionIntent = "pick" | "summary" | "position" | "qa";
+export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = ["pick", "summary", "position", "qa"] as const;
+export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent {
+  return value === "pick" || value === "summary" || value === "position" || value === "qa";
+}
+
 // 텍스트를 멘션/일반 세그먼트로 분해 — 메시지뷰가 멘션 토큰만 하이라이트 렌더하는 데 쓴다.
 export function splitByMention(text: string): Array<{ text: string; isMention: boolean }> {
   const re = new RegExp(FINZ_MENTION.source, "gi");
