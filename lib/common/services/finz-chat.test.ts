@@ -5,6 +5,7 @@ import {
   mentionsFinz,
   selectLatestPick,
   selectLatestPositionsByMember,
+  isFinzMentionIntent,
   shouldFinzProactivelySpeak,
   splitByMention,
   stripFinzMention,
@@ -126,6 +127,22 @@ describe("stripFinzMention", () => {
     expect(stripFinzMention("@AI 오늘 테슬라 주가 알려줘")).toBe("오늘 테슬라 주가 알려줘");
     expect(stripFinzMention("@finz 뉴스 정리해줘")).toBe("뉴스 정리해줘");
     expect(stripFinzMention("@핀즈")).toBe("");
+  });
+});
+
+describe("isFinzMentionIntent", () => {
+  it("4개 의도만 통과", () => {
+    expect(isFinzMentionIntent("pick")).toBe(true);
+    expect(isFinzMentionIntent("summary")).toBe(true);
+    expect(isFinzMentionIntent("position")).toBe(true);
+    expect(isFinzMentionIntent("qa")).toBe(true);
+  });
+  it("모르는 값 거절(서버 분류 폴백 안전망)", () => {
+    expect(isFinzMentionIntent("raid")).toBe(false);
+    expect(isFinzMentionIntent("")).toBe(false);
+    expect(isFinzMentionIntent(null)).toBe(false);
+    expect(isFinzMentionIntent(undefined)).toBe(false);
+    expect(isFinzMentionIntent(123)).toBe(false);
   });
 });
 

@@ -368,3 +368,19 @@ export async function releaseProactiveLock(id: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.del(proactiveLockKey(id));
 }
+
+// @finz 의도 분류 동시성 락 — ask/pick/summary 와 동일하게 LLM 호출 표면을 보호(동시 분류 중복 차단).
+// 분류는 cheap·짧으므로 finally 에서 즉시 푼다(쿨다운 아님). TTL 은 크래시 안전망.
+function intentLockKey(id: string): string {
+  return `${chatKey(id)}:intent-lock`;
+}
+export async function acquireIntentLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(intentLockKey(id), "1", { nx: true, ex: 15 });
+  return res === "OK";
+}
+export async function releaseIntentLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(intentLockKey(id));
+}
