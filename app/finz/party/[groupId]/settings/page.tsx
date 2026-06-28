@@ -5,6 +5,8 @@ import { listRecurringForRoom } from "@/lib/server/finz-recurring-store";
 import { isBriefingSubscribed, MORNING_ECONOMY_BRIEFING_ID } from "@/lib/server/finz-briefing-store";
 import { listTrades } from "@/lib/server/finz-portfolio-store";
 import { FinzRoomSettings } from "../../../_components/finz-room-settings";
+import { resolveAccount } from "@/lib/server/finz-account";
+import { getRoomMute, type RoomMute } from "@/lib/server/finz-push-store";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +33,16 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
     );
   }
 
-  const [items, briefingSubscribed, trades] = await Promise.all([
+  // 음소거 초기값은 보는 사람(계정)별 — 세션으로 계정을 도출해 조회(미로그인이면 기본=음소거 안 함).
+  const auth = await resolveAccount();
+  const myAccountId = auth.status === "ok" ? auth.account.accountId : null;
+  const [items, briefingSubscribed, trades, mute] = await Promise.all([
     listRecurringForRoom(groupId),
     isBriefingSubscribed(MORNING_ECONOMY_BRIEFING_ID, groupId),
     listTrades(groupId),
+    myAccountId
+      ? getRoomMute(myAccountId, groupId)
+      : Promise.resolve<RoomMute>({ muted: false, allowMentions: true }),
   ]);
 
   const roomTitle =
@@ -48,6 +56,7 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
       initialItems={items}
       initialBriefingSubscribed={briefingSubscribed}
       initialTrades={trades}
+      initialMute={mute}
     />
   );
 }
