@@ -3,6 +3,7 @@
 
 import { callLlm, type GeminiModel } from "@/lib/common/llm";
 import type { FinzRecurringMessage } from "@/lib/common/services/finz-recurring";
+import { resolveKnownSymbol } from "@/lib/common/services/finz-portfolio";
 import { appendAnswerMessage, appendChartMessage } from "./finz-chat-store";
 import {
   acquireRecurringRunLock,
@@ -50,12 +51,20 @@ export async function processRecurringIds(
         // occurrence 선점: nextRunAt 먼저 전진(at-most-once).
         await advanceRecurringAfterRun(def, nowMs);
 
-        if (def.contentKind === "chart") {
+        // 차트 종류이거나, ai/text 라도 내용이 'X 차트' 요청이면(옛 정의·오분류 보정) 실제 차트로 보낸다.
+        const chartSymbol =
+          def.contentKind === "chart"
+            ? def.content
+            : /차트|chart/i.test(def.content)
+              ? resolveKnownSymbol(def.content)
+              : null;
+
+        if (chartSymbol) {
           // 종목 차트 — 텍스트가 아니라 실제 TradingView 차트 메시지(기존 chart kind 재사용).
-          const res = await appendChartMessage(def.roomId, def.content, def.content);
+          const res = await appendChartMessage(def.roomId, chartSymbol, chartSymbol);
           if (res.status === "ok" && res.message) {
             posted += 1;
-            void notifyMembers(def, `📈 ${def.content} 차트`).catch(() => {});
+            void notifyMembers(def, `📈 ${chartSymbol} 차트`).catch(() => {});
           } else {
             skipped += 1;
           }
