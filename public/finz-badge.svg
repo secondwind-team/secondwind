@@ -1,0 +1,5 @@
+<!-- 안드로이드 상태바 알림용 모노크롬 badge. 배경 투명 + 흰 "f" 실루엣만.
+     OS 는 알파 채널만 보고 색을 버리므로(배경이 차 있으면 흰 네모가 됨) 배경을 비운다. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <text x="48" y="50" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-weight="800" font-size="80" fill="#ffffff">f</text>
+</svg>

@@ -26,8 +26,10 @@ self.addEventListener("push", (event) => {
   const title = data.title || "FINZ";
   const options = {
     body: data.body || "",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-192.png", // 알림 카드의 큰 컬러 아이콘(코랄 f)
+    // 상태바 작은 아이콘은 안드로이드가 알파(실루엣)만 쓴다 — 컬러 PNG 를 주면 흰 네모가 된다.
+    // 투명 배경 + 흰 "f" 모노크롬이라야 f 실루엣으로 렌더된다.
+    badge: "/badge-96.png",
     tag: data.tag || undefined,
     // tag 가 같아도 새 알림이 사용자에게 한 번 더 뜨도록(메신저 기본 동작).
     renotify: Boolean(data.tag),
