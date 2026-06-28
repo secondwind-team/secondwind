@@ -23,6 +23,7 @@ import {
   type FinzStoredChatMessage,
 } from "@/lib/common/services/finz-chat";
 import type { FinzPartyPick, FinzPartyStance, FinzPartySummary } from "@/lib/common/services/finz";
+import type { FinzPortfolioCardPayload } from "@/lib/common/services/finz-portfolio";
 
 export const MAX_TEXT_LENGTH = 280;
 export const TEXT_RATE_LIMIT_MS = 800;
@@ -251,6 +252,23 @@ export async function appendChartMessage(
   return appendChatMessage(id, stored);
 }
 
+// 포트폴리오 카드(보유 현황/섹터 분석) — finz 메시지로 타임라인에 append. 페이로드는 생성 시점 스냅샷.
+export async function appendPortfolioCardMessage(
+  id: string,
+  payload: FinzPortfolioCardPayload,
+): Promise<{ status: "ok" | "not-found"; message?: FinzStoredChatMessage }> {
+  const stored: FinzStoredChatMessage = {
+    id: newId(),
+    role: "finz",
+    authorId: "finz",
+    authorName: "FINZ",
+    kind: "portfolio",
+    payload,
+    createdAt: new Date().toISOString(),
+  };
+  return appendChatMessage(id, stored);
+}
+
 // 내부: 꼬리 N개를 파싱된 FinzChatMessage(seq 포함)로. 레이트 리밋/요약 조회용.
 async function readWindow(id: string, count: number): Promise<FinzChatMessage[]> {
   const redis = getClient();
@@ -317,6 +335,9 @@ export async function getRoomLastMessage(id: string): Promise<{ text: string; cr
       break;
     case "chart":
       text = `📈 ${obj.payload.label || obj.payload.symbol} 차트`;
+      break;
+    case "portfolio":
+      text = obj.payload.view === "sector" ? "📊 섹터 분석" : `📊 ${obj.payload.scopeLabel}`;
       break;
     default:
       return null;
@@ -405,6 +426,22 @@ export async function acquireRecapLock(id: string): Promise<boolean> {
 export async function releaseRecapLock(id: string): Promise<void> {
   const redis = getClient();
   if (redis) await redis.del(recapLockKey(id));
+}
+
+// 포트폴리오 LLM 호출(추출·현재가·섹터) 동시성 락 — 동시 중복 호출 차단. finally 즉시 해제. TTL 은 크래시 안전망.
+const PORTFOLIO_LOCK_TTL_SECONDS = 90;
+function portfolioLockKey(id: string): string {
+  return `${chatKey(id)}:portfolio-lock`;
+}
+export async function acquirePortfolioLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(portfolioLockKey(id), "1", { nx: true, ex: PORTFOLIO_LOCK_TTL_SECONDS });
+  return res === "OK";
+}
+export async function releasePortfolioLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(portfolioLockKey(id));
 }
 
 // @finz 의도 분류 동시성 락 — ask/pick/summary 와 동일하게 LLM 호출 표면을 보호(동시 분류 중복 차단).

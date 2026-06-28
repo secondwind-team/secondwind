@@ -283,8 +283,37 @@ export function FinzPartyRoom({
       void scheduleRecurring(question);
       return;
     }
+    if (intent === "portfolio") {
+      // 매수/매도 기록 · 보유현황·수익률 조회 · 섹터 분석 — 서버가 추출·계산해 메시지/카드 append.
+      void handlePortfolio(question);
+      return;
+    }
     // qa(기본) — 기존 그라운딩 답변.
     void ask(question);
+  }
+
+  // @finz 포트폴리오 — 서버가 기록/조회/섹터를 판단해 확인 메시지나 포트폴리오 카드를 append, 폴링으로 뜬다.
+  async function handlePortfolio(text: string) {
+    setAskBusy(true); // 카드/현재가 조회가 오는 동안 타이핑 인디케이터
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/portfolio/handle`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, text }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { busy?: boolean };
+      if (!res.ok) setActionError("포트폴리오를 처리하지 못했어. 잠시 뒤 다시 시도해줘.");
+      else if (json.busy) setActionError("포트폴리오를 정리하는 중이야 — 잠깐 뒤 다시 물어봐줘.");
+      await refetch();
+      setTimeout(() => void refetch(), 1500);
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      setAskBusy(false);
+      bumpStick();
+    }
   }
 
   // @finz 매일 아침 시황 구독/해지 → 서버가 토글 + 확인 메시지 append, 폴링으로 뜬다.

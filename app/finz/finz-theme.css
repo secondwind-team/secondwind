@@ -19,6 +19,9 @@
   --fz-amber-tint: #fff6e4;
   --fz-amber-ink: #b6791b;
   --fz-error: #e05b4b;
+  /* 손익 의미색(포트폴리오 전용) — emerald 가 아닌 차분한 그린/레드. finz 네임스페이스 안에서만. */
+  --fz-gain: #2f9e6b;
+  --fz-loss: #d8503f;
   --fz-display: "Cabinet Grotesk", "Pretendard Variable", Pretendard, sans-serif;
   --fz-body: "Pretendard Variable", Pretendard, system-ui, sans-serif;
   --fz-r-sm: 14px;

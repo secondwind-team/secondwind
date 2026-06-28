@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { listRecurringForRoom } from "@/lib/server/finz-recurring-store";
 import { isBriefingSubscribed, MORNING_ECONOMY_BRIEFING_ID } from "@/lib/server/finz-briefing-store";
+import { listTrades } from "@/lib/server/finz-portfolio-store";
 import { FinzRoomSettings } from "../../../_components/finz-room-settings";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +31,10 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
     );
   }
 
-  const [items, briefingSubscribed] = await Promise.all([
+  const [items, briefingSubscribed, trades] = await Promise.all([
     listRecurringForRoom(groupId),
     isBriefingSubscribed(MORNING_ECONOMY_BRIEFING_ID, groupId),
+    listTrades(groupId),
   ]);
 
   const roomTitle =
@@ -45,6 +47,7 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
       memberIds={group.members.map((m) => m.memberId)}
       initialItems={items}
       initialBriefingSubscribed={briefingSubscribed}
+      initialTrades={trades}
     />
   );
 }

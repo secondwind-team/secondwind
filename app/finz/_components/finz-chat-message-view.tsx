@@ -6,6 +6,7 @@ import { formatKstTime } from "@/lib/common/services/finz-time";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
 import { FinzChartBubble } from "./finz-chart-bubble";
+import { FinzPortfolioCard } from "./finz-portfolio-card";
 import { STANCE_EMOJI } from "./finz-position-input";
 
 // 메시지 본문 — @finz 같은 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
@@ -118,6 +119,18 @@ export function FinzChatMessageView({
         <div className="min-w-0 flex-1 space-y-1">
           <FinzHeader label="FINZ · 차트" iso={message.createdAt} />
           <FinzChartBubble payload={message.payload} />
+        </div>
+      </div>
+    );
+  }
+
+  if (message.kind === "portfolio") {
+    return (
+      <div className="flex items-start gap-2">
+        <FinzAvatar />
+        <div className="min-w-0 flex-1 space-y-1">
+          <FinzHeader label={message.payload.view === "sector" ? "FINZ · 섹터 분석" : "FINZ · 포트폴리오"} iso={message.createdAt} />
+          <FinzPortfolioCard payload={message.payload} />
         </div>
       </div>
     );

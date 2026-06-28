@@ -125,6 +125,7 @@ export function FinzChatTimeline({
     if (last.kind === "pick") setLiveMsg("FINZ가 우정주를 뽑았어요.");
     else if (last.kind === "summary") setLiveMsg("파티 요약이 도착했어요.");
     else if (last.kind === "chart") setLiveMsg("FINZ가 차트를 보여줬어요.");
+    else if (last.kind === "portfolio") setLiveMsg("FINZ가 포트폴리오를 정리했어요.");
     else if (last.kind === "system") setLiveMsg(last.text);
     else setLiveMsg(`${last.authorName}님이 메시지를 보냈어요.`);
   }, [messages, myMemberId]);
