@@ -1,9 +1,10 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FinzChatMessage, FinzNudge } from "@/lib/common/services/finz-chat";
 import { selectLatestPick } from "@/lib/common/services/finz-chat";
+import { formatKstDate, kstDayKey } from "@/lib/common/services/finz-time";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import { FinzNudgeBubble } from "./finz-nudge-bubble";
 
@@ -11,6 +12,19 @@ export type PendingText = { tempId: string; text: string; status: "sending" | "f
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+// 카카오톡식 날짜 구분선 — 하루가 바뀌면 한 번 가운데 pill 로 "yyyy년 M월 D일 (요일)".
+function DateDivider({ iso }: { iso: string }) {
+  const label = formatKstDate(iso);
+  if (!label) return null;
+  return (
+    <div className="my-2 flex justify-center">
+      <span className="rounded-[var(--fz-r-full)] bg-[var(--fz-surface-2)] px-3 py-1 text-[11px] font-medium text-[var(--fz-muted)]">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 // 메시지 타임라인 — flex-1 스크롤 영역. 내 행동엔 항상 바닥으로, 상대/봇 메시지엔 바닥 근처일 때만
@@ -115,24 +129,38 @@ export function FinzChatTimeline({
     else setLiveMsg(`${last.authorName}님이 메시지를 보냈어요.`);
   }, [messages, myMemberId]);
 
+  // 보내는 중인 메시지(아직 createdAt 없음)가 마지막 실제 메시지와 다른 날(자정 넘김)이면 그 앞에도 구분선.
+  const nowIso = new Date().toISOString();
+  const lastReal = messages[messages.length - 1];
+  const pendingNeedsDivider =
+    pending.length > 0 && (!lastReal || kstDayKey(lastReal.createdAt) !== kstDayKey(nowIso));
+
   return (
     <div className="relative min-h-0 flex-1">
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveMsg}
       </div>
       <div ref={scrollRef} onScroll={onScroll} className="h-full space-y-3 overflow-y-auto px-4 py-4">
-        {messages.map((m) => (
-          <FinzChatMessageView
-            key={m.id}
-            message={m}
-            myMemberId={myMemberId}
-            isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
-            onReroll={onReroll}
-            superseded={m.kind === "position" && supersededIds.has(m.id)}
-            changed={m.kind === "position" && changedIds.has(m.id)}
-          />
-        ))}
+        {messages.map((m, i) => {
+          // 직전 메시지와 KST 날짜가 다르면(또는 첫 메시지면) 그 앞에 날짜 구분선을 한 번 넣는다.
+          const prev = messages[i - 1];
+          const showDate = !prev || kstDayKey(prev.createdAt) !== kstDayKey(m.createdAt);
+          return (
+            <Fragment key={m.id}>
+              {showDate && <DateDivider iso={m.createdAt} />}
+              <FinzChatMessageView
+                message={m}
+                myMemberId={myMemberId}
+                isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
+                onReroll={onReroll}
+                superseded={m.kind === "position" && supersededIds.has(m.id)}
+                changed={m.kind === "position" && changedIds.has(m.id)}
+              />
+            </Fragment>
+          );
+        })}
 
+        {pendingNeedsDivider && <DateDivider iso={nowIso} />}
         {pending.map((p) => (
           <div key={p.tempId} className="flex flex-col items-end gap-0.5">
             <div className="fz-msg fz-msg--me whitespace-pre-wrap break-words opacity-70">{p.text}</div>
