@@ -133,14 +133,23 @@ export function stripFinzMention(text: string): string {
 }
 
 // @finz 멘션의 "의도" — 서버 LLM 분류 결과. 클라이언트가 이걸로 기능을 분기한다.
-//  pick=우정주 / summary=AI 요약 / position=내 입장 / chart=종목 차트 / briefing=매일 아침 시황 구독·해지 / qa=그 외(기본).
-export type FinzMentionIntent = "pick" | "summary" | "position" | "chart" | "briefing" | "qa";
+//  pick=우정주 / summary=AI 요약 / position=내 입장 / chart=종목 차트 / briefing=매일 아침 시황 구독·해지 /
+//  schedule=임의의 정기 메시지 등록(매일/매주/N분마다 보내줘) / qa=그 외(기본).
+export type FinzMentionIntent =
+  | "pick"
+  | "summary"
+  | "position"
+  | "chart"
+  | "briefing"
+  | "schedule"
+  | "qa";
 export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = [
   "pick",
   "summary",
   "position",
   "chart",
   "briefing",
+  "schedule",
   "qa",
 ] as const;
 export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent {
@@ -150,6 +159,7 @@ export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent 
     value === "position" ||
     value === "chart" ||
     value === "briefing" ||
+    value === "schedule" ||
     value === "qa"
   );
 }
