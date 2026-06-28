@@ -108,6 +108,14 @@
   color: #fff;
   background: rgb(255 255 255 / 0.28);
 }
+/* 입력창에서 타이핑 중 멘션 강조(하이라이트 오버레이용) — textarea 글자와 1:1 정렬돼야 하므로
+   padding/font-weight 로 글자 advance 폭을 바꾸지 않는다(캐럿 어긋남 방지). 배지 느낌은 배경+라운드+box-shadow 로만. */
+.fz-mention-live {
+  color: var(--fz-coral-ink);
+  background: var(--fz-coral-tint);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--fz-coral-tint);
+}
 
 /* 칩 (stance/태그 선택) */
 .fz-chip {
