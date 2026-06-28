@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { getChatTail } from "@/lib/server/finz-chat-store";
+import { resolveAccount } from "@/lib/server/finz-account";
 import { FinzPartyRoom } from "../../_components/finz-party-room";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +36,12 @@ export default async function FinzPartyRoomPage({ params }: Props) {
     );
   }
 
-  // 첫 페인트에 전체 대화를 SSR(깜빡임 없음). 멤버/합류 여부는 룸이 클라이언트에서 계정으로 결정.
-  const tail = await getChatTail(groupId, -1);
+  // 멤버에게만 대화를 SSR 시드한다(비멤버에겐 페이지 소스로도 메시지·포트폴리오가 새지 않게).
+  // 비멤버는 빈 시드 → 룸이 join-view 를 보여주고, 합류 후 폴링(세션 인증)으로 대화가 채워진다.
+  // 멤버 미리보기(아바타·제목)는 group.members 로 충분하므로 그대로 시드한다.
+  const me = await resolveAccount();
+  const isMember = me.status === "ok" && group.members.some((m) => m.memberId === me.account.accountId);
+  const tail = isMember ? await getChatTail(groupId, -1) : { messages: [], cursor: -1 };
 
   return (
     <FinzPartyRoom

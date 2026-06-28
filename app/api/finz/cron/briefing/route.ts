@@ -8,7 +8,7 @@ import {
   releaseBriefingRun,
   unsubscribeBriefing,
 } from "@/lib/server/finz-briefing-store";
-import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { getBlockedModels, recordCall, recordLlmQuota } from "@/lib/server/quota-store";
 import { getFinzGroup } from "@/lib/server/finz-group-store";
 import { isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
@@ -50,6 +50,7 @@ export async function GET(req: Request) {
     { system: BRIEFING_SYSTEM_PROMPT, user: BRIEFING_USER_PROMPT, temperature: 0.4, maxTokens: 2048, thinkingBudget: 0, grounded: true },
     { skipModels },
   );
+  void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
   if (result.status !== "ok" || !result.text.trim()) {
     // 일시 실패(쿼터·그라운딩 장애)는 actionable 하지 않으니 200 으로(워크플로 빨강 방지) + 멱등 락 해제(재시도 허용).
     await releaseBriefingRun(MORNING_ECONOMY_BRIEFING_ID, dateKey);

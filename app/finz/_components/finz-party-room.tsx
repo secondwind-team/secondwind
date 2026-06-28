@@ -63,9 +63,11 @@ export function FinzPartyRoom({
   const [pickBusy, setPickBusy] = useState(false);
   const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴/nudge)
   const [askBusy, setAskBusy] = useState(false);
+  const [mentionBusy, setMentionBusy] = useState(false); // @finz 의도 분류~기능 응답까지 타이핑 인디케이터 유지
   const [positionSubmitting, setPositionSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [needsCharacter, setNeedsCharacter] = useState(false); // 합류 실패가 '캐릭터 없음'이면 프로필 CTA 노출
   const [stanceMode, setStanceMode] = useState(false);
   const [stickSignal, setStickSignal] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -202,11 +204,15 @@ export function FinzPartyRoom({
   async function join() {
     setJoining(true);
     setJoinError(null);
+    setNeedsCharacter(false);
     try {
       const res = await fetch(`/api/finz/rooms/${groupId}/join`, { method: "POST" });
       const json = (await res.json()) as { status: string; reason?: string };
       if (res.status === 409) throw new Error("이 대화방은 정원이 가득 찼어요.");
-      if (json.reason === "my-character") throw new Error("프로필에서 캐릭터를 먼저 소환해야 들어갈 수 있어.");
+      if (json.reason === "my-character") {
+        setNeedsCharacter(true); // join-view 가 '캐릭터 만들러 가기' CTA 를 띄우게(막다른 길 방지)
+        throw new Error("들어가려면 먼저 캐릭터를 만들어야 해.");
+      }
       if (!res.ok || json.status !== "ok") throw new Error("들어가지 못했어요. 잠시 뒤 다시 시도해주세요.");
       await refetch();
     } catch (e) {
@@ -216,17 +222,25 @@ export function FinzPartyRoom({
     }
   }
 
-  async function sendText(text: string, reuseId?: string) {
+  async function sendText(text: string, reuseId?: string, attempt = 0) {
     const tempId = reuseId ?? crypto.randomUUID();
-    setPending((p) => [...p, { tempId, text, status: "sending" }]);
-    bumpStick();
+    if (attempt === 0) {
+      setPending((p) => [...p, { tempId, text, status: "sending" }]);
+      bumpStick();
+    }
     try {
       const res = await fetch(`/api/finz/party/${groupId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ memberId: myMemberId, text, id: tempId }),
       });
-      const json = (await res.json()) as { status: string };
+      // 빠른 연속 전송이 800ms 레이트리밋(429)에 걸려도 '전송 실패'로 보이지 않게 — 같은 id 라 서버가
+      // 멱등 처리하므로 잠깐 뒤 1회 자동 재전송한다('보내는 중'이 잠깐 길어질 뿐, 메시지는 안 잃는다).
+      if (res.status === 429 && attempt < 1) {
+        await new Promise((r) => setTimeout(r, 900));
+        return sendText(text, tempId, attempt + 1);
+      }
+      const json = (await res.json().catch(() => ({}))) as { status?: string };
       if (!res.ok || json.status !== "ok") throw new Error("send-failed");
       await refetch();
       setPending((p) => p.filter((x) => x.tempId !== tempId));
@@ -248,79 +262,88 @@ export function FinzPartyRoom({
   // @finz 멘션 → 서버에 의도 분류 요청 후 분기. 분류 실패/qa 면 기존 그라운딩 답변(ask)으로 폴백.
   // pick/summary/position 은 기존 핸들러를 재사용하되, 전제조건(정원·픽·입장)을 먼저 가드해 친절히 안내.
   async function handleMention(question: string) {
-    setActionError(null);
-    let intent: string = "qa";
-    let symbol: string | undefined;
-    let subscribe: boolean | undefined;
+    // 의도 분류(~1s)부터 분기된 기능의 응답까지 타이핑 인디케이터를 켜둔다 — 멘션 직후 봇이 '죽은 것처럼'
+    // 보이지 않게(분기를 await 로 기다려, 차트·브리핑·스케줄처럼 자체 busy 가 없는 경로도 공백이 안 생김).
+    setMentionBusy(true);
+    bumpStick();
     try {
-      const res = await fetch(`/api/finz/party/${groupId}/intent`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId: myMemberId, text: question }),
-      });
-      const json = (await res.json().catch(() => ({}))) as {
-        status?: string;
-        intent?: string;
-        symbol?: string;
-        subscribe?: boolean;
-      };
-      if (json.status === "ok" && typeof json.intent === "string") intent = json.intent;
-      if (typeof json.symbol === "string") symbol = json.symbol;
-      if (typeof json.subscribe === "boolean") subscribe = json.subscribe;
-    } catch {
-      // 분류 호출 실패 → qa 폴백.
-    }
+      setActionError(null);
+      let intent: string = "qa";
+      let symbol: string | undefined;
+      let subscribe: boolean | undefined;
+      try {
+        const res = await fetch(`/api/finz/party/${groupId}/intent`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ memberId: myMemberId, text: question }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          status?: string;
+          intent?: string;
+          symbol?: string;
+          subscribe?: boolean;
+        };
+        if (json.status === "ok" && typeof json.intent === "string") intent = json.intent;
+        if (typeof json.symbol === "string") symbol = json.symbol;
+        if (typeof json.subscribe === "boolean") subscribe = json.subscribe;
+      } catch {
+        // 분류 호출 실패 → qa 폴백.
+      }
 
-    // 분류 대기 중 폴링으로 상태가 바뀌었을 수 있으니 최신 커밋 상태(ref)로 가드한다.
-    const live = liveRef.current;
-    if (intent === "pick") {
-      if (!live.full) {
-        setActionError("친구가 들어와야 우정주를 뽑을 수 있어. 먼저 초대해봐!");
+      // 분류 대기 중 폴링으로 상태가 바뀌었을 수 있으니 최신 커밋 상태(ref)로 가드한다.
+      const live = liveRef.current;
+      if (intent === "pick") {
+        if (!live.full) {
+          setActionError("친구가 들어와야 우정주를 뽑을 수 있어. 먼저 초대해봐!");
+          return;
+        }
+        await openPick(false);
         return;
       }
-      void openPick(false);
-      return;
-    }
-    if (intent === "summary") {
-      // 대화 요약(general) — 전제조건 없음. 질문 텍스트를 그대로 보내 명시 기간(어제부터/최근 1시간/N개)을 서버가 파싱.
-      void openRecap(question);
-      return;
-    }
-    if (intent === "position") {
-      if (!selectLatestPick(live.messages)) {
-        setActionError("먼저 우정주를 뽑아줘. 그 주제에 대한 입장을 남길 수 있어.");
+      if (intent === "summary") {
+        // 대화 요약(general) — 전제조건 없음. 질문 텍스트를 그대로 보내 명시 기간(어제부터/최근 1시간/N개)을 서버가 파싱.
+        await openRecap(question);
         return;
       }
-      setStanceMode(true);
-      return;
-    }
-    if (intent === "chart") {
-      // 심볼이 정규화되면 차트 메시지, 아니면 일반 질문으로 폴백(가짜 차트 방지).
-      const normalized = normalizeChartSymbol(symbol);
-      if (normalized) {
-        void openChart(normalized, question);
+      if (intent === "position") {
+        if (!selectLatestPick(live.messages)) {
+          setActionError("먼저 우정주를 뽑아줘. 그 주제에 대한 입장을 남길 수 있어.");
+          return;
+        }
+        setStanceMode(true);
         return;
       }
-      void ask(question);
-      return;
+      if (intent === "chart") {
+        // 심볼이 정규화되면 차트 메시지, 아니면 일반 질문으로 폴백(가짜 차트 방지).
+        const normalized = normalizeChartSymbol(symbol);
+        if (normalized) {
+          await openChart(normalized, question);
+          return;
+        }
+        await ask(question);
+        return;
+      }
+      if (intent === "briefing") {
+        // 매일 아침 시황 구독/해지(기본 구독). 서버가 토글 + 확인 메시지 append.
+        await subscribeBriefing(subscribe !== false);
+        return;
+      }
+      if (intent === "schedule") {
+        // 임의의 정기 메시지 등록 — 서버가 자연어에서 주기·시각·내용을 추출해 등록 + 확인 메시지 append.
+        await scheduleRecurring(question);
+        return;
+      }
+      if (intent === "portfolio") {
+        // 매수/매도 기록 · 보유현황·수익률 조회 · 섹터 분석 — 서버가 추출·계산해 메시지/카드 append.
+        await handlePortfolio(question);
+        return;
+      }
+      // qa(기본) — 기존 그라운딩 답변.
+      await ask(question);
+    } finally {
+      setMentionBusy(false);
+      bumpStick();
     }
-    if (intent === "briefing") {
-      // 매일 아침 시황 구독/해지(기본 구독). 서버가 토글 + 확인 메시지 append.
-      void subscribeBriefing(subscribe !== false);
-      return;
-    }
-    if (intent === "schedule") {
-      // 임의의 정기 메시지 등록 — 서버가 자연어에서 주기·시각·내용을 추출해 등록 + 확인 메시지 append.
-      void scheduleRecurring(question);
-      return;
-    }
-    if (intent === "portfolio") {
-      // 매수/매도 기록 · 보유현황·수익률 조회 · 섹터 분석 — 서버가 추출·계산해 메시지/카드 append.
-      void handlePortfolio(question);
-      return;
-    }
-    // qa(기본) — 기존 그라운딩 답변.
-    void ask(question);
   }
 
   // @finz 포트폴리오 — 서버가 기록/조회/섹터를 판단해 확인 메시지나 포트폴리오 카드를 append, 폴링으로 뜬다.
@@ -551,6 +574,7 @@ export function FinzPartyRoom({
         members={members}
         joining={joining}
         error={joinError}
+        needsCharacter={needsCharacter}
         onJoin={join}
       />
     );
@@ -588,7 +612,7 @@ export function FinzPartyRoom({
         myMemberId={myMemberId}
         mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
-        aiBusy={pickBusy || recapBusy || askBusy}
+        aiBusy={pickBusy || recapBusy || askBusy || mentionBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}

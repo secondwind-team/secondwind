@@ -5,7 +5,7 @@ import { buildSummaryTranscript } from "@/lib/common/services/finz-summary";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { appendAnswerMessage, getChatTail } from "@/lib/server/finz-chat-store";
 import { createRecurring } from "@/lib/server/finz-recurring-store";
-import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { getBlockedModels, recordCall, recordLlmQuota } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
@@ -55,6 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
       },
       { skipModels },
     );
+    void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
     if (result.status === "ok") {
       void recordCall(result.model, result.usage.total).catch(() => {});
       try {

@@ -10,7 +10,7 @@
 // TTL 이 곧 "리셋" 이라 별도 cron 불필요.
 
 import { Redis } from "@upstash/redis";
-import { GEMINI_MODELS, type GeminiModel } from "@/lib/common/llm";
+import { GEMINI_MODELS, type GeminiModel, type LlmResult } from "@/lib/common/llm";
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -104,6 +104,16 @@ export async function markBlocked(
   } catch {
     // 무시
   }
+}
+
+// callLlm 결과에 담긴 429(rateLimitHits)를 KV 에 기록한다 — 다음 호출이 getBlockedModels 로 사전 skip.
+// 이게 없으면(finz 라우트가 그동안 호출하지 않았다) 한도 도달 후에도 매 호출이 flash→flash-lite 로
+// 429 round-trip 을 반복한다. callLlm 직후 한 줄로 호출하면 된다(성공·실패 결과 모두 hits 를 실어 보냄).
+export async function recordLlmQuota(result: LlmResult): Promise<void> {
+  if (result.status !== "ok" && result.status !== "error") return;
+  const hits = result.rateLimitHits;
+  if (!hits || hits.length === 0) return;
+  await Promise.all(hits.map((h) => markBlocked(h.model, h.dim, h.retryMs).catch(() => {})));
 }
 
 // 호출 전 사전 skip 용 — 어떤 dim 이라도 차단된 모델 목록.

@@ -15,7 +15,7 @@ import {
   getFinzProfile,
   upsertDailyPick,
 } from "@/lib/server/finz-store";
-import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { getBlockedModels, recordCall, recordLlmQuota } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
@@ -87,6 +87,7 @@ export async function POST(req: Request) {
     },
     { skipModels },
   );
+  void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
 
   if (result.status === "ok") {
     let parsed: unknown;

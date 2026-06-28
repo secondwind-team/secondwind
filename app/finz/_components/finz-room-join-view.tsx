@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { LogIn } from "lucide-react";
 import { buildFinzProfile } from "@/lib/common/services/finz";
 import type { FinzRoomKind } from "@/lib/common/services/finz-account";
@@ -13,6 +14,7 @@ export function FinzRoomJoinView({
   members,
   joining,
   error,
+  needsCharacter,
   onJoin,
 }: {
   kind: FinzRoomKind;
@@ -20,6 +22,7 @@ export function FinzRoomJoinView({
   members: FinzChatMemberLite[];
   joining: boolean;
   error: string | null;
+  needsCharacter?: boolean;
   onJoin: () => void;
 }) {
   const names = members.map((m) => m.displayName);
@@ -52,6 +55,12 @@ export function FinzRoomJoinView({
         {joining ? "들어가는 중…" : "대화방 들어가기"}
       </button>
       {error && <p className="fz-alert mt-3 max-w-xs">{error}</p>}
+      {needsCharacter && (
+        // 합류가 '캐릭터 없음'으로 막혔을 때의 탈출구 — 막다른 길 대신 프로필로 보낸다.
+        <Link href="/finz/profile" className="fz-btn fz-btn--ghost mt-3 w-full max-w-xs">
+          캐릭터 만들러 가기
+        </Link>
+      )}
     </div>
   );
 }
