@@ -63,6 +63,21 @@ const KNOWN_SYMBOLS: Record<string, string> = {
   amd: "NASDAQ:AMD",
   코인베이스: "NASDAQ:COIN",
   coinbase: "NASDAQ:COIN",
+  // 암호화폐(TradingView BINANCE 쌍). 차트/포트폴리오 심볼 해석용.
+  비트코인: "BINANCE:BTCUSDT",
+  bitcoin: "BINANCE:BTCUSDT",
+  btc: "BINANCE:BTCUSDT",
+  이더리움: "BINANCE:ETHUSDT",
+  ethereum: "BINANCE:ETHUSDT",
+  eth: "BINANCE:ETHUSDT",
+  솔라나: "BINANCE:SOLUSDT",
+  solana: "BINANCE:SOLUSDT",
+  sol: "BINANCE:SOLUSDT",
+  리플: "BINANCE:XRPUSDT",
+  xrp: "BINANCE:XRPUSDT",
+  도지코인: "BINANCE:DOGEUSDT",
+  도지: "BINANCE:DOGEUSDT",
+  doge: "BINANCE:DOGEUSDT",
 };
 const KNOWN_NAMES_BY_LENGTH = Object.keys(KNOWN_SYMBOLS).sort((a, b) => b.length - a.length);
 

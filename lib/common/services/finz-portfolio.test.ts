@@ -152,6 +152,8 @@ describe("resolveKnownSymbol / inferTradeAction (LLM 누락 보강)", () => {
     expect(resolveKnownSymbol("엔비디아 더 살까")).toBe("NASDAQ:NVDA");
     expect(resolveKnownSymbol("삼성전자")).toBe("KRX:005930");
     expect(resolveKnownSymbol("Tesla")).toBe("NASDAQ:TSLA");
+    expect(resolveKnownSymbol("비트코인 차트")).toBe("BINANCE:BTCUSDT");
+    expect(resolveKnownSymbol("SOL")).toBe("BINANCE:SOLUSDT");
     expect(resolveKnownSymbol("듣보종목")).toBeNull();
   });
   it("긴 이름 우선 매칭(삼성전자 vs 삼성 충돌 방지 의도)", () => {
