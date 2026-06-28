@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildFinzTranscript,
   computeNextNudge,
   isFinzStoredChatMessage,
   mentionsFinz,
@@ -265,5 +266,61 @@ describe("isFinzStoredChatMessage", () => {
     expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { symbol: "", label: "x" } })).toBe(false); // 빈 심볼
     expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { label: "x" } })).toBe(false); // symbol 누락
     expect(isFinzStoredChatMessage({ ...base, role: "bot", kind: "text", text: "x" })).toBe(false); // 잘못된 role
+  });
+});
+
+describe("buildFinzTranscript", () => {
+  const finzText = (seq: number, t: string): FinzChatMessage => ({
+    id: `f${seq}`, seq, role: "finz", authorId: "finz", authorName: "FINZ", kind: "text", text: t, createdAt: "t",
+  });
+  const memberText = (seq: number, authorId: string, t: string): FinzChatMessage => ({
+    id: `m${seq}`, seq, role: "member", authorId, authorName: authorId, kind: "text", text: t, createdAt: "t",
+  });
+
+  it("멤버는 displayName, finz 는 'finz' 로 화자를 도출한다", () => {
+    const turns = buildFinzTranscript([memberText(1, "a", "안녕"), finzText(2, "반가워")], MEMBERS);
+    expect(turns).toEqual([
+      { speaker: "지헌", text: "안녕" },
+      { speaker: "finz", text: "반가워" },
+    ]);
+  });
+
+  it("비텍스트 메시지(픽·요약·차트·입장)는 행동 한 줄로 요약한다", () => {
+    const chart: FinzChatMessage = {
+      id: "c1", seq: 4, role: "finz", authorId: "finz", authorName: "FINZ", kind: "chart",
+      payload: { symbol: "NASDAQ:TSLA", label: "테슬라" }, createdAt: "t",
+    };
+    const turns = buildFinzTranscript([pick(1), position(2, "a", "관망", "지켜볼래"), summary(3), chart], MEMBERS);
+    expect(turns).toEqual([
+      { speaker: "finz", text: "(우정주 테마 '구독 경제' 를 뽑음)" },
+      { speaker: "지헌", text: "(입장) 관망 · 지켜볼래" },
+      { speaker: "finz", text: "(파티 요약) s" },
+      { speaker: "finz", text: "(테슬라 차트를 보여줌)" },
+    ]);
+  });
+
+  it("system 메시지는 맥락에서 생략한다", () => {
+    const sys: FinzChatMessage = {
+      id: "s1", seq: 2, role: "system", authorId: "system", authorName: "", kind: "system", text: "입장했어요", createdAt: "t",
+    };
+    const turns = buildFinzTranscript([memberText(1, "a", "안녕"), sys, finzText(3, "응")], MEMBERS);
+    expect(turns).toEqual([
+      { speaker: "지헌", text: "안녕" },
+      { speaker: "finz", text: "응" },
+    ]);
+  });
+
+  it("최근 maxTurns 발화만 남긴다(기본 8)", () => {
+    const msgs = Array.from({ length: 12 }, (_, i) => memberText(i + 1, "a", `m${i + 1}`));
+    const turns = buildFinzTranscript(msgs, MEMBERS);
+    expect(turns).toHaveLength(8);
+    expect(turns[0]?.text).toBe("m5"); // 마지막 8개 → m5..m12
+    expect(turns[7]?.text).toBe("m12");
+    expect(buildFinzTranscript(msgs, MEMBERS, 3)).toHaveLength(3);
+  });
+
+  it("멤버 목록에 없는 authorId 는 '친구' 로 폴백한다", () => {
+    const turns = buildFinzTranscript([memberText(1, "unknown", "어")], MEMBERS);
+    expect(turns).toEqual([{ speaker: "친구", text: "어" }]);
   });
 });
