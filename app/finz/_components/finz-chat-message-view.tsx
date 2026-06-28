@@ -3,6 +3,7 @@
 import { Sparkles } from "lucide-react";
 import { splitByMentionTokens, type FinzChatMessage } from "@/lib/common/services/finz-chat";
 import { formatKstTime } from "@/lib/common/services/finz-time";
+import { FinzRichText } from "./finz-rich-text";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
 import { FinzChartBubble } from "./finz-chart-bubble";
@@ -145,8 +146,8 @@ export function FinzChatMessageView({
         <FinzAvatar />
         <div className="min-w-0 flex-1 space-y-1">
           <FinzHeader label="FINZ" iso={message.createdAt} />
-          <div className="fz-bubble max-w-full whitespace-pre-wrap break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
-            <MessageBody text={message.text} mentionNames={mentionNames} />
+          <div className="fz-bubble max-w-full break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
+            <FinzRichText text={message.text} mentionNames={mentionNames} />
           </div>
         </div>
       </div>
