@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { callLlm } from "@/lib/common/llm";
 import { describeRecurring, normalizeRecurringInput } from "@/lib/common/services/finz-recurring";
+import { buildSummaryTranscript } from "@/lib/common/services/finz-summary";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
-import { appendAnswerMessage } from "@/lib/server/finz-chat-store";
+import { appendAnswerMessage, getChatTail } from "@/lib/server/finz-chat-store";
 import { createRecurring } from "@/lib/server/finz-recurring-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
 
@@ -35,14 +36,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
   }
 
+  // "위 내용/방금 그거" 같은 맥락 지시를 풀 수 있게 최근 대화(꼬리 12개)를 컨텍스트로 함께 넘긴다.
+  const tail = await getChatTail(groupId, -1);
+  const recentContext = buildSummaryTranscript(tail.messages.slice(-12), 2000);
+
   let normalized = null as ReturnType<typeof normalizeRecurringInput>;
   if (text) {
     const skipModels = await getBlockedModels();
     const result = await callLlm(
       {
         system: FINZ_SCHEDULE_EXTRACT_PROMPT,
-        // 사용자 문장은 데이터로만(프롬프트 인젝션 방어).
-        user: JSON.stringify({ userMessage: text }),
+        // 사용자 문장·최근 대화는 데이터로만(프롬프트 인젝션 방어).
+        user: JSON.stringify({ userMessage: text, recentContext }),
         temperature: 0,
         maxTokens: 256,
         thinkingBudget: 0,
@@ -91,6 +96,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
 const FINZ_SCHEDULE_EXTRACT_PROMPT = [
   "너는 FINZ 채팅방에서 사용자가 요청한 '정기 메시지'의 주기·시각·내용을 추출하는 추출기다.",
   "사용자는 '매일 9시에 물 마시라고 해줘' 처럼 언제·무엇을 보낼지 자연어로 말한다. 아래 필드로 구조화하라:",
+  "⚠️ 사용자가 '위 내용/방금 그거/이거/그 시황' 처럼 **앞선 대화를 가리키면**, userMessage 의 그 표현을 그대로 content 에 넣지 말고 recentContext(최근 대화)를 읽어 **실제 의도한 내용**으로 content 를 채워라. 그게 매번 갱신돼야 하는 시황·뉴스·날씨류면 contentKind='ai' 로 하고 content 에 그 '주제'를 적어라(예: recentContext 가 세계경제·암호화폐 시황 정리면 content='세계 경제·암호화폐 시황과 주요 뉴스 정리', contentKind='ai'). 특정 종목 차트면 contentKind='chart' + 심볼.",
   "- freq: 'daily'(매일) / 'weekly'(매주 특정 요일) / 'interval'(N분·N시간마다) 중 하나.",
   "- hour, minute: freq 가 daily/weekly 일 때 24시간제 시각. '아침'은 보통 9시, '점심'은 12시, '저녁'은 19시로 해석. minute 없으면 0.",
   "- weekday: freq 가 weekly 일 때 요일. 0=일,1=월,2=화,3=수,4=목,5=금,6=토.",
