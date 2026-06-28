@@ -158,6 +158,25 @@ export async function listDueRecurring(nowMs: number, limit: number): Promise<st
   return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
 }
 
+// 방의 due 정의 id 목록 — 열린 방에서 클라가 호출하는 tick 용(SET 읽어 nextRunAt<=now & enabled 만).
+// 전역 ZSET 대신 방 SET 만 보므로 GitHub cron 이 안 돌아도 그 방은 즉시 발송된다.
+export async function listDueIdsForRoom(roomId: string, nowMs: number): Promise<string[]> {
+  const defs = await listRecurringForRoom(roomId);
+  return defs.filter((d) => d.enabled && d.nextRunAt <= nowMs).map((d) => d.id);
+}
+
+// 방별 tick 스로틀 — 폴링마다 처리하지 않게 60초 잠금(NX). 잠금 획득 시에만 due 처리.
+const ROOM_TICK_THROTTLE_SECONDS = 60;
+function roomTickKey(roomId: string): string {
+  return `sw:finz:recurring:tick:${roomId}`;
+}
+export async function acquireRoomTick(roomId: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(roomTickKey(roomId), "1", { nx: true, ex: ROOM_TICK_THROTTLE_SECONDS });
+  return res === "OK";
+}
+
 // 발송 처리 동시성 락 — 동시 cron 이 같은 정의를 중복 발송하지 않게. 성공 후 advance 로 nextRunAt 전진.
 export async function acquireRecurringRunLock(id: string): Promise<boolean> {
   const redis = getClient();

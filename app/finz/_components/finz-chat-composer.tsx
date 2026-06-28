@@ -124,9 +124,9 @@ export function FinzChatComposer({
               aria-label={sheetOpen ? "액션 닫기" : "파티 액션 열기"}
               aria-expanded={sheetOpen}
               onClick={() => setSheetOpen((v) => !v)}
-              className="fz-btn fz-btn--ghost h-12 w-12 shrink-0 p-0"
+              className="fz-btn fz-btn--ghost h-11 w-11 shrink-0 p-0"
             >
-              {sheetOpen ? <X className="h-6 w-6" aria-hidden /> : <Plus className="h-6 w-6" aria-hidden />}
+              {sheetOpen ? <X className="h-7 w-7" aria-hidden /> : <Plus className="h-7 w-7" aria-hidden />}
             </button>
 
             {/* 멘션 하이라이트 오버레이: 타이핑 중에도 @finz 가 배지처럼 보이게.
@@ -164,7 +164,7 @@ export function FinzChatComposer({
                 }}
                 rows={1}
                 placeholder="메시지 보내기 · @finz 로 질문"
-                className="fz-input relative max-h-28 min-h-12 w-full resize-none py-2.5"
+                className="fz-input relative max-h-28 min-h-11 w-full resize-none py-2.5"
                 style={{ background: "transparent", color: "transparent", caretColor: "var(--fz-ink)" }}
               />
             </div>
@@ -174,9 +174,9 @@ export function FinzChatComposer({
               onClick={send}
               disabled={!text.trim() || sending}
               aria-label="보내기"
-              className="fz-btn h-12 w-12 shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-50"
+              className="fz-btn h-11 w-11 shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Send className="h-6 w-6" aria-hidden />
+              <Send className="h-7 w-7" aria-hidden />
             </button>
           </div>
         </>

@@ -86,10 +86,9 @@ describe("computeNextNudge", () => {
     expect(n?.cta).toBe("position");
     expect(n?.missingMemberName).toBeUndefined();
   });
-  it("내 입장만 있고 상대 없으면 상대 이름과 함께 대기", () => {
+  it("내 입장만 있고 상대 미입장이면 nudge 없음(행동 불가한 '대기' 버블은 안 띄움)", () => {
     const n = computeNextNudge([pick(1), position(2, "a")], MEMBERS, "a");
-    expect(n?.cta).toBe("position");
-    expect(n?.missingMemberName).toBe("태훈");
+    expect(n).toBeNull();
   });
   it("둘 다 입장 + 요약 없으면 summary", () => {
     const n = computeNextNudge([pick(1), position(2, "a"), position(3, "b")], MEMBERS, "a");
@@ -99,15 +98,14 @@ describe("computeNextNudge", () => {
     const n = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), summary(4)], MEMBERS, "a");
     expect(n).toBeNull();
   });
-  it("3인 방: 한 명이라도 미입장이면 summary 아니라 그 사람을 기다린다(조기 summary nudge 방지)", () => {
+  it("3인 방: 한 명이라도 미입장이면 조기 summary nudge 없음(null), 전원 입장해야 summary", () => {
     const THREE: FinzChatMemberLite[] = [
       ...MEMBERS,
       { memberId: "c", displayName: "민지", selectedCardIds: ["z"], joinedAt: "t" },
     ];
-    // a·b 입장했지만 c 미입장 → summary 가 아니라 미입장자(민지) 대기여야 한다.
+    // a·b 입장, c 미입장 → 행동 불가한 대기 버블 대신 nudge 없음(조기 summary 도 방지).
     const waiting = computeNextNudge([pick(1), position(2, "a"), position(3, "b")], THREE, "a");
-    expect(waiting?.cta).toBe("position");
-    expect(waiting?.missingMemberName).toBe("민지");
+    expect(waiting).toBeNull();
     // 셋 다 입장 → summary.
     const ready = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), position(4, "c")], THREE, "a");
     expect(ready?.cta).toBe("summary");

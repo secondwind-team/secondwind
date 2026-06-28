@@ -19,6 +19,70 @@ export type FinzTradeAction = "buy" | "sell";
 // personal = 기록한 사람의 개인 포트폴리오 / shared = 방 공동(pooled) 포트폴리오.
 export type FinzPortfolioScope = "personal" | "shared";
 
+// 자주 쓰는 종목명(한/영) → TradingView 심볼. LLM 이 심볼을 한글로 주거나 못 줄 때의 결정적 폴백.
+// (키는 소문자·공백제거 후 비교. 부분 포함 매칭이라 긴 이름을 먼저 검사한다.)
+const KNOWN_SYMBOLS: Record<string, string> = {
+  삼성전자: "KRX:005930",
+  sk하이닉스: "KRX:000660",
+  하이닉스: "KRX:000660",
+  네이버: "KRX:035420",
+  naver: "KRX:035420",
+  카카오: "KRX:035720",
+  kakao: "KRX:035720",
+  현대차: "KRX:005380",
+  기아: "KRX:000270",
+  lg에너지솔루션: "KRX:373220",
+  에코프로비엠: "KOSDAQ:247540",
+  테슬라: "NASDAQ:TSLA",
+  tesla: "NASDAQ:TSLA",
+  tsla: "NASDAQ:TSLA",
+  엔비디아: "NASDAQ:NVDA",
+  nvidia: "NASDAQ:NVDA",
+  nvda: "NASDAQ:NVDA",
+  애플: "NASDAQ:AAPL",
+  apple: "NASDAQ:AAPL",
+  aapl: "NASDAQ:AAPL",
+  마이크로소프트: "NASDAQ:MSFT",
+  microsoft: "NASDAQ:MSFT",
+  msft: "NASDAQ:MSFT",
+  아마존: "NASDAQ:AMZN",
+  amazon: "NASDAQ:AMZN",
+  amzn: "NASDAQ:AMZN",
+  알파벳: "NASDAQ:GOOGL",
+  구글: "NASDAQ:GOOGL",
+  google: "NASDAQ:GOOGL",
+  googl: "NASDAQ:GOOGL",
+  메타: "NASDAQ:META",
+  페이스북: "NASDAQ:META",
+  meta: "NASDAQ:META",
+  넷플릭스: "NASDAQ:NFLX",
+  netflix: "NASDAQ:NFLX",
+  nflx: "NASDAQ:NFLX",
+  팔란티어: "NASDAQ:PLTR",
+  pltr: "NASDAQ:PLTR",
+  amd: "NASDAQ:AMD",
+  코인베이스: "NASDAQ:COIN",
+  coinbase: "NASDAQ:COIN",
+};
+const KNOWN_NAMES_BY_LENGTH = Object.keys(KNOWN_SYMBOLS).sort((a, b) => b.length - a.length);
+
+// 종목명/문장에서 알려진 심볼을 찾는다(소문자·공백제거 후 포함 매칭, 긴 이름 우선). 없으면 null.
+export function resolveKnownSymbol(text: unknown): string | null {
+  if (typeof text !== "string") return null;
+  const t = text.toLowerCase().replace(/\s+/g, "");
+  if (!t) return null;
+  for (const name of KNOWN_NAMES_BY_LENGTH) {
+    if (t.includes(name)) return KNOWN_SYMBOLS[name]!;
+  }
+  return null;
+}
+
+// 문장에서 매수/매도 추론(LLM 이 action 을 빠뜨릴 때 폴백). 기본은 매수.
+export function inferTradeAction(text: unknown): FinzTradeAction {
+  const t = typeof text === "string" ? text : "";
+  return /매도|팔았|팔아|매각|sold|sell|익절|손절/.test(t) ? "sell" : "buy";
+}
+
 export type FinzTrade = {
   id: string;
   ownerId: string; // 기록한 멤버(=accountId)
@@ -262,7 +326,8 @@ export function normalizeTrade(raw: unknown, nowIso: string): NormalizedTrade | 
   const action: FinzTradeAction = r.action === "sell" ? "sell" : r.action === "buy" ? "buy" : (null as never);
   if (action !== "buy" && action !== "sell") return null;
 
-  const symbol = normalizeSymbol(r.symbol);
+  // 심볼: LLM 이 깔끔한 거래소:티커를 주면 그대로, 한글/누락이면 알려진 종목 사전(심볼 또는 라벨)으로 폴백.
+  const symbol = normalizeSymbol(r.symbol) ?? resolveKnownSymbol(r.symbol) ?? resolveKnownSymbol(r.label);
   if (!symbol) return null;
 
   const shares = toNum(r.shares);

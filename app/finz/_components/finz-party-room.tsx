@@ -167,6 +167,37 @@ export function FinzPartyRoom({
     };
   }, [isMember, refetch]);
 
+  // 정기 메시지 tick — 방이 열려 있는 동안 주기적으로 "발송 시각 지난 정기 메시지"를 즉시 보내게 한다.
+  // GitHub cron(잦은 스케줄)은 지연·누락이 잦아, 방을 보고 있을 땐 클라가 직접 트리거(서버가 60초 스로틀).
+  useEffect(() => {
+    if (!isMember) return;
+    let cancelled = false;
+    async function tick() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        const res = await fetch(`/api/finz/party/${groupId}/recurring/tick`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ memberId: myMemberId }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { fired?: number };
+        if (!cancelled && json.fired && json.fired > 0) {
+          await refetch();
+          setTimeout(() => void refetch(), 1500);
+        }
+      } catch {
+        // tick 은 best-effort — 실패해도 cron 백업이 있다.
+      }
+    }
+    const first = setTimeout(() => void tick(), 4000); // 진입 직후 한 번(밀린 발송 빠르게)
+    const timer = setInterval(() => void tick(), 60000); // 이후 60초마다(서버 스로틀과 동일)
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [isMember, groupId, myMemberId, refetch]);
+
   // 세션 인증 원탭 합류 — 취향 재선택 없이 계정 캐릭터로 들어간다(불특정 다수도 링크로).
   async function join() {
     setJoining(true);
