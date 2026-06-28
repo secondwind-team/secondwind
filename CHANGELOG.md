@@ -2,6 +2,18 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.29.0] - 2026-06-28
+
+### Added
+- **채팅방 설정 화면 + 정기 메시지.** 채팅방 헤더에 **⚙️ 설정** 버튼이 생겼다(`/finz/party/[groupId]/settings`). 첫 기능은 **정기 메시지** — 정해진 시각·주기에 finz 가 메시지를 보내준다.
+  - **채팅으로 등록**: 방에서 **"@finz 매일 9시에 물 마시기 보내줘"**, **"@finz 매주 월요일 9시에 회의 알림"**, **"@finz 30분마다 스트레칭 알려줘"**, **"@finz 매일 아침 오늘의 명언 보내줘"** 처럼 말하면 자동 등록되고 finz 가 확인 메시지를 남긴다.
+  - **두 종류**: 고정 문구(매번 같은 메시지)와 **AI 생성**(저장된 주제를 발송 시점에 finz 가 생성 — 예: 오늘의 명언, 오늘 날씨/시황은 실시간 검색으로 사실 확인).
+  - **설정에서 관리**: 설정 화면에서 정기 메시지를 **보고·켜고/끄고·수정·삭제**할 수 있다. 폼으로 직접 추가도 가능(매일/매주/N분마다 · 시각 · 내용). 내장 **아침 경제 시황**도 같은 화면에서 토글. 방당 최대 10개.
+  - **발송**: 약 10분 간격 GitHub Actions cron(`.github/workflows/recurring-messages.yml`)이 보안 엔드포인트 `GET /api/finz/cron/recurring`(Bearer `CRON_SECRET`, 아침 시황과 동일 값 재사용)을 호출 → 발송 시각이 지난 정기 메시지를 finz 메시지로 전송하고 다음 시각을 재계산. **at-most-once**(occurrence 선전진 후 발송)로 딜레이·재시도에도 중복 발송 방지, 방 멤버 전원 푸시(best-effort). 시각 정밀도는 분 단위가 아니라 ~10분 버킷.
+  - **기술**: 스케줄 계산·라벨·입력 검증은 결정적 순수 헬퍼 `finz-recurring.ts`(KST 고정, 단위 테스트 14케이스), 저장은 `finz-recurring-store.ts`(정의 blob + 방별 SET + 전역 due ZSET + 발송 락). intent 라우터에 `schedule` 추가(경제 시황 `briefing` 과 구분), 자연어 추출은 `/recurring/parse`(constrained schema·인젝션 가드, 추출 실패는 사용법 안내). 모든 변경 라우트 members-guard.
+
+  > ⚙️ **설정 필요(수동)**: 새 cron 이 동작하려면 GitHub 레포 Secret 의 `CRON_SECRET`(아침 시황과 동일 값)만 있으면 된다 — 추가 시크릿 없음. 안 넣으면 정기 메시지 발송만 비활성(앱·등록은 정상).
+
 ## [0.1.28.0] - 2026-06-28
 
 ### Fixed

@@ -279,6 +279,11 @@ export function FinzPartyRoom({
       void subscribeBriefing(subscribe !== false);
       return;
     }
+    if (intent === "schedule") {
+      // 임의의 정기 메시지 등록 — 서버가 자연어에서 주기·시각·내용을 추출해 등록 + 확인 메시지 append.
+      void scheduleRecurring(question);
+      return;
+    }
     // qa(기본) — 기존 그라운딩 답변.
     void ask(question);
   }
@@ -294,6 +299,25 @@ export function FinzPartyRoom({
         body: JSON.stringify({ memberId: myMemberId, subscribe }),
       });
       if (!res.ok) setActionError("시황 구독 설정을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      bumpStick();
+    }
+  }
+
+  // @finz 정기 메시지 등록 → 서버가 자연어에서 주기·시각·내용을 추출해 등록 + 확인 메시지 append, 폴링으로 뜬다.
+  async function scheduleRecurring(text: string) {
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/recurring/parse`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, text }),
+      });
+      if (!res.ok) setActionError("정기 메시지를 등록하지 못했어. 잠시 뒤 다시 시도해줘.");
       await refetch();
     } catch {
       setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
@@ -511,6 +535,7 @@ export function FinzPartyRoom({
       style={viewportH ? { height: `${viewportH}px` } : undefined}
     >
       <FinzChatHeader
+        groupId={groupId}
         members={members}
         myMemberId={myMemberId}
         themeName={latestPick?.payload.name ?? null}

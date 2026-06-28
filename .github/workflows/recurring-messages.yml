@@ -1,0 +1,44 @@
+# 방별 "정기 메시지"를 발송 시각에 맞춰 보내는 스케줄 트리거.
+#
+# 무엇을 하나: 약 10분마다 prod 의 보안 엔드포인트 GET /api/finz/cron/recurring 를 Bearer 토큰으로 호출한다.
+#   실제 처리(발송 시각이 지난 정기 메시지 찾아 전송 + 다음 시각 재계산)는 그 서버 라우트가 한다.
+#   (이 워크플로는 "알람 시계"일 뿐, 코드/데이터를 직접 만지지 않는다.)
+#
+# 위험 설명(비개발자용): 외부 호출 1건만 보냄. 실패해도 앱·배포에 영향 없음(그 회차 정기 메시지만 잠깐 늦음).
+#   토큰이 틀리면 서버가 401 로 거절 → 아무 일도 안 일어남.
+#
+# ⚠️ 동작하려면 GitHub 레포 Secret 에 CRON_SECRET 이 있어야 한다(아침 시황과 같은 값 재사용).
+#   같은 값을 Vercel 환경변수 CRON_SECRET 에도 넣어야 서버가 검증한다(양쪽 동일 값).
+#
+# 참고: GitHub 스케줄은 best-effort 라 몇 분 늦을 수 있다 → 정기 메시지 시각은 분 단위가 아니라 ~10분 버킷 정밀도.
+#   즉시 테스트하려면 Actions 탭에서 "Run workflow"(workflow_dispatch)로 수동 실행.
+
+name: recurring-messages
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # 약 10분마다
+  workflow_dispatch: {} # 수동 실행(테스트용)
+
+# 동시 실행 방지(이전 회차가 늦어져도 겹쳐 돌지 않게).
+concurrency:
+  group: finz-recurring
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    name: trigger recurring messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: call recurring endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET 미설정 — 레포 Settings → Secrets → Actions 에 추가해야 정기 메시지가 동작합니다."
+            exit 1
+          fi
+          # transient 네트워크/5xx 는 2회 재시도. 인증오류(401)·미설정(503)은 빨강(actionable).
+          curl -fsS --retry 2 --retry-delay 15 -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://secondwind-mu.vercel.app/api/finz/cron/recurring"

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, UserPlus } from "lucide-react";
+import { ChevronLeft, Settings, UserPlus } from "lucide-react";
 import { buildFinzProfile } from "@/lib/common/services/finz";
 import type { FinzChatMemberLite } from "@/lib/common/services/finz-chat";
 import { finzClassEmoji } from "./finz-character-card";
 
 // 채팅방 상단 바 — 뒤로(대화 목록) + 멤버 아바타 + 상태 라벨 + 초대. flex-none(타임라인 위에 고정).
 export function FinzChatHeader({
+  groupId,
   members,
   myMemberId,
   themeName,
@@ -15,6 +16,7 @@ export function FinzChatHeader({
   full,
   onInvite,
 }: {
+  groupId: string;
   members: FinzChatMemberLite[];
   myMemberId: string | null;
   themeName: string | null;
@@ -64,6 +66,13 @@ export function FinzChatHeader({
             초대
           </button>
         )}
+        <Link
+          href={`/finz/party/${groupId}/settings`}
+          aria-label="채팅방 설정"
+          className="fz-iconbtn h-9 w-9 shrink-0 border-none bg-transparent shadow-none"
+        >
+          <Settings className="h-5 w-5" aria-hidden />
+        </Link>
       </div>
     </div>
   );
