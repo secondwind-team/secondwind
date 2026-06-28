@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { callLlm, type GeminiModel } from "@/lib/common/llm";
+import { normalizeChartSymbol } from "@/lib/common/services/finz-chat";
+import { cacheSymbol, getCachedSymbol } from "@/lib/server/finz-symbol-cache";
 import {
   computeAllocation,
   computeHoldings,
@@ -70,10 +72,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
 
     // 2) 기록(매수/매도) — 결정적 파싱을 우선(reliable), 빈 칸만 LLM 으로 보강.
     if (op === "record") {
+      const name = (ext?.label || det.label || "").trim();
+      // 심볼 해석 순서: 내장 사전(det) → 학습 캐시 → LLM. LLM 으로 새로 찾으면 캐시에 적재(다음부턴 LLM 불필요·일관).
+      let symbol = det.symbol; // 사전(pure)
+      if (!symbol && name) symbol = await getCachedSymbol(name); // 학습 캐시
+      let learnedFromLlm = false;
+      if (!symbol) {
+        symbol = normalizeChartSymbol(ext?.symbol) ?? resolveKnownSymbol(ext?.label);
+        learnedFromLlm = Boolean(symbol && name && normalizeChartSymbol(ext?.symbol));
+      }
       const merged = {
         action: det.action, // inferTradeAction 은 항상 buy/sell
-        symbol: det.symbol || ext?.symbol || resolveKnownSymbol(ext?.label) || "",
-        label: ext?.label || det.label || "",
+        symbol: symbol || "",
+        label: name || symbol || "",
         shares: det.shares ?? ext?.shares,
         price: det.price ?? ext?.price,
         currency: det.currency ?? ext?.currency,
@@ -85,6 +96,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
         await appendAnswerMessage(groupId, PORTFOLIO_HELP).catch(() => {});
         return NextResponse.json({ status: "ok", nudged: true });
       }
+      // LLM 이 처음 찾아낸 종목명→심볼을 학습 캐시에 저장(best-effort).
+      if (learnedFromLlm) void cacheSymbol(name, normalized.symbol).catch(() => {});
       const added = await addTrade(groupId, {
         ...normalized,
         ownerId: memberId,
