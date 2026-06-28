@@ -66,21 +66,64 @@ const KNOWN_SYMBOLS: Record<string, string> = {
 };
 const KNOWN_NAMES_BY_LENGTH = Object.keys(KNOWN_SYMBOLS).sort((a, b) => b.length - a.length);
 
-// 종목명/문장에서 알려진 심볼을 찾는다(소문자·공백제거 후 포함 매칭, 긴 이름 우선). 없으면 null.
-export function resolveKnownSymbol(text: unknown): string | null {
+// 종목명/문장에서 알려진 종목(심볼 + 매칭된 이름)을 찾는다(소문자·공백제거 후 포함 매칭, 긴 이름 우선).
+export function resolveKnownStock(text: unknown): { symbol: string; name: string } | null {
   if (typeof text !== "string") return null;
   const t = text.toLowerCase().replace(/\s+/g, "");
   if (!t) return null;
   for (const name of KNOWN_NAMES_BY_LENGTH) {
-    if (t.includes(name)) return KNOWN_SYMBOLS[name]!;
+    if (t.includes(name)) return { symbol: KNOWN_SYMBOLS[name]!, name };
   }
   return null;
+}
+export function resolveKnownSymbol(text: unknown): string | null {
+  return resolveKnownStock(text)?.symbol ?? null;
 }
 
 // 문장에서 매수/매도 추론(LLM 이 action 을 빠뜨릴 때 폴백). 기본은 매수.
 export function inferTradeAction(text: unknown): FinzTradeAction {
   const t = typeof text === "string" ? text : "";
   return /매도|팔았|팔아|매각|sold|sell|익절|손절/.test(t) ? "sell" : "buy";
+}
+
+// 문장에서 거래를 결정적으로 파싱(LLM 의존 X) — "테슬라 2주 400달러 매수" 류 표준 표현용. 부분 결과 허용.
+// '주'→수량, '달러/$/원/₩'→가격+통화, 알려진 종목명→심볼/라벨, 매수/매도 키워드→action.
+export type ParsedTradeText = {
+  symbol: string | null;
+  label: string | null;
+  shares: number | null;
+  price: number | null;
+  currency: string | null;
+  action: FinzTradeAction;
+};
+export function parseTradeFromText(text: unknown): ParsedTradeText {
+  const t = typeof text === "string" ? text : "";
+  const stock = resolveKnownStock(t);
+
+  const sharesM = t.match(/(\d[\d,]*(?:\.\d+)?)\s*주/);
+  const shares = sharesM?.[1] ? Number(sharesM[1].replace(/,/g, "")) : null;
+
+  // 가격 + 통화 단위. 단위가 명시된 숫자만(수량 '주'와 혼동 방지).
+  const usdM = t.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:달러|불|\$|usd|dollars?)/i);
+  const krwM = t.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:원|₩|krw|won)/i);
+  let price: number | null = null;
+  let currency: string | null = null;
+  if (usdM?.[1]) {
+    price = Number(usdM[1].replace(/,/g, ""));
+    currency = "USD";
+  } else if (krwM?.[1]) {
+    price = Number(krwM[1].replace(/,/g, ""));
+    currency = "KRW";
+  }
+
+  return {
+    symbol: stock?.symbol ?? null,
+    label: stock?.name ?? null,
+    shares: shares != null && Number.isFinite(shares) && shares > 0 ? shares : null,
+    price: price != null && Number.isFinite(price) && price >= 0 ? price : null,
+    currency,
+    action: inferTradeAction(t),
+  };
 }
 
 export type FinzTrade = {

@@ -6,6 +6,7 @@ import {
   normalizeCurrency,
   normalizeTrade,
   parsePriceLines,
+  parseTradeFromText,
   resolveKnownSymbol,
   summarizePortfolio,
   type FinzTrade,
@@ -165,6 +166,31 @@ describe("resolveKnownSymbol / inferTradeAction (LLM 누락 보강)", () => {
   it("normalizeTrade 가 한글 symbol 을 사전으로 보강", () => {
     const n = normalizeTrade({ action: "buy", symbol: "테슬라", label: "테슬라", shares: 2, price: 400 }, "2026-06-28T05:00:00Z");
     expect(n?.symbol).toBe("NASDAQ:TSLA");
+  });
+});
+
+describe("parseTradeFromText (결정적 — LLM 의존 X)", () => {
+  it("사용자 예시: '오늘 테슬라 2주 400 달러에 매수했어'", () => {
+    const p = parseTradeFromText("오늘 테슬라 2주 400 달러에 매수했어. 포트폴리오에 기록해줘.");
+    expect(p.symbol).toBe("NASDAQ:TSLA");
+    expect(p.shares).toBe(2);
+    expect(p.price).toBe(400);
+    expect(p.currency).toBe("USD");
+    expect(p.action).toBe("buy");
+  });
+  it("가격이 먼저 와도, 매도/원화도", () => {
+    const p = parseTradeFromText("삼성전자 70,000원에 10주 팔았어");
+    expect(p.symbol).toBe("KRX:005930");
+    expect(p.shares).toBe(10);
+    expect(p.price).toBe(70000);
+    expect(p.currency).toBe("KRW");
+    expect(p.action).toBe("sell");
+  });
+  it("수량/가격 단위 없으면 null(주·통화단위로만 잡음)", () => {
+    const p = parseTradeFromText("테슬라 좋아 보여");
+    expect(p.symbol).toBe("NASDAQ:TSLA");
+    expect(p.shares).toBeNull();
+    expect(p.price).toBeNull();
   });
 });
 

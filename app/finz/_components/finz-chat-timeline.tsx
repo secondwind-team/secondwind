@@ -33,6 +33,7 @@ export function FinzChatTimeline({
   messages,
   pending,
   myMemberId,
+  mentionNames,
   nudge,
   aiBusy,
   stickSignal,
@@ -43,6 +44,7 @@ export function FinzChatTimeline({
   messages: FinzChatMessage[];
   pending: PendingText[];
   myMemberId: string | null;
+  mentionNames: string[];
   nudge: FinzNudge | null;
   aiBusy: boolean;
   stickSignal: number;
@@ -152,6 +154,7 @@ export function FinzChatTimeline({
               <FinzChatMessageView
                 message={m}
                 myMemberId={myMemberId}
+                mentionNames={mentionNames}
                 isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
                 onReroll={onReroll}
                 superseded={m.kind === "position" && supersededIds.has(m.id)}

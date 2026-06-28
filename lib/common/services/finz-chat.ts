@@ -179,9 +179,23 @@ export function normalizeChartSymbol(raw: unknown): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
-// 텍스트를 멘션/일반 세그먼트로 분해 — 메시지뷰가 멘션 토큰만 하이라이트 렌더하는 데 쓴다.
-export function splitByMention(text: string): Array<{ text: string; isMention: boolean }> {
-  const re = new RegExp(FINZ_MENTION.source, "gi");
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// 텍스트를 멘션/일반 세그먼트로 분해 — finz 봇 멘션(@finz 등)에 더해, names 로 준 멤버 이름(@남덕우 등)도 멘션으로.
+// 메시지뷰·입력창 백드롭이 멘션 토큰만 칩으로 하이라이트하는 데 쓴다.
+export function splitByMentionTokens(
+  text: string,
+  names: string[] = [],
+): Array<{ text: string; isMention: boolean }> {
+  // 멤버 이름: 공백 제거·중복 제거·긴 이름 우선(부분 매칭 방지). 정규식 특수문자 이스케이프.
+  const memberNames = [...new Set(names.map((n) => n.trim()).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  const memberAlt = memberNames.length > 0 ? `|@\\s*(?:${memberNames.join("|")})` : "";
+  const re = new RegExp(`(?:${FINZ_MENTION.source})${memberAlt}`, "gi");
+
   const out: Array<{ text: string; isMention: boolean }> = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -193,6 +207,11 @@ export function splitByMention(text: string): Array<{ text: string; isMention: b
   }
   if (last < text.length) out.push({ text: text.slice(last), isMention: false });
   return out;
+}
+
+// 기존 호출부 호환 — finz 봇 멘션만 하이라이트.
+export function splitByMention(text: string): Array<{ text: string; isMention: boolean }> {
+  return splitByMentionTokens(text, []);
 }
 
 // ── 순수 셀렉터(I/O 없음, 단위 테스트 대상). messages 는 seq 오름차순 가정. ──
