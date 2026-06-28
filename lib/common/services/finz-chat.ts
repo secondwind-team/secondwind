@@ -277,6 +277,33 @@ export function shouldFinzProactivelySpeak(messages: FinzChatMessage[], threshol
   return countMemberMessagesSinceFinz(messages) >= threshold;
 }
 
+// @finz 호출(의도 분류 · 그라운딩 답변 · 선제 개입)이 LLM 에 넘길 "대화 맥락" 한 줄.
+// speaker 는 서버가 아는 role/멤버에서만 도출 — 사용자 텍스트가 'finz:' 가짜 화자로 위장하지 못한다.
+export type FinzTranscriptTurn = { speaker: string; text: string };
+
+// 최근 maxTurns 발화를 speaker/text 로 평탄화한다(seq 오름차순 가정). 비텍스트 메시지(픽·요약·차트·입장)는
+// finz/멤버가 한 '행동'을 한 줄로 요약해 흐름을 유지한다. system·portfolio 메시지는 맥락에서 생략한다.
+// ask/proactive/intent 가 같은 맥락 뷰를 공유해, 답변하는 finz 와 의도를 분류하는 finz 가 동일한 대화를 본다.
+export function buildFinzTranscript(
+  messages: FinzChatMessage[],
+  members: { memberId: string; displayName: string }[],
+  maxTurns = 8,
+): FinzTranscriptTurn[] {
+  const nameOf = (id: string) => members.find((m) => m.memberId === id)?.displayName ?? "친구";
+  const recent = messages.slice(-maxTurns);
+  const turns: FinzTranscriptTurn[] = [];
+  for (const m of recent) {
+    if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
+    else if (m.kind === "pick") turns.push({ speaker: "finz", text: `(우정주 테마 '${m.payload.name}' 를 뽑음)` });
+    else if (m.kind === "summary") turns.push({ speaker: "finz", text: `(파티 요약) ${m.payload.summary}` });
+    else if (m.kind === "chart") turns.push({ speaker: "finz", text: `(${m.payload.label} 차트를 보여줌)` });
+    else if (m.kind === "position")
+      turns.push({ speaker: nameOf(m.authorId), text: `(입장) ${m.payload.stance}${m.payload.note ? " · " + m.payload.note : ""}` });
+    // system·portfolio 는 생략(기존 ask/proactive 동작 보존)
+  }
+  return turns;
+}
+
 // "이제 뭐 할까" 코칭 — 현재 상태에서 단 하나(또는 없음)를 계산. 비저장. 상태가 진행되면 자연히 사라짐.
 export function computeNextNudge(
   messages: FinzChatMessage[],

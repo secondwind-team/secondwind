@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { callLlm } from "@/lib/common/llm";
-import { type FinzChatMessage } from "@/lib/common/services/finz-chat";
+import { buildFinzTranscript, type FinzTranscriptTurn } from "@/lib/common/services/finz-chat";
 import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { acquireAskLock, appendAnswerMessage, getChatTail, releaseAskLock } from "@/lib/server/finz-chat-store";
 import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
@@ -10,7 +10,6 @@ export const runtime = "nodejs";
 type Body = { memberId?: unknown; question?: unknown };
 
 const MAX_QUESTION_LENGTH = 500;
-const TRANSCRIPT_TURNS = 8;
 
 // @finz 멘션 시 사용자의 질문에 답한다. 오늘 시세·뉴스 등 실시간 사실은 Google Search 그라운딩으로 답한다.
 // 픽(우정주)의 theme-only 환각 방어와 별개 — 여기선 검색으로 사실을 메워 "반드시 대답"하게 한다.
@@ -43,7 +42,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
 
   try {
     const tail = await getChatTail(groupId, -1);
-    const transcript = buildTranscript(tail.messages, group.members);
+    const transcript = buildFinzTranscript(tail.messages, group.members);
 
     const skipModels = await getBlockedModels();
     const result = await callLlm(
@@ -86,9 +85,7 @@ const FINZ_ASK_SYSTEM_PROMPT = [
   "욕설·혐오·불법 요청은 정중히 거절하라.",
 ].join("\n");
 
-type TranscriptTurn = { speaker: string; text: string };
-
-function buildAskPrompt(transcript: TranscriptTurn[], question: string): string {
+function buildAskPrompt(transcript: FinzTranscriptTurn[], question: string): string {
   // 대화·질문은 데이터로만 전달한다(프롬프트 인젝션 방어). 지시는 위 system 에만 있다.
   // speaker 는 서버가 정한 값이고 turn 은 구조화 배열이라, 사용자 텍스트에 끼운 줄바꿈·"finz:" 가짜
   // 프리픽스가 별도 발화로 위장하지 못한다(JSON.stringify 가 개행을 이스케이프).
@@ -101,23 +98,6 @@ function buildAskPrompt(transcript: TranscriptTurn[], question: string): string 
     null,
     2,
   );
-}
-
-function buildTranscript(messages: FinzChatMessage[], members: { memberId: string; displayName: string }[]): TranscriptTurn[] {
-  const nameOf = (id: string) => members.find((m) => m.memberId === id)?.displayName ?? "친구";
-  const recent = messages.slice(-TRANSCRIPT_TURNS);
-  const turns: TranscriptTurn[] = [];
-  for (const m of recent) {
-    // speaker 는 서버가 아는 role 에서만 도출(사용자 텍스트로 위장 불가).
-    if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
-    else if (m.kind === "pick") turns.push({ speaker: "finz", text: `(우정주 테마 '${m.payload.name}' 를 뽑음)` });
-    else if (m.kind === "summary") turns.push({ speaker: "finz", text: `(파티 요약) ${m.payload.summary}` });
-    else if (m.kind === "chart") turns.push({ speaker: "finz", text: `(${m.payload.label} 차트를 보여줌)` });
-    else if (m.kind === "position")
-      turns.push({ speaker: nameOf(m.authorId), text: `(입장) ${m.payload.stance}${m.payload.note ? " · " + m.payload.note : ""}` });
-    // system 은 생략
-  }
-  return turns;
 }
 
 const DISCLAIMER = "ℹ️ 투자 조언이 아니라 정보 참고용이야.";
