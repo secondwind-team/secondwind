@@ -61,8 +61,7 @@ export function FinzPartyRoom({
   const [shareUrl, setShareUrl] = useState("");
   const [pending, setPending] = useState<PendingText[]>([]);
   const [pickBusy, setPickBusy] = useState(false);
-  const [summaryBusy, setSummaryBusy] = useState(false); // 파티 요약(우정주 입장 기반, nudge 전용)
-  const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴)
+  const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴/nudge)
   const [askBusy, setAskBusy] = useState(false);
   const [positionSubmitting, setPositionSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -436,27 +435,6 @@ export function FinzPartyRoom({
     }
   }
 
-  // 파티 요약(우정주 입장 기반 앰버 카드) — nudge CTA 전용. 전제조건은 서버가 검증(미충족 시 nudged).
-  async function openSummary() {
-    setSummaryBusy(true);
-    setActionError(null);
-    bumpStick();
-    try {
-      const res = await fetch(`/api/finz/party/${groupId}/pick/summary`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId: myMemberId }),
-      });
-      if (!res.ok) setActionError("요약을 만들지 못했어. 잠시 뒤 다시 시도해줘.");
-      await refetch();
-    } catch {
-      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
-    } finally {
-      setSummaryBusy(false);
-      bumpStick();
-    }
-  }
-
   // 대화 요약(general) — @finz 요약/+메뉴 "대화 요약". text 가 있으면 서버가 명시 기간(어제부터/최근 N개)을 파싱,
   // 없으면 100개 초과 시 최근 100개. 결과는 finz 텍스트 메시지로 채팅에 쌓인다.
   async function openRecap(text?: string) {
@@ -499,7 +477,8 @@ export function FinzPartyRoom({
     if (cta === "invite") setInviteOpen(true);
     else if (cta === "pick") void openPick(false);
     else if (cta === "position") setStanceMode(true);
-    else if (cta === "summary") void openSummary();
+    // nudge 의 'AI 요약 받기' → 전제조건 없는 일반 대화 요약(우정주 입장 기반 파티 요약은 안 됨이 잦아 통일).
+    else if (cta === "summary") void openRecap();
   }
 
   // ── 분기: 비멤버는 정원초과 안내 또는 합류 뷰, 멤버는 풀블리드 메신저 ──
@@ -548,7 +527,7 @@ export function FinzPartyRoom({
         pending={pending}
         myMemberId={myMemberId}
         nudge={nudge}
-        aiBusy={pickBusy || summaryBusy || recapBusy || askBusy}
+        aiBusy={pickBusy || recapBusy || askBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}

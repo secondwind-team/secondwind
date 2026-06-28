@@ -99,6 +99,19 @@ describe("computeNextNudge", () => {
     const n = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), summary(4)], MEMBERS, "a");
     expect(n).toBeNull();
   });
+  it("3인 방: 한 명이라도 미입장이면 summary 아니라 그 사람을 기다린다(조기 summary nudge 방지)", () => {
+    const THREE: FinzChatMemberLite[] = [
+      ...MEMBERS,
+      { memberId: "c", displayName: "민지", selectedCardIds: ["z"], joinedAt: "t" },
+    ];
+    // a·b 입장했지만 c 미입장 → summary 가 아니라 미입장자(민지) 대기여야 한다.
+    const waiting = computeNextNudge([pick(1), position(2, "a"), position(3, "b")], THREE, "a");
+    expect(waiting?.cta).toBe("position");
+    expect(waiting?.missingMemberName).toBe("민지");
+    // 셋 다 입장 → summary.
+    const ready = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), position(4, "c")], THREE, "a");
+    expect(ready?.cta).toBe("summary");
+  });
 });
 
 describe("mentionsFinz", () => {

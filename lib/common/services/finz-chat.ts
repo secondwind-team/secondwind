@@ -261,16 +261,17 @@ export function computeNextNudge(
   if (!iPositioned) {
     return { cta: "position", text: "이 테마, 너는 어떻게 봐? 한 줄 입장을 남겨봐." };
   }
-  const other = members.find((m) => m.memberId !== myMemberId);
-  if (other && !positions.has(other.memberId)) {
+  // 나 말고 아직 입장을 안 남긴 멤버가 있으면 그 사람을 기다린다(2인이 아니어도 정확히 — 첫 미입장자).
+  const missing = members.find((m) => m.memberId !== myMemberId && !positions.has(m.memberId));
+  if (missing) {
     return {
       cta: "position",
-      missingMemberName: other.displayName,
-      text: `${other.displayName}님의 입장을 기다리는 중이야.`,
+      missingMemberName: missing.displayName,
+      text: `${missing.displayName}님의 입장을 기다리는 중이야.`,
     };
   }
-  // 둘 다 포지션 완료 — 이 픽 기준 최신 요약이 최신 포지션보다 뒤면 더 권할 게 없다.
+  // 모두 포지션 완료 — 이 픽 기준 최신 요약이 최신 포지션보다 뒤면 더 권할 게 없다.
   const latestPositionSeq = Math.max(...[...positions.values()].map((p) => p.seq), latestPick.seq);
   if (maxSummarySeq(messages, latestPick.seq) > latestPositionSeq) return null;
-  return { cta: "summary", text: "둘 다 입장을 남겼어! AI 파티 요약을 받아볼까?" };
+  return { cta: "summary", text: "다들 입장을 남겼어! AI 요약을 받아볼까?" };
 }
