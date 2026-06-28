@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   computeAllocation,
   computeHoldings,
+  inferTradeAction,
   normalizeCurrency,
   normalizeTrade,
   parsePriceLines,
+  resolveKnownSymbol,
   summarizePortfolio,
   type FinzTrade,
 } from "./finz-portfolio";
@@ -140,6 +142,29 @@ describe("parsePriceLines", () => {
     expect(p["NASDAQ:TSLA"]).toBe(412.3);
     expect(p["KRX:005930"]).toBe(71200);
     expect(p["NASDAQ:AAPL"]).toBeUndefined(); // 보유 목록에 없음
+  });
+});
+
+describe("resolveKnownSymbol / inferTradeAction (LLM 누락 보강)", () => {
+  it("한글/영문 종목명 → TradingView 심볼", () => {
+    expect(resolveKnownSymbol("테슬라")).toBe("NASDAQ:TSLA");
+    expect(resolveKnownSymbol("엔비디아 더 살까")).toBe("NASDAQ:NVDA");
+    expect(resolveKnownSymbol("삼성전자")).toBe("KRX:005930");
+    expect(resolveKnownSymbol("Tesla")).toBe("NASDAQ:TSLA");
+    expect(resolveKnownSymbol("듣보종목")).toBeNull();
+  });
+  it("긴 이름 우선 매칭(삼성전자 vs 삼성 충돌 방지 의도)", () => {
+    expect(resolveKnownSymbol("삼성전자 2주")).toBe("KRX:005930");
+  });
+  it("문장에서 매수/매도 추론(기본 매수)", () => {
+    expect(inferTradeAction("테슬라 2주 샀어")).toBe("buy");
+    expect(inferTradeAction("엔비디아 10주 팔았어")).toBe("sell");
+    expect(inferTradeAction("매도했어")).toBe("sell");
+    expect(inferTradeAction("기록해줘")).toBe("buy");
+  });
+  it("normalizeTrade 가 한글 symbol 을 사전으로 보강", () => {
+    const n = normalizeTrade({ action: "buy", symbol: "테슬라", label: "테슬라", shares: 2, price: 400 }, "2026-06-28T05:00:00Z");
+    expect(n?.symbol).toBe("NASDAQ:TSLA");
   });
 });
 

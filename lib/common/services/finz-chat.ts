@@ -268,15 +268,10 @@ export function computeNextNudge(
   if (!iPositioned) {
     return { cta: "position", text: "이 테마, 너는 어떻게 봐? 한 줄 입장을 남겨봐." };
   }
-  // 나 말고 아직 입장을 안 남긴 멤버가 있으면 그 사람을 기다린다(2인이 아니어도 정확히 — 첫 미입장자).
-  const missing = members.find((m) => m.memberId !== myMemberId && !positions.has(m.memberId));
-  if (missing) {
-    return {
-      cta: "position",
-      missingMemberName: missing.displayName,
-      text: `${missing.displayName}님의 입장을 기다리는 중이야.`,
-    };
-  }
+  // 나 말고 아직 입장을 안 남긴 멤버가 있으면 — 내가 할 행동이 없으니 코칭 버블을 띄우지 않는다(null).
+  // (예전엔 "OO님 입장 기다리는 중" 버블을 띄웠는데, 행동 불가한데 타임라인 맨 아래에 계속 박혀 있어 제거.)
+  const someoneMissing = members.some((m) => m.memberId !== myMemberId && !positions.has(m.memberId));
+  if (someoneMissing) return null;
   // 모두 포지션 완료 — 이 픽 기준 최신 요약이 최신 포지션보다 뒤면 더 권할 게 없다.
   const latestPositionSeq = Math.max(...[...positions.values()].map((p) => p.seq), latestPick.seq);
   if (maxSummarySeq(messages, latestPick.seq) > latestPositionSeq) return null;
