@@ -214,6 +214,14 @@ export function splitByMention(text: string): Array<{ text: string; isMention: b
   return splitByMentionTokens(text, []);
 }
 
+// 메시지가 특정 멤버를 멘션(@표시이름)했는지 — 방 음소거 시 "멘션 예외" 판단용.
+// 멤버 멘션 기준(@displayName)은 splitByMentionTokens 와 동일. 빈 이름은 false.
+export function mentionsMember(text: string, displayName: string): boolean {
+  const name = displayName.trim();
+  if (!name) return false;
+  return new RegExp(`@\\s*${escapeRegExp(name)}`, "i").test(text);
+}
+
 // ── 순수 셀렉터(I/O 없음, 단위 테스트 대상). messages 는 seq 오름차순 가정. ──
 
 export function selectLatestPick(messages: FinzChatMessage[]): FinzChatPickMessage | null {

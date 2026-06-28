@@ -25,6 +25,7 @@ export function FinzRoomSettings({
   initialItems,
   initialBriefingSubscribed,
   initialTrades,
+  initialMute,
 }: {
   groupId: string;
   roomTitle: string;
@@ -32,6 +33,7 @@ export function FinzRoomSettings({
   initialItems: FinzRecurringMessage[];
   initialBriefingSubscribed: boolean;
   initialTrades: FinzTrade[];
+  initialMute: { muted: boolean; allowMentions: boolean };
 }) {
   const account = useFinzAccount();
   const memberId = account.accountId;
@@ -39,6 +41,9 @@ export function FinzRoomSettings({
 
   const [items, setItems] = useState<FinzRecurringMessage[]>(initialItems);
   const [briefingOn, setBriefingOn] = useState(initialBriefingSubscribed);
+  const [muted, setMuted] = useState(initialMute.muted);
+  const [allowMentions, setAllowMentions] = useState(initialMute.allowMentions);
+  const [muteBusy, setMuteBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FinzRecurringMessage | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -69,6 +74,29 @@ export function FinzRoomSettings({
     } catch {
       setBriefingOn(!next); // 롤백
       setError("아침 시황 설정을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+    }
+  }
+
+  // 방 음소거 설정 저장(낙관적 + 실패 시 롤백). muted/allowMentions 를 함께 보낸다.
+  async function saveMute(next: { muted: boolean; allowMentions: boolean }) {
+    setError(null);
+    setMuteBusy(true);
+    const prev = { muted, allowMentions };
+    setMuted(next.muted);
+    setAllowMentions(next.allowMentions);
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/mute`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setMuted(prev.muted); // 롤백
+      setAllowMentions(prev.allowMentions);
+      setError("알림 설정을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+    } finally {
+      setMuteBusy(false);
     }
   }
 
@@ -163,6 +191,43 @@ export function FinzRoomSettings({
       {/* 본문 */}
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5">
         {error && <p className="fz-alert">{error}</p>}
+
+        {/* 알림 음소거 */}
+        <section className="space-y-2">
+          <h2 className="px-1 text-sm font-bold text-[var(--fz-ink)]">🔔 알림</h2>
+          <div className="fz-card divide-y divide-[var(--fz-line)]">
+            <div className="flex items-center gap-3 p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--fz-ink)]">이 방 알림 끄기</p>
+                <p className="text-xs leading-relaxed text-[var(--fz-muted)]">
+                  {muted ? "이 방의 새 메시지 푸시 알림을 받지 않아요." : "새 메시지가 오면 푸시 알림을 받아요."}
+                </p>
+              </div>
+              <Toggle
+                on={muted}
+                onClick={() => void saveMute({ muted: !muted, allowMentions })}
+                disabled={muteBusy}
+                label="이 방 알림 끄기"
+              />
+            </div>
+            {muted && (
+              <div className="flex items-center gap-3 p-3.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[var(--fz-ink)]">멘션은 받기</p>
+                  <p className="text-xs leading-relaxed text-[var(--fz-muted)]">
+                    알림을 꺼도 누가 나를 멘션하면 알림을 받아요.
+                  </p>
+                </div>
+                <Toggle
+                  on={allowMentions}
+                  onClick={() => void saveMute({ muted, allowMentions: !allowMentions })}
+                  disabled={muteBusy}
+                  label="멘션은 받기"
+                />
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* 정기 메시지 */}
         <section className="space-y-2">

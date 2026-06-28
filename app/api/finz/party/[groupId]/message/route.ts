@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { mentionsMember } from "@/lib/common/services/finz-chat";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { appendTextMessage } from "@/lib/server/finz-chat-store";
-import { isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
+import { getRoomMutesForAccounts, isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
 export const runtime = "nodejs";
 
@@ -47,8 +48,26 @@ async function notifyRoomMembers(groupId: string, senderId: string, text: string
   if (!isFinzPushConfigured()) return;
   const group = await getFinzGroup(groupId);
   if (!group) return;
-  const recipients = group.members.filter((m) => m.memberId !== senderId).map((m) => m.memberId);
+  const others = group.members.filter((m) => m.memberId !== senderId);
+  if (others.length === 0) return;
+
+  // 방 음소거 필터 — 음소거한 수신자는 제외. 단 "멘션 예외" ON 이고 그를 @표시이름으로 멘션했으면 포함.
+  let recipients: string[];
+  try {
+    const mutes = await getRoomMutesForAccounts(groupId, others.map((m) => m.memberId));
+    recipients = others
+      .filter((m) => {
+        const mute = mutes.get(m.memberId);
+        if (!mute || !mute.muted) return true; // 음소거 안 함 → 받음
+        return mute.allowMentions && mentionsMember(text, m.displayName); // 음소거지만 멘션 예외
+      })
+      .map((m) => m.memberId);
+  } catch {
+    // mute 조회 실패 → 전체 발송(알림 누락보다 과발송이 안전).
+    recipients = others.map((m) => m.memberId);
+  }
   if (recipients.length === 0) return;
+
   const senderName = group.members.find((m) => m.memberId === senderId)?.displayName ?? "친구";
   const isGroup = group.kind === "group" && group.title.length > 0;
   const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;

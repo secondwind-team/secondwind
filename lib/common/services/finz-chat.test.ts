@@ -3,6 +3,7 @@ import {
   computeNextNudge,
   isFinzStoredChatMessage,
   mentionsFinz,
+  mentionsMember,
   selectLatestPick,
   selectLatestPositionsByMember,
   isFinzMentionIntent,
@@ -132,6 +133,22 @@ describe("mentionsFinz", () => {
     expect(mentionsFinz("email@finance.com")).toBe(false);
     expect(mentionsFinz("@airline 예약했어")).toBe(false); // 'ai' 라틴 연속은 봇 호출 아님
     expect(mentionsFinz("@aim 좋아")).toBe(false);
+  });
+});
+
+describe("mentionsMember", () => {
+  it("@표시이름을 멘션으로 인식(공백 허용·조사 무관)", () => {
+    expect(mentionsMember("@남덕우 이거 봐", "남덕우")).toBe(true);
+    expect(mentionsMember("@ 남덕우 봐", "남덕우")).toBe(true);
+    expect(mentionsMember("@남덕우야 봐봐", "남덕우")).toBe(true);
+  });
+  it("멘션이 아니면 false", () => {
+    expect(mentionsMember("그냥 대화", "남덕우")).toBe(false);
+    expect(mentionsMember("남덕우 봐", "남덕우")).toBe(false); // @ 없으면 멘션 아님
+  });
+  it("빈 이름은 false", () => {
+    expect(mentionsMember("@아무개", "")).toBe(false);
+    expect(mentionsMember("@아무개", "   ")).toBe(false);
   });
 });
 

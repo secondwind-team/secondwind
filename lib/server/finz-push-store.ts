@@ -69,6 +69,16 @@ async function ensureSchema() {
       await sql`
         CREATE INDEX IF NOT EXISTS push_subs_account_idx ON push_subscriptions (account_id)
       `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS push_room_mutes (
+          account_id TEXT NOT NULL,
+          room_id TEXT NOT NULL,
+          muted BOOLEAN NOT NULL DEFAULT TRUE,
+          allow_mentions BOOLEAN NOT NULL DEFAULT TRUE,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (account_id, room_id)
+        )
+      `;
     })();
   }
   return schemaReady;
@@ -161,4 +171,54 @@ export async function sendToAccounts(
     }
   }
   return { sent, pruned };
+}
+
+// ── 방별 알림 음소거 ──
+// 계정 × 방. 행이 없으면 음소거 안 함(기본 알림 ON). 음소거 시 allowMentions 로 멘션 예외 여부를 가른다.
+
+export type RoomMute = { muted: boolean; allowMentions: boolean };
+
+const DEFAULT_MUTE: RoomMute = { muted: false, allowMentions: true };
+
+// 내 방 음소거 상태. DB 미설정/행 없음이면 기본(음소거 안 함).
+export async function getRoomMute(accountId: string, roomId: string): Promise<RoomMute> {
+  if (!process.env.DATABASE_URL) return DEFAULT_MUTE;
+  await ensureSchema();
+  const [row] = await getSql()`
+    SELECT muted, allow_mentions FROM push_room_mutes
+    WHERE account_id = ${accountId} AND room_id = ${roomId} LIMIT 1
+  `;
+  if (!row) return DEFAULT_MUTE;
+  return { muted: Boolean(row.muted), allowMentions: Boolean(row.allow_mentions) };
+}
+
+// 음소거 설정 저장(upsert).
+export async function setRoomMute(accountId: string, roomId: string, mute: RoomMute): Promise<void> {
+  await ensureSchema();
+  await getSql()`
+    INSERT INTO push_room_mutes (account_id, room_id, muted, allow_mentions, updated_at)
+    VALUES (${accountId}, ${roomId}, ${mute.muted}, ${mute.allowMentions}, NOW())
+    ON CONFLICT (account_id, room_id) DO UPDATE SET
+      muted = EXCLUDED.muted,
+      allow_mentions = EXCLUDED.allow_mentions,
+      updated_at = NOW()
+  `;
+}
+
+// fan-out 필터용 — 방의 여러 수신자 중 음소거 행이 있는 계정만 Map 으로(행 없는 계정 = 기본 알림 ON).
+export async function getRoomMutesForAccounts(
+  roomId: string,
+  accountIds: string[],
+): Promise<Map<string, RoomMute>> {
+  const out = new Map<string, RoomMute>();
+  if (accountIds.length === 0 || !process.env.DATABASE_URL) return out;
+  await ensureSchema();
+  const rows = await getSql()`
+    SELECT account_id, muted, allow_mentions FROM push_room_mutes
+    WHERE room_id = ${roomId} AND account_id = ANY(${accountIds})
+  `;
+  for (const r of rows as Record<string, unknown>[]) {
+    out.set(r.account_id as string, { muted: Boolean(r.muted), allowMentions: Boolean(r.allow_mentions) });
+  }
+  return out;
 }
