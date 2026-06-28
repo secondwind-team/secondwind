@@ -390,6 +390,23 @@ export async function releaseProactiveLock(id: string): Promise<void> {
   if (redis) await redis.del(proactiveLockKey(id));
 }
 
+// "대화 요약"(general recap) 동시성 락 — @finz 요약/+메뉴 대화요약이 동시에 들어와도 LLM 1회만.
+// 파티 요약 락(summary-lock)과 별개 키 — 둘은 다른 기능이라 서로를 막지 않는다. cheap·짧아 finally 즉시 해제.
+const RECAP_LOCK_TTL_SECONDS = 30;
+function recapLockKey(id: string): string {
+  return `${chatKey(id)}:recap-lock`;
+}
+export async function acquireRecapLock(id: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis) return true;
+  const res = await redis.set(recapLockKey(id), "1", { nx: true, ex: RECAP_LOCK_TTL_SECONDS });
+  return res === "OK";
+}
+export async function releaseRecapLock(id: string): Promise<void> {
+  const redis = getClient();
+  if (redis) await redis.del(recapLockKey(id));
+}
+
 // @finz 의도 분류 동시성 락 — ask/pick/summary 와 동일하게 LLM 호출 표면을 보호(동시 분류 중복 차단).
 // 분류는 cheap·짧으므로 finally 에서 즉시 푼다(쿨다운 아님). TTL 은 크래시 안전망.
 function intentLockKey(id: string): string {

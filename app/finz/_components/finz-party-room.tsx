@@ -61,7 +61,8 @@ export function FinzPartyRoom({
   const [shareUrl, setShareUrl] = useState("");
   const [pending, setPending] = useState<PendingText[]>([]);
   const [pickBusy, setPickBusy] = useState(false);
-  const [summaryBusy, setSummaryBusy] = useState(false);
+  const [summaryBusy, setSummaryBusy] = useState(false); // 파티 요약(우정주 입장 기반, nudge 전용)
+  const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴)
   const [askBusy, setAskBusy] = useState(false);
   const [positionSubmitting, setPositionSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -251,14 +252,8 @@ export function FinzPartyRoom({
       return;
     }
     if (intent === "summary") {
-      const latest = selectLatestPick(live.messages);
-      const pos = latest ? selectLatestPositionsByMember(live.messages, latest.seq) : new Map<string, LatestPosition>();
-      const ready = live.full && live.members.every((m) => pos.has(m.memberId));
-      if (!ready) {
-        setActionError("둘 다 입장을 남기면 AI 요약을 받을 수 있어.");
-        return;
-      }
-      void openSummary();
+      // 대화 요약(general) — 전제조건 없음. 질문 텍스트를 그대로 보내 명시 기간(어제부터/최근 1시간/N개)을 서버가 파싱.
+      void openRecap(question);
       return;
     }
     if (intent === "position") {
@@ -417,6 +412,7 @@ export function FinzPartyRoom({
     }
   }
 
+  // 파티 요약(우정주 입장 기반 앰버 카드) — nudge CTA 전용. 전제조건은 서버가 검증(미충족 시 nudged).
   async function openSummary() {
     setSummaryBusy(true);
     setActionError(null);
@@ -433,6 +429,28 @@ export function FinzPartyRoom({
       setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
     } finally {
       setSummaryBusy(false);
+      bumpStick();
+    }
+  }
+
+  // 대화 요약(general) — @finz 요약/+메뉴 "대화 요약". text 가 있으면 서버가 명시 기간(어제부터/최근 N개)을 파싱,
+  // 없으면 100개 초과 시 최근 100개. 결과는 finz 텍스트 메시지로 채팅에 쌓인다.
+  async function openRecap(text?: string) {
+    setRecapBusy(true);
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/summary`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, text: text ?? "" }),
+      });
+      if (!res.ok) setActionError("요약을 만들지 못했어. 잠시 뒤 다시 시도해줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      setRecapBusy(false);
       bumpStick();
     }
   }
@@ -481,7 +499,6 @@ export function FinzPartyRoom({
   const positions: Map<string, LatestPosition> = latestPick
     ? selectLatestPositionsByMember(messages, latestPick.seq)
     : new Map<string, LatestPosition>();
-  const everyonePositioned = full && members.every((m) => positions.has(m.memberId));
   const myPos = positions.get(myMemberId);
   const isSelf = initialKind === "self";
   const isGroup = initialKind === "group";
@@ -506,7 +523,7 @@ export function FinzPartyRoom({
         pending={pending}
         myMemberId={myMemberId}
         nudge={nudge}
-        aiBusy={pickBusy || summaryBusy || askBusy}
+        aiBusy={pickBusy || summaryBusy || recapBusy || askBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}
@@ -520,10 +537,9 @@ export function FinzPartyRoom({
       <FinzChatComposer
         full={full}
         hasPick={hasPick}
-        canSummarize={everyonePositioned}
         sending={false}
         pickBusy={pickBusy}
-        summaryBusy={summaryBusy}
+        recapBusy={recapBusy}
         positionSubmitting={positionSubmitting}
         myLatestStance={myPos?.stance ?? null}
         myLatestNote={myPos?.note ?? ""}
@@ -532,7 +548,7 @@ export function FinzPartyRoom({
         onSendText={sendText}
         onPick={() => void openPick(false)}
         onPosition={submitPosition}
-        onSummary={openSummary}
+        onRecap={() => void openRecap()}
       />
       {inviteOpen && (
         <FinzInviteSheet

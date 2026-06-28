@@ -10,10 +10,9 @@ import { FinzPositionInput } from "./finz-position-input";
 export function FinzChatComposer({
   full,
   hasPick,
-  canSummarize,
   sending,
   pickBusy,
-  summaryBusy,
+  recapBusy,
   positionSubmitting,
   myLatestStance,
   myLatestNote,
@@ -22,14 +21,13 @@ export function FinzChatComposer({
   onSendText,
   onPick,
   onPosition,
-  onSummary,
+  onRecap,
 }: {
   full: boolean;
   hasPick: boolean;
-  canSummarize: boolean;
   sending: boolean;
   pickBusy: boolean;
-  summaryBusy: boolean;
+  recapBusy: boolean;
   positionSubmitting: boolean;
   myLatestStance: FinzPartyStance | null;
   myLatestNote: string;
@@ -38,7 +36,7 @@ export function FinzChatComposer({
   onSendText: (text: string) => void;
   onPick: () => void;
   onPosition: (stance: FinzPartyStance, note: string) => void;
-  onSummary: () => void;
+  onRecap: () => void;
 }) {
   const [text, setText] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -74,7 +72,6 @@ export function FinzChatComposer({
 
   const pickReason = !full ? "친구가 들어와야 뽑을 수 있어" : hasPick ? "이미 뽑았어 (말풍선에서 다시 뽑기)" : "";
   const positionReason = !hasPick ? "우정주를 먼저 뽑아줘" : "";
-  const summaryReason = !canSummarize ? "둘 다 입장을 남기면 요약할 수 있어" : "";
 
   return (
     <div
@@ -103,7 +100,7 @@ export function FinzChatComposer({
                   runAction(() => onSetStanceMode(true))
                 }
               />
-              <SheetItem label="📝 AI 요약 받기" reason={summaryReason} busy={summaryBusy} onClick={() => runAction(onSummary)} />
+              <SheetItem label="📝 대화 요약" reason="" busy={recapBusy} onClick={() => runAction(onRecap)} />
             </div>
           )}
 
