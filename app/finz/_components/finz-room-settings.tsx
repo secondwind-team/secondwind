@@ -206,9 +206,9 @@ export function FinzRoomSettings({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate text-sm font-semibold text-[var(--fz-ink)]">{item.content}</p>
-                    {item.contentKind === "ai" && (
+                    {(item.contentKind === "ai" || item.contentKind === "chart") && (
                       <span className="shrink-0 rounded-[var(--fz-r-full)] bg-[var(--fz-surface-2)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--fz-coral-ink)]">
-                        AI
+                        {item.contentKind === "ai" ? "AI" : "차트"}
                       </span>
                     )}
                   </div>
@@ -378,13 +378,22 @@ function RecurringForm({
         <Chip on={contentKind === "ai"} onClick={() => setContentKind("ai")}>
           AI 생성
         </Chip>
+        <Chip on={contentKind === "chart"} onClick={() => setContentKind("chart")}>
+          차트
+        </Chip>
       </div>
 
       {/* 내용 */}
       <input
         value={content}
         onChange={(e) => setContent(e.target.value.slice(0, RECURRING_CONTENT_MAX))}
-        placeholder={contentKind === "ai" ? "예: 오늘의 명언, 오늘 서울 날씨" : "예: 물 마시기, 회의 시작!"}
+        placeholder={
+          contentKind === "ai"
+            ? "예: 오늘의 명언, 오늘 서울 날씨"
+            : contentKind === "chart"
+              ? "종목 심볼 (예: NASDAQ:TSLA, BINANCE:SOLUSDT)"
+              : "예: 물 마시기, 회의 시작!"
+        }
         className="fz-input w-full"
       />
 

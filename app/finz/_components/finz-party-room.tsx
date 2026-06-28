@@ -586,6 +586,7 @@ export function FinzPartyRoom({
         messages={messages}
         pending={pending}
         myMemberId={myMemberId}
+        mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
         aiBusy={pickBusy || recapBusy || askBusy}
         stickSignal={stickSignal}
@@ -608,6 +609,7 @@ export function FinzPartyRoom({
         myLatestStance={myPos?.stance ?? null}
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
+        mentionNames={members.map((m) => m.displayName)}
         onSetStanceMode={setStanceMode}
         onSendText={sendText}
         onPick={() => void openPick(false)}

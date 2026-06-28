@@ -4,9 +4,9 @@ import {
   computeAllocation,
   computeHoldings,
   computeSectors,
-  inferTradeAction,
   normalizeTrade,
   parsePriceLines,
+  parseTradeFromText,
   resolveKnownSymbol,
   summarizePortfolio,
   type FinzPortfolioCardPayload,
@@ -56,19 +56,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
 
-    // 1) 의도/필드 추출(비그라운딩 JSON).
+    // 0) 결정적 파싱(LLM 의존 X) — "테슬라 2주 400달러 매수" 류 표준 표현을 먼저 잡는다.
+    const det = parseTradeFromText(text);
+    const detComplete = Boolean(det.symbol && det.shares != null && det.price != null);
+
+    // 1) 의도/필드 추출(비그라운딩 JSON). 실패해도 det 가 완전하면 record 로 진행한다.
     const ext = await extract(text, today, skipModels);
-    if (!ext) {
+    const op: "record" | "view" | "sector" | null = ext?.op ?? (detComplete ? "record" : null);
+    if (!op) {
       await appendAnswerMessage(groupId, PORTFOLIO_HELP).catch(() => {});
       return NextResponse.json({ status: "ok", nudged: true });
     }
 
-    // 2) 기록(매수/매도)
-    if (ext.op === "record") {
-      // LLM 누락 보강: action 은 문장에서 추론, symbol 은 한글/누락이면 원문에서 알려진 종목으로 폴백.
-      if (ext.action !== "buy" && ext.action !== "sell") ext.action = inferTradeAction(text);
-      ext.symbol = ext.symbol || resolveKnownSymbol(ext.label) || resolveKnownSymbol(text) || "";
-      const normalized = normalizeTrade(ext, nowIso);
+    // 2) 기록(매수/매도) — 결정적 파싱을 우선(reliable), 빈 칸만 LLM 으로 보강.
+    if (op === "record") {
+      const merged = {
+        action: det.action, // inferTradeAction 은 항상 buy/sell
+        symbol: det.symbol || ext?.symbol || resolveKnownSymbol(ext?.label) || "",
+        label: ext?.label || det.label || "",
+        shares: det.shares ?? ext?.shares,
+        price: det.price ?? ext?.price,
+        currency: det.currency ?? ext?.currency,
+        scope: ext?.scope,
+        tradedAt: ext?.tradedAt,
+      };
+      const normalized = normalizeTrade(merged, nowIso);
       if (!normalized) {
         await appendAnswerMessage(groupId, PORTFOLIO_HELP).catch(() => {});
         return NextResponse.json({ status: "ok", nudged: true });
@@ -91,8 +103,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
       return NextResponse.json({ status: "ok", recorded: true });
     }
 
-    // 3) 조회(view) / 섹터 분석(sector) — 보유 현황 카드
-    const scope: FinzPortfolioScope = ext.scope === "shared" ? "shared" : "personal";
+    // 3) 조회(view) / 섹터 분석(sector) — 보유 현황 카드 (여기 도달하면 op 는 ext 에서 온 것)
+    const scope: FinzPortfolioScope = ext?.scope === "shared" ? "shared" : "personal";
     const trades = filterScope(await listTrades(groupId), scope, memberId);
     const holdings = computeHoldings(trades);
     const open = holdings.filter((h) => h.shares > 0);
@@ -119,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     const summary = summarizePortfolio(holdings, priced ? prices : undefined);
 
     let payload: FinzPortfolioCardPayload;
-    if (ext.op === "sector") {
+    if (op === "sector") {
       const sectorMap = await classifySectors(open.map((h) => ({ symbol: h.symbol, label: h.label })), skipModels);
       const sectors = computeSectors(holdings, sectorMap, priced ? "value" : "invested", priced ? prices : undefined);
       payload = {

@@ -8,7 +8,8 @@
 // 실제 발송은 ~10분 간격 GitHub Actions cron → /api/finz/cron/recurring 이 due(nextRunAt<=now)를 처리한다.
 // 그래서 시각은 분 단위가 아니라 ~10분 버킷 정밀도다(친구 채팅엔 충분). 모든 시각 계산은 KST 고정.
 
-export type FinzRecurringContentKind = "text" | "ai";
+// text=고정 문구 / ai=실행시점 LLM 생성 / chart=종목 차트(content 에 TradingView 심볼 저장, 매번 차트 메시지).
+export type FinzRecurringContentKind = "text" | "ai" | "chart";
 export type FinzRecurringFreq = "daily" | "weekly" | "interval";
 
 export type FinzRecurringMessage = {
@@ -61,10 +62,16 @@ export function normalizeRecurringInput(raw: unknown): NormalizedRecurring | nul
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
 
-  const content = typeof r.content === "string" ? r.content.trim().slice(0, RECURRING_CONTENT_MAX) : "";
+  let content = typeof r.content === "string" ? r.content.trim().slice(0, RECURRING_CONTENT_MAX) : "";
   if (!content) return null;
 
-  const contentKind: FinzRecurringContentKind = r.contentKind === "ai" ? "ai" : "text";
+  const contentKind: FinzRecurringContentKind =
+    r.contentKind === "ai" ? "ai" : r.contentKind === "chart" ? "chart" : "text";
+  // chart 면 content 는 TradingView 심볼(거래소:티커). 영문 심볼로 정리, 비면 무효.
+  if (contentKind === "chart") {
+    content = content.toUpperCase().replace(/[^A-Z0-9:._-]/g, "").slice(0, 24);
+    if (!content) return null;
+  }
 
   if (r.freq !== "daily" && r.freq !== "weekly" && r.freq !== "interval") return null;
   const freq = r.freq;
@@ -150,7 +157,12 @@ export function formatRecurringSchedule(
 export function describeRecurring(
   def: Pick<FinzRecurringMessage, "freq" | "hour" | "minute" | "weekday" | "intervalMinutes" | "contentKind" | "content">,
 ): string {
-  const what = def.contentKind === "ai" ? `'${def.content}' (AI 생성)` : `'${def.content}'`;
+  const what =
+    def.contentKind === "ai"
+      ? `'${def.content}' (AI 생성)`
+      : def.contentKind === "chart"
+        ? `${def.content} 차트`
+        : `'${def.content}'`;
   return `${formatRecurringSchedule(def)}에 ${what}`;
 }
 

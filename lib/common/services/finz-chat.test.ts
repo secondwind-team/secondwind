@@ -9,6 +9,7 @@ import {
   normalizeChartSymbol,
   shouldFinzProactivelySpeak,
   splitByMention,
+  splitByMentionTokens,
   stripFinzMention,
   type FinzChatMemberLite,
   type FinzChatMessage,
@@ -193,6 +194,22 @@ describe("splitByMention", () => {
   it("멘션 없으면 통째로 일반 세그먼트", () => {
     expect(splitByMention("그냥 텍스트")).toEqual([{ text: "그냥 텍스트", isMention: false }]);
     expect(splitByMention("@airline 예약")).toEqual([{ text: "@airline 예약", isMention: false }]);
+  });
+});
+
+describe("splitByMentionTokens (멤버 멘션 포함)", () => {
+  it("멤버 이름(@남덕우)도 멘션으로 분해", () => {
+    expect(splitByMentionTokens("@남덕우 안녕", ["남덕우", "지헌"])).toEqual([
+      { text: "@남덕우", isMention: true },
+      { text: " 안녕", isMention: false },
+    ]);
+  });
+  it("finz 와 멤버 멘션 둘 다", () => {
+    const segs = splitByMentionTokens("@finz 랑 @지헌 봐", ["지헌"]);
+    expect(segs.filter((s) => s.isMention).map((s) => s.text)).toEqual(["@finz", "@지헌"]);
+  });
+  it("names 없으면 finz 만(기존과 동일)", () => {
+    expect(splitByMentionTokens("@남덕우 안녕", [])).toEqual([{ text: "@남덕우 안녕", isMention: false }]);
   });
 });
 

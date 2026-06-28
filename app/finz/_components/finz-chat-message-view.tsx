@@ -1,7 +1,7 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import { splitByMention, type FinzChatMessage } from "@/lib/common/services/finz-chat";
+import { splitByMentionTokens, type FinzChatMessage } from "@/lib/common/services/finz-chat";
 import { formatKstTime } from "@/lib/common/services/finz-time";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
@@ -9,11 +9,11 @@ import { FinzChartBubble } from "./finz-chart-bubble";
 import { FinzPortfolioCard } from "./finz-portfolio-card";
 import { STANCE_EMOJI } from "./finz-position-input";
 
-// 메시지 본문 — @finz 같은 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
-function MessageBody({ text }: { text: string }) {
+// 메시지 본문 — @finz·@멤버 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
+function MessageBody({ text, mentionNames }: { text: string; mentionNames: string[] }) {
   return (
     <>
-      {splitByMention(text).map((seg, i) =>
+      {splitByMentionTokens(text, mentionNames).map((seg, i) =>
         seg.isMention ? (
           <span key={i} className="fz-mention">
             {seg.text}
@@ -59,6 +59,7 @@ function FinzHeader({ label, iso, amber }: { label: string; iso: string; amber?:
 export function FinzChatMessageView({
   message,
   myMemberId,
+  mentionNames = [],
   isLatestPick,
   onReroll,
   superseded,
@@ -66,6 +67,7 @@ export function FinzChatMessageView({
 }: {
   message: FinzChatMessage;
   myMemberId: string | null;
+  mentionNames?: string[];
   isLatestPick?: boolean;
   onReroll?: () => void;
   superseded?: boolean;
@@ -144,7 +146,7 @@ export function FinzChatMessageView({
         <div className="min-w-0 flex-1 space-y-1">
           <FinzHeader label="FINZ" iso={message.createdAt} />
           <div className="fz-bubble max-w-full whitespace-pre-wrap break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
-            <MessageBody text={message.text} />
+            <MessageBody text={message.text} mentionNames={mentionNames} />
           </div>
         </div>
       </div>
@@ -183,7 +185,7 @@ export function FinzChatMessageView({
       {!mine && <span className="px-1 text-xs text-[var(--fz-muted)]">{message.authorName}</span>}
       <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
         <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>
-          <MessageBody text={message.text} />
+          <MessageBody text={message.text} mentionNames={mentionNames} />
         </div>
         <MsgTime iso={message.createdAt} />
       </div>

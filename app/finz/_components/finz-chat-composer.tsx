@@ -3,7 +3,7 @@
 import { Plus, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
-import { splitByMention } from "@/lib/common/services/finz-chat";
+import { splitByMentionTokens } from "@/lib/common/services/finz-chat";
 import { FinzPositionInput } from "./finz-position-input";
 
 // 하단 입력 바(멤버 전용). + 버튼 = 액션 시트(우정주 뽑기 / 내 입장 / 요약), 본문 = 텍스트 전송.
@@ -18,6 +18,7 @@ export function FinzChatComposer({
   myLatestStance,
   myLatestNote,
   stanceMode,
+  mentionNames,
   onSetStanceMode,
   onSendText,
   onPick,
@@ -33,6 +34,7 @@ export function FinzChatComposer({
   myLatestStance: FinzPartyStance | null;
   myLatestNote: string;
   stanceMode: boolean;
+  mentionNames: string[]; // 멤버 이름들(@남덕우 처럼 입력 중 배지 강조용)
   onSetStanceMode: (v: boolean) => void;
   onSendText: (text: string) => void;
   onPick: () => void;
@@ -124,9 +126,10 @@ export function FinzChatComposer({
               aria-label={sheetOpen ? "액션 닫기" : "파티 액션 열기"}
               aria-expanded={sheetOpen}
               onClick={() => setSheetOpen((v) => !v)}
-              className="fz-btn fz-btn--ghost h-11 w-11 shrink-0 p-0"
+              className="fz-btn fz-btn--ghost h-11 w-11 shrink-0"
+              style={{ padding: 0 }}
             >
-              {sheetOpen ? <X className="h-7 w-7" aria-hidden /> : <Plus className="h-7 w-7" aria-hidden />}
+              {sheetOpen ? <X className="h-6 w-6 shrink-0" aria-hidden /> : <Plus className="h-6 w-6 shrink-0" aria-hidden />}
             </button>
 
             {/* 멘션 하이라이트 오버레이: 타이핑 중에도 @finz 가 배지처럼 보이게.
@@ -139,7 +142,7 @@ export function FinzChatComposer({
                 className="fz-input pointer-events-none absolute inset-0 max-h-28 overflow-hidden whitespace-pre-wrap break-words py-2.5 text-[var(--fz-ink)]"
                 style={{ borderColor: "transparent" }}
               >
-                {splitByMention(text).map((seg, i) =>
+                {splitByMentionTokens(text, mentionNames).map((seg, i) =>
                   seg.isMention ? (
                     <span key={i} className="fz-mention-live">
                       {seg.text}
@@ -174,9 +177,10 @@ export function FinzChatComposer({
               onClick={send}
               disabled={!text.trim() || sending}
               aria-label="보내기"
-              className="fz-btn h-11 w-11 shrink-0 p-0 disabled:cursor-not-allowed disabled:opacity-50"
+              className="fz-btn h-11 w-11 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ padding: 0 }}
             >
-              <Send className="h-7 w-7" aria-hidden />
+              <Send className="h-6 w-6 shrink-0" aria-hidden />
             </button>
           </div>
         </>
