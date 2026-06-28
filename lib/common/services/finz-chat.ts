@@ -13,9 +13,10 @@ import {
   type FinzPartyStance,
   type FinzPartySummary,
 } from "./finz";
+import { isFinzPortfolioCardPayload, type FinzPortfolioCardPayload } from "./finz-portfolio";
 
 export type FinzChatRole = "member" | "finz" | "system";
-export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary" | "chart";
+export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary" | "chart" | "portfolio";
 
 export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
@@ -29,7 +30,8 @@ type FinzChatVariants<B> =
   | (B & { kind: "pick"; payload: FinzPartyPick })
   | (B & { kind: "position"; payload: FinzPositionPayload })
   | (B & { kind: "summary"; payload: FinzPartySummary })
-  | (B & { kind: "chart"; payload: FinzChartPayload });
+  | (B & { kind: "chart"; payload: FinzChartPayload })
+  | (B & { kind: "portfolio"; payload: FinzPortfolioCardPayload });
 
 type FinzStoredBase = {
   id: string; // crypto.randomUUID() — React key + 낙관적 전송 reconcile 의 유일 키
@@ -108,6 +110,8 @@ export function isFinzStoredChatMessage(value: unknown): value is FinzStoredChat
       return isPositionPayload(m.payload);
     case "chart":
       return isChartPayload(m.payload);
+    case "portfolio":
+      return isFinzPortfolioCardPayload(m.payload);
     default:
       return false;
   }
@@ -142,6 +146,7 @@ export type FinzMentionIntent =
   | "chart"
   | "briefing"
   | "schedule"
+  | "portfolio"
   | "qa";
 export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = [
   "pick",
@@ -150,6 +155,7 @@ export const FINZ_MENTION_INTENTS: readonly FinzMentionIntent[] = [
   "chart",
   "briefing",
   "schedule",
+  "portfolio",
   "qa",
 ] as const;
 export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent {
@@ -160,6 +166,7 @@ export function isFinzMentionIntent(value: unknown): value is FinzMentionIntent 
     value === "chart" ||
     value === "briefing" ||
     value === "schedule" ||
+    value === "portfolio" ||
     value === "qa"
   );
 }

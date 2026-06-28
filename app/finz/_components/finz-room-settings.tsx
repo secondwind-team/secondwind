@@ -11,23 +11,27 @@ import {
   type FinzRecurringFreq,
   type FinzRecurringMessage,
 } from "@/lib/common/services/finz-recurring";
+import type { FinzTrade } from "@/lib/common/services/finz-portfolio";
 import { useFinzAccount } from "./finz-account-context";
+import { FinzPortfolioSettings } from "./finz-portfolio-settings";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-// 채팅방 설정 — 풀블리드(탭바 밖). 현재는 정기 메시지 관리 + 아침 시황 토글. 추후 사진/유형별 보기 등 확장.
+// 채팅방 설정 — 풀블리드(탭바 밖). 정기 메시지·포트폴리오 관리 + 아침 시황 토글. 추후 사진/유형별 보기 등 확장.
 export function FinzRoomSettings({
   groupId,
   roomTitle,
   memberIds,
   initialItems,
   initialBriefingSubscribed,
+  initialTrades,
 }: {
   groupId: string;
   roomTitle: string;
   memberIds: string[];
   initialItems: FinzRecurringMessage[];
   initialBriefingSubscribed: boolean;
+  initialTrades: FinzTrade[];
 }) {
   const account = useFinzAccount();
   const memberId = account.accountId;
@@ -253,6 +257,9 @@ export function FinzRoomSettings({
             />
           )}
         </section>
+
+        {/* 포트폴리오 */}
+        <FinzPortfolioSettings groupId={groupId} initialTrades={initialTrades} />
 
         {/* 곧 추가될 기능(로드맵 안내) */}
         <section className="space-y-2">
