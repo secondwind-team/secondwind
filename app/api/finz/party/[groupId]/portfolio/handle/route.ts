@@ -23,7 +23,7 @@ import {
   releasePortfolioLock,
 } from "@/lib/server/finz-chat-store";
 import { addTrade, listTrades } from "@/lib/server/finz-portfolio-store";
-import { getBlockedModels, recordCall } from "@/lib/server/quota-store";
+import { getBlockedModels, recordCall, recordLlmQuota } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
@@ -281,6 +281,7 @@ async function extract(text: string, today: string, skipModels: GeminiModel[]): 
     },
     { skipModels },
   );
+  void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
   if (result.status !== "ok") return null;
   void recordCall(result.model, result.usage.total).catch(() => {});
   try {
@@ -313,6 +314,7 @@ async function fetchPrices(
     },
     { skipModels },
   );
+  void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
   if (result.status !== "ok") return { prices: {} };
   void recordCall(result.model, result.usage.total).catch(() => {});
   return { prices: parsePriceLines(result.text, symbols), sources: result.sources };
@@ -350,6 +352,7 @@ async function classifySectors(
     },
     { skipModels },
   );
+  void recordLlmQuota(result).catch(() => {}); // 429 를 KV 에 기록 → 다음 호출 사전 skip
   const map: Record<string, string> = {};
   if (result.status !== "ok") return map;
   void recordCall(result.model, result.usage.total).catch(() => {});

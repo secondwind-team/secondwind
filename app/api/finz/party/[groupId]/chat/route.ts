@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { getChatTail } from "@/lib/server/finz-chat-store";
+import { requireAccount } from "@/lib/server/finz-account";
 
 export const runtime = "nodejs";
 // 폴링이 항상 최신 꼬리를 받도록 캐시를 끈다.
@@ -12,8 +13,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ groupId:
   if (!isFinzGroupId(groupId)) {
     return NextResponse.json({ status: "error", reason: "invalid-id" }, { status: 400 });
   }
-  const group = await getFinzGroup(groupId);
+  // 읽기도 멤버만 — 비멤버가 그룹 ID 만으로 대화·포트폴리오·입장을 열람하지 못하게(쓰기 가드와 동일 원칙).
+  // memberId=accountId 라 세션으로 검증한다(폴링 fetch 가 쿠키를 자동 전송 → 클라 변경 불필요).
+  // 비멤버 클라는 애초에 폴링하지 않고(join-view), 합류 후 멤버가 되면 폴링이 통과한다.
+  // 가장 빈번한 폴링 경로라 그룹(Redis 도쿄)·계정(Neon 싱가포르) 조회를 병렬로 묶어 cross-region 왕복이
+  // 직렬로 쌓이지 않게 한다. (accountId 를 세션 클레임으로 옮겨 Neon 조회 자체를 없애는 건 후속 과제.)
+  const [group, account] = await Promise.all([getFinzGroup(groupId), requireAccount()]);
   if (!group) return NextResponse.json({ status: "not-found" }, { status: 404 });
+  if (!account || !group.members.some((m) => m.memberId === account.accountId)) {
+    return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
+  }
 
   // after 방어적 파싱: NaN/음수면 전체 꼬리(seq 0 환영 메시지가 가려지지 않게).
   const raw = new URL(req.url).searchParams.get("after");

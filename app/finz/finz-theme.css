@@ -242,6 +242,12 @@
 .fz-input::placeholder {
   color: var(--fz-muted);
 }
+/* 키보드 포커스 표시 — 마우스/터치 클릭엔 안 뜨고 키보드 탐색(:focus-visible)에만 코랄 윤곽.
+   버튼·칩·탭바·리스트행·링크·입력 전역에 적용(WCAG 2.4.7). 토큰만 사용(하드코딩 색 없음). */
+.finz-root :focus-visible {
+  outline: 2px solid var(--fz-coral);
+  outline-offset: 2px;
+}
 /* 왼쪽 아이콘(@ 등)이 있는 입력 — 아이콘과 placeholder/텍스트가 겹치지 않게 왼쪽 패딩 확보.
    .fz-input 의 shorthand padding 이 Tailwind pl-* 유틸을 (로드 순서상) 덮으므로, 같은 finz-theme
    안에서 .fz-input 뒤에 정의해 안전하게 padding-left 만 재정의한다. */
