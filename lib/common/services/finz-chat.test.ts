@@ -101,6 +101,14 @@ describe("computeNextNudge", () => {
     const n = computeNextNudge([pick(1), position(2, "a"), position(3, "b"), summary(4)], MEMBERS, "a");
     expect(n).toBeNull();
   });
+  it("모두 입장 직후엔 summary, 이후 대화가 이어지면 null(최하단 영구 고정 방지)", () => {
+    const base = [pick(1), position(2, "a"), position(3, "b")];
+    // 모두 막 입장을 마친 직후(마지막 메시지 = 그 입장) → summary nudge 1회 노출
+    expect(computeNextNudge(base, MEMBERS, "a")?.cta).toBe("summary");
+    // 이후 자유 대화(또는 브리핑 등 어떤 메시지)가 오면 '요약 받을까?' 순간은 지났으므로 사라진다
+    expect(computeNextNudge([...base, text(4, "a")], MEMBERS, "a")).toBeNull();
+    expect(computeNextNudge([...base, text(4, "b"), text(5, "a")], MEMBERS, "a")).toBeNull();
+  });
   it("3인 방: 한 명이라도 미입장이면 조기 summary nudge 없음(null), 전원 입장해야 summary", () => {
     const THREE: FinzChatMemberLite[] = [
       ...MEMBERS,
