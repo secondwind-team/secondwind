@@ -329,5 +329,10 @@ export function computeNextNudge(
   // 모두 포지션 완료 — 이 픽 기준 최신 요약이 최신 포지션보다 뒤면 더 권할 게 없다.
   const latestPositionSeq = Math.max(...[...positions.values()].map((p) => p.seq), latestPick.seq);
   if (maxSummarySeq(messages, latestPick.seq) > latestPositionSeq) return null;
+  // 대화가 마지막 입장 이후로 이어졌으면(브리핑·자유 대화 등) '요약 받을까?' 순간은 지난 것 —
+  // 코칭 버블을 최하단에 영원히 고정하지 않는다. 모두 막 입장을 마친 직후(마지막 메시지가 그 입장)에만
+  // 한 번 뜨고, 대화가 계속되면 사라진다. 요약은 +메뉴·@finz 로 언제든 받을 수 있어 기능 손실 없음.
+  const last = messages[messages.length - 1];
+  if (last && last.seq > latestPositionSeq) return null;
   return { cta: "summary", text: "다들 입장을 남겼어! AI 요약을 받아볼까?" };
 }
