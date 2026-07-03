@@ -183,7 +183,7 @@ async function callGemini(
   }
 
   try {
-    // grounded 면 plain text + googleSearch 툴(JSON 모드와 동시 불가). 아니면 기존 JSON 모드.
+    // grounded 면 plain text + googleSearch 툴(JSON 모드와 동시 불가).
     const generationConfig: Record<string, unknown> = {
       temperature: input.temperature ?? 0.6,
       maxOutputTokens: input.maxTokens ?? 2048,
@@ -191,9 +191,12 @@ async function callGemini(
         ? { thinkingConfig: { thinkingBudget: input.thinkingBudget } }
         : {}),
     };
-    if (!input.grounded) {
+    // JSON 모드는 responseSchema 가 있을 때만 켠다. 스키마 없이 responseMimeType=json 만 강제하면
+    // 모델이 필드명을 제멋대로 지어낸 JSON 을 뱉는다(예: 선제 개입이 {finz_message,...} 를 반환하던 버그).
+    // 비그라운딩 + 무스키마 = 자유 텍스트(기본 text/plain).
+    if (!input.grounded && input.responseSchema) {
       generationConfig.responseMimeType = "application/json";
-      if (input.responseSchema) generationConfig.responseSchema = input.responseSchema;
+      generationConfig.responseSchema = input.responseSchema;
     }
 
     const res = await fetch(`${url}?key=${encodeURIComponent(env.geminiApiKey)}`, {
