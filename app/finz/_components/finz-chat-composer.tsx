@@ -85,6 +85,20 @@ export function FinzChatComposer({
     fn();
   }
 
+  // + 메뉴 'FINZ에게 물어보기' — 입력창에 "@finz " 를 자동으로 넣고 포커스한다(멘션 질문을 쉽게 시작).
+  // 이미 @finz 로 시작하면 그대로, 기존 텍스트가 있으면 앞에 붙인다.
+  function askFinz() {
+    setSheetOpen(false);
+    setText((t) => (/^@\s*finz/i.test(t) ? t : t ? `@finz ${t}` : "@finz "));
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      const end = ta.value.length;
+      ta.setSelectionRange(end, end); // 커서를 끝으로 — 바로 질문을 이어 타이핑
+    });
+  }
+
   const pickReason = !full ? "친구가 들어와야 뽑을 수 있어" : hasPick ? "이미 뽑았어 (말풍선에서 다시 뽑기)" : "";
   const positionReason = !hasPick ? "우정주를 먼저 뽑아줘" : "";
 
@@ -107,6 +121,7 @@ export function FinzChatComposer({
         <>
           {sheetOpen && (
             <div ref={sheetRef} role="menu" aria-label="파티 액션" className="mb-2 space-y-1.5 rounded-[var(--fz-r)] border border-[var(--fz-line)] bg-[var(--fz-surface)] p-2 shadow-[var(--fz-shadow-sm)]">
+              <SheetItem label="🤖 FINZ에게 물어보기" reason="" onClick={askFinz} />
               <SheetItem label="🎴 우정주 뽑기" reason={pickReason} busy={pickBusy} onClick={() => runAction(onPick)} />
               <SheetItem
                 label="✋ 내 입장 남기기"

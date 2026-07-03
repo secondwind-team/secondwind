@@ -26,6 +26,11 @@ import { FinzInviteSheet } from "./finz-invite-sheet";
 // 그룹방 정원(서버 MAX_ROOM_MEMBERS 와 동일). 이 이상이면 비멤버는 못 들어옴.
 const ROOM_CAPACITY = 12;
 
+// 선제 개입(finz 가 @finz 멘션 없이 대화에 끼어들어 LLM 을 쓰던 기능)은 사용자 요청으로 비활성.
+// 이제 finz 는 @finz 멘션(하단 + 메뉴의 'FINZ에게 물어보기' 포함)에만 응답한다 — 비멘션 LLM 사용/토큰 절감.
+// 되살리려면 true 로 바꾸면 됨(proactive API 라우트는 그대로 두어 즉시 재사용 가능).
+const FINZ_PROACTIVE_ENABLED = false;
+
 // 멤버 집합이 실질적으로 같은지(id + 표시이름) — 폴링 리렌더 억제용.
 function sameMembers(a: FinzChatMemberLite[], b: FinzChatMemberLite[]): boolean {
   if (a.length !== b.length) return false;
@@ -458,6 +463,7 @@ export function FinzPartyRoom({
 
   // 선제 개입 트리거(백그라운드). 서버가 조건/쿨다운 미충족이면 조용히 no-op. 곧 폴링으로 뜬다.
   async function triggerProactive() {
+    if (!FINZ_PROACTIVE_ENABLED) return; // 비활성(위 상수) — finz 는 @finz 멘션에만 응답
     try {
       await fetch(`/api/finz/party/${groupId}/proactive`, {
         method: "POST",

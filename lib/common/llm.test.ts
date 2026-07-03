@@ -49,6 +49,25 @@ describe("callLlm — thinkingBudget plumbing", () => {
     const genConfig = body.generationConfig as Record<string, unknown>;
     expect(genConfig.thinkingConfig).toBeUndefined();
   });
+
+  // JSON 모드는 responseSchema 가 있을 때만 — 없으면 모델이 필드명을 지어낸 JSON({finz_message,...})을
+  // 뱉던 버그(선제 개입) 회귀 방지.
+  it("비그라운딩 + 스키마 없음 → responseMimeType 안 붙음(자유 텍스트)", async () => {
+    const { callLlm, requests } = await loadWithFetchCapture();
+    await callLlm({ system: "s", user: "u", thinkingBudget: 0 });
+    const genConfig = requests[0]?.generationConfig as Record<string, unknown>;
+    expect(genConfig.responseMimeType).toBeUndefined();
+    expect(genConfig.responseSchema).toBeUndefined();
+  });
+
+  it("비그라운딩 + 스키마 있음 → JSON 모드(responseMimeType + responseSchema)", async () => {
+    const { callLlm, requests } = await loadWithFetchCapture();
+    const schema = { type: "object", properties: { x: { type: "string" } } };
+    await callLlm({ system: "s", user: "u", thinkingBudget: 0, responseSchema: schema });
+    const genConfig = requests[0]?.generationConfig as Record<string, unknown>;
+    expect(genConfig.responseMimeType).toBe("application/json");
+    expect(genConfig.responseSchema).toEqual(schema);
+  });
 });
 
 // 잘린(MAX_TOKENS) 200 응답을 ok 로 오판하던 버그 회귀 방지.
