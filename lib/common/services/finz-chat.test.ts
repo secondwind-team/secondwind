@@ -19,6 +19,10 @@ import {
   splitMessageBody,
   firstUrlInText,
   stripFinzMention,
+  isFinzAttachment,
+  attachmentSnippet,
+  finzMessageSnippet,
+  type FinzAttachment,
   type FinzChatMemberLite,
   type FinzChatMessage,
 } from "./finz-chat";
@@ -463,5 +467,47 @@ describe("firstUrlInText", () => {
   });
   it("URL 없으면 null", () => {
     expect(firstUrlInText("그냥 텍스트 @finz")).toBeNull();
+  });
+});
+
+describe("첨부(attachments)", () => {
+  const img: FinzAttachment = {
+    kind: "image",
+    url: "https://x.public.blob.vercel-storage.com/a.jpg",
+    name: "a.jpg",
+    size: 1234,
+    contentType: "image/jpeg",
+  };
+  const file: FinzAttachment = {
+    kind: "file",
+    url: "https://x.public.blob.vercel-storage.com/doc.pdf",
+    name: "doc.pdf",
+    size: 5000,
+    contentType: "application/pdf",
+  };
+
+  it("isFinzAttachment: 유효/무효 판정", () => {
+    expect(isFinzAttachment(img)).toBe(true);
+    expect(isFinzAttachment(file)).toBe(true);
+    expect(isFinzAttachment({ ...img, kind: "video" })).toBe(false); // 허용 안 되는 kind
+    expect(isFinzAttachment({ ...img, url: "ftp://x/a.jpg" })).toBe(false); // http(s) 아님
+    expect(isFinzAttachment({ ...img, size: -1 })).toBe(false);
+    expect(isFinzAttachment({ ...img, size: "big" })).toBe(false);
+    expect(isFinzAttachment(null)).toBe(false);
+  });
+
+  it("attachmentSnippet: 이미지/파일/혼합 요약", () => {
+    expect(attachmentSnippet([img])).toBe("📷 사진");
+    expect(attachmentSnippet([img, img])).toBe("📷 사진 2장");
+    expect(attachmentSnippet([file])).toBe("📎 doc.pdf");
+    expect(attachmentSnippet([img, file])).toBe("📎 첨부 2개");
+    expect(attachmentSnippet([])).toBe("");
+  });
+
+  it("finzMessageSnippet: 캡션 없는 첨부 메시지는 첨부를 요약", () => {
+    const withCaption = { kind: "text", text: "이거 봐", attachments: [img] } as unknown as FinzChatMessage;
+    const noCaption = { kind: "text", text: "   ", attachments: [img, img] } as unknown as FinzChatMessage;
+    expect(finzMessageSnippet(withCaption)).toBe("이거 봐");
+    expect(finzMessageSnippet(noCaption)).toBe("📷 사진 2장");
   });
 });

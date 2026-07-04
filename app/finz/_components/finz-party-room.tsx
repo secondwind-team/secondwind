@@ -16,6 +16,7 @@ import {
   selectThreadRoots,
   stripFinzMention,
   threadStats,
+  type FinzAttachment,
   type FinzChatMemberLite,
   type FinzChatMessage,
   type FinzChatMode,
@@ -55,6 +56,7 @@ export function FinzPartyRoom({
   initialKind,
   initialTitle,
   initialChatMode,
+  attachmentsEnabled = false,
 }: {
   groupId: string;
   initialMembers: FinzChatMemberLite[];
@@ -65,6 +67,7 @@ export function FinzPartyRoom({
   initialKind: FinzRoomKind;
   initialTitle: string;
   initialChatMode: FinzChatMode;
+  attachmentsEnabled?: boolean; // Blob 스토어 연결 여부 — 첨부 UI 노출 게이트
 }) {
   // 메신저: 방 멤버 = 로그인 계정. memberId 는 곧 내 accountId(게이트 통과 → 항상 존재).
   const account = useFinzAccount();
@@ -264,24 +267,31 @@ export function FinzPartyRoom({
     }
   }
 
-  async function sendText(text: string, reuseId?: string, attempt = 0, replyToId?: string) {
+  async function sendText(
+    text: string,
+    reuseId?: string,
+    attempt = 0,
+    replyToId?: string,
+    attachments?: FinzAttachment[],
+  ) {
     const tempId = reuseId ?? crypto.randomUUID();
     if (attempt === 0) {
       // parentId 를 실어 스레드 답글 pending 은 스레드 뷰에만, 최상위 pending 은 메인에만 뜨게 한다.
-      setPending((p) => [...p, { tempId, text, status: "sending", parentId: replyToId }]);
+      // attachments 는 낙관적 버블에서 썸네일로 미리 보여준다(업로드는 이미 끝나 실제 Blob URL 을 들고 있음).
+      setPending((p) => [...p, { tempId, text, status: "sending", parentId: replyToId, attachments }]);
       bumpStick();
     }
     try {
       const res = await fetch(`/api/finz/party/${groupId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId: myMemberId, text, id: tempId, replyToId }),
+        body: JSON.stringify({ memberId: myMemberId, text, id: tempId, replyToId, attachments }),
       });
       // 빠른 연속 전송이 800ms 레이트리밋(429)에 걸려도 '전송 실패'로 보이지 않게 — 같은 id 라 서버가
       // 멱등 처리하므로 잠깐 뒤 1회 자동 재전송한다('보내는 중'이 잠깐 길어질 뿐, 메시지는 안 잃는다).
       if (res.status === 429 && attempt < 1) {
         await new Promise((r) => setTimeout(r, 900));
-        return sendText(text, tempId, attempt + 1, replyToId);
+        return sendText(text, tempId, attempt + 1, replyToId, attachments);
       }
       const json = (await res.json().catch(() => ({}))) as { status?: string };
       if (!res.ok || json.status !== "ok") throw new Error("send-failed");
@@ -612,7 +622,7 @@ export function FinzPartyRoom({
     const item = pending.find((x) => x.tempId === tempId);
     if (!item) return;
     setPending((p) => p.filter((x) => x.tempId !== tempId));
-    void sendText(item.text, tempId);
+    void sendText(item.text, tempId, 0, item.parentId, item.attachments);
   }
 
   async function openPick(force: boolean) {
@@ -815,11 +825,12 @@ export function FinzPartyRoom({
         myLatestStance={myPos?.stance ?? null}
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
+        attachmentsEnabled={attachmentsEnabled}
         mentionNames={members.map((m) => m.displayName)}
         replyTarget={threadMode ? null : replyReference}
         editingTarget={editingReference}
         onSetStanceMode={setStanceMode}
-        onSendText={(text, replyToId) => void sendText(text, undefined, 0, replyToId)}
+        onSendText={(text, replyToId, attachments) => void sendText(text, undefined, 0, replyToId, attachments)}
         onEditText={(text) => void submitEdit(text)}
         onCancelReply={() => setReplyTarget(null)}
         onCancelEdit={() => setEditingMessage(null)}

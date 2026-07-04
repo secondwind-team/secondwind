@@ -9,6 +9,7 @@ import {
   type FinzChatMessage,
 } from "@/lib/common/services/finz-chat";
 import { formatKstTime } from "@/lib/common/services/finz-time";
+import { FinzAttachmentList } from "./finz-attachment-list";
 import { FinzLinkPreview } from "./finz-link-preview";
 import { FinzRichText } from "./finz-rich-text";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
@@ -335,26 +336,39 @@ export function FinzChatMessageView({
     );
   }
 
-  // text (멤버)
-  const previewUrl = message.deletedAt ? null : firstUrlInText(message.text);
+  // text (멤버) — 캡션(text) + 첨부(attachments) 조합
+  const deleted = Boolean(message.deletedAt);
+  const attachments = deleted ? [] : message.attachments ?? [];
+  const hasText = !deleted && message.text.trim().length > 0;
+  const previewUrl = deleted ? null : firstUrlInText(message.text);
+  // 캡션 말풍선: 삭제/캡션있음/답장인용/첨부없음(일반 텍스트) 중 하나면 그린다. (첨부만 있고 캡션 없으면 생략.)
+  const showBubble = deleted || hasText || Boolean(message.replyTo) || attachments.length === 0;
   return (
     <ActionableMessage onOpenActions={onOpenActions}>
       <div className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
         {!mine && <span className="px-1 text-xs text-[var(--fz-muted)]">{message.authorName}</span>}
-        <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
-          <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>
-            <ReplyQuote message={message} onJump={onReplyQuoteJump} />
-            {message.deletedAt ? (
-              <DeletedText />
-            ) : (
-              <>
-                <MessageBody text={message.text} mentionNames={mentionNames} />
-                <EditedLabel message={message} />
-              </>
-            )}
+        {attachments.length > 0 && (
+          <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
+            <FinzAttachmentList attachments={attachments} mine={mine} />
+            {!showBubble && <MsgTime iso={message.createdAt} />}
           </div>
-          <MsgTime iso={message.createdAt} />
-        </div>
+        )}
+        {showBubble && (
+          <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
+            <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>
+              <ReplyQuote message={message} onJump={onReplyQuoteJump} />
+              {deleted ? (
+                <DeletedText />
+              ) : hasText ? (
+                <>
+                  <MessageBody text={message.text} mentionNames={mentionNames} />
+                  <EditedLabel message={message} />
+                </>
+              ) : null}
+            </div>
+            <MsgTime iso={message.createdAt} />
+          </div>
+        )}
         {previewUrl && <FinzLinkPreview url={previewUrl} mine={mine} />}
         <ReactionBar message={message} mine={mine} />
       </div>

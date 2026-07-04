@@ -2,13 +2,26 @@
 
 import { ArrowDown } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FinzChatMessage, FinzChatMode, FinzNudge, FinzThreadStat } from "@/lib/common/services/finz-chat";
+import type {
+  FinzAttachment,
+  FinzChatMessage,
+  FinzChatMode,
+  FinzNudge,
+  FinzThreadStat,
+} from "@/lib/common/services/finz-chat";
 import { selectLatestPick } from "@/lib/common/services/finz-chat";
 import { formatKstDate, formatKstTime, kstDayKey } from "@/lib/common/services/finz-time";
+import { FinzAttachmentList } from "./finz-attachment-list";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import { FinzNudgeBubble } from "./finz-nudge-bubble";
 
-export type PendingText = { tempId: string; text: string; status: "sending" | "failed"; parentId?: string };
+export type PendingText = {
+  tempId: string;
+  text: string;
+  status: "sending" | "failed";
+  parentId?: string;
+  attachments?: FinzAttachment[]; // 낙관적 버블 썸네일(업로드 완료된 Blob 첨부)
+};
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -223,7 +236,12 @@ export function FinzChatTimeline({
         {pendingNeedsDivider && <DateDivider iso={nowIso} />}
         {pending.map((p) => (
           <div key={p.tempId} className="flex flex-col items-end gap-0.5">
-            <div className="fz-msg fz-msg--me whitespace-pre-wrap break-words opacity-70">{p.text}</div>
+            {p.attachments && p.attachments.length > 0 && (
+              <div className="opacity-70">
+                <FinzAttachmentList attachments={p.attachments} mine />
+              </div>
+            )}
+            {p.text && <div className="fz-msg fz-msg--me whitespace-pre-wrap break-words opacity-70">{p.text}</div>}
             {p.status === "failed" ? (
               <button type="button" onClick={() => onRetryPending(p.tempId)} className="px-1 text-[11px] font-medium text-[var(--fz-error)]">
                 전송 실패 · 다시 시도

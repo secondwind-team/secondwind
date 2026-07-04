@@ -248,6 +248,143 @@
   overflow: hidden;
 }
 
+/* ── 메시지 첨부(이미지 그리드 + 파일 카드) ── 정렬은 부모 flex-col(items-start/end)을 따른다.
+   폭은 vw 기반(중첩 flex 퍼센트 사이징 함정 회피 — .fz-msg 폭 이슈와 동일 이유). */
+.fz-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fz-attach-grid {
+  display: grid;
+  gap: 3px;
+  width: min(72vw, 300px);
+  border-radius: var(--fz-r);
+  overflow: hidden;
+}
+.fz-attach-grid--1 {
+  grid-template-columns: 1fr;
+}
+.fz-attach-grid--2,
+.fz-attach-grid--3,
+.fz-attach-grid--4 {
+  grid-template-columns: 1fr 1fr;
+}
+/* 3장이면 첫 장을 가로로 넓게(자연스러운 콜라주). */
+.fz-attach-grid--3 .fz-attach-img:first-child {
+  grid-column: span 2;
+}
+.fz-attach-img {
+  display: block;
+  background: var(--fz-surface-2);
+}
+.fz-attach-img img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+}
+.fz-attach-grid--1 .fz-attach-img img {
+  max-height: 340px;
+}
+.fz-attach-grid:not(.fz-attach-grid--1) .fz-attach-img {
+  aspect-ratio: 1 / 1;
+}
+.fz-attach-grid:not(.fz-attach-grid--1) .fz-attach-img img {
+  height: 100%;
+}
+.fz-attach-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(78vw, 320px);
+  padding: 10px 12px;
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r);
+  background: var(--fz-surface);
+  box-shadow: var(--fz-shadow-sm);
+  color: var(--fz-ink);
+  transition: border-color 0.15s ease;
+}
+.fz-attach-file:hover {
+  border-color: var(--fz-coral);
+}
+.fz-attach-file__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.fz-attach-file__name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fz-attach-file__meta {
+  font-size: 11px;
+  color: var(--fz-muted);
+}
+
+/* 컴포저 스테이징 스트립 — 고른 첨부의 업로드 중/완료 썸네일(전송 전). */
+.fz-staged {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fz-staged__item {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--fz-r-sm);
+  overflow: hidden;
+  border: 1px solid var(--fz-line);
+  background: var(--fz-surface-2);
+}
+.fz-staged__item--error {
+  border-color: var(--fz-error);
+}
+.fz-staged__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fz-staged__file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--fz-coral-ink);
+}
+.fz-staged__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 0.55);
+}
+.fz-staged__overlay--error {
+  background: rgb(224 91 75 / 0.18);
+  color: var(--fz-error);
+  font-weight: 800;
+}
+.fz-staged__remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(43 38 34 / 0.6);
+  color: #fff;
+}
+
 .fz-action-backdrop,
 .fz-modal-backdrop {
   position: fixed;
