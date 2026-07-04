@@ -40,6 +40,7 @@ export function FinzChatTimeline({
   onReroll,
   onNudgeCta,
   onRetryPending,
+  onOpenMessageActions,
 }: {
   messages: FinzChatMessage[];
   pending: PendingText[];
@@ -51,6 +52,7 @@ export function FinzChatTimeline({
   onReroll: () => void;
   onNudgeCta: (cta: FinzNudge["cta"]) => void;
   onRetryPending: (tempId: string) => void;
+  onOpenMessageActions: (message: FinzChatMessage, point: { x: number; y: number }) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
@@ -64,6 +66,7 @@ export function FinzChatTimeline({
     const byAuthorLatestSeq = new Map<string, number>();
     const byAuthorCount = new Map<string, number>();
     for (const m of messages) {
+      if (m.deletedAt) continue;
       if (m.kind !== "position") continue;
       byAuthorCount.set(m.authorId, (byAuthorCount.get(m.authorId) ?? 0) + 1);
       const cur = byAuthorLatestSeq.get(m.authorId) ?? -1;
@@ -72,6 +75,7 @@ export function FinzChatTimeline({
     const superseded = new Set<string>();
     const changed = new Set<string>();
     for (const m of messages) {
+      if (m.deletedAt) continue;
       if (m.kind !== "position") continue;
       const latest = byAuthorLatestSeq.get(m.authorId);
       if (m.seq !== latest) superseded.add(m.id);
@@ -159,6 +163,7 @@ export function FinzChatTimeline({
                 onReroll={onReroll}
                 superseded={m.kind === "position" && supersededIds.has(m.id)}
                 changed={m.kind === "position" && changedIds.has(m.id)}
+                onOpenActions={(point) => onOpenMessageActions(m, point)}
               />
             </Fragment>
           );

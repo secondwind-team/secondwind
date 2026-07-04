@@ -3,8 +3,10 @@
 import { Plus, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
-import { splitByMentionTokens } from "@/lib/common/services/finz-chat";
+import { splitByMentionTokens, type FinzChatKind } from "@/lib/common/services/finz-chat";
 import { FinzPositionInput } from "./finz-position-input";
+
+type ComposerReference = { id: string; authorName: string; snippet: string; kind: FinzChatKind };
 
 // 하단 입력 바(멤버 전용). + 버튼 = 액션 시트(우정주 뽑기 / 내 입장 / 요약), 본문 = 텍스트 전송.
 // stance 모드는 부모가 제어(nudge 의 '입장' CTA 도 같은 모드를 연다).
@@ -19,8 +21,13 @@ export function FinzChatComposer({
   myLatestNote,
   stanceMode,
   mentionNames,
+  replyTarget,
+  editingTarget,
   onSetStanceMode,
   onSendText,
+  onEditText,
+  onCancelReply,
+  onCancelEdit,
   onPick,
   onPosition,
   onRecap,
@@ -35,8 +42,13 @@ export function FinzChatComposer({
   myLatestNote: string;
   stanceMode: boolean;
   mentionNames: string[]; // 멤버 이름들(@남덕우 처럼 입력 중 배지 강조용)
+  replyTarget: ComposerReference | null;
+  editingTarget: (ComposerReference & { text: string }) | null;
   onSetStanceMode: (v: boolean) => void;
-  onSendText: (text: string) => void;
+  onSendText: (text: string, replyToId?: string) => void;
+  onEditText: (text: string) => void;
+  onCancelReply: () => void;
+  onCancelEdit: () => void;
   onPick: () => void;
   onPosition: (stance: FinzPartyStance, note: string) => void;
   onRecap: () => void;
@@ -73,10 +85,27 @@ export function FinzChatComposer({
     return () => document.removeEventListener("keydown", onKey);
   }, [sheetOpen]);
 
+  useEffect(() => {
+    if (!editingTarget) return;
+    setSheetOpen(false);
+    setText(editingTarget.text);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      const end = ta.value.length;
+      ta.setSelectionRange(end, end);
+    });
+  }, [editingTarget]);
+
   function send() {
     const t = text.trim();
     if (!t || sending) return;
-    onSendText(t);
+    if (editingTarget) {
+      onEditText(t);
+    } else {
+      onSendText(t, replyTarget?.id);
+    }
     setText("");
   }
 
@@ -134,6 +163,31 @@ export function FinzChatComposer({
             </div>
           )}
 
+          {(replyTarget || editingTarget) && (
+            <div className="fz-composer-context mb-2">
+              <div className="min-w-0">
+                <p>{editingTarget ? "수정 중" : "답장 대상 메시지"}</p>
+                <span>
+                  {(editingTarget ?? replyTarget)?.authorName}
+                  {" · "}
+                  {(editingTarget ?? replyTarget)?.snippet}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label={editingTarget ? "수정 취소" : "답장 취소"}
+                onClick={() => {
+                  if (editingTarget) setText("");
+                  editingTarget ? onCancelEdit() : onCancelReply();
+                }}
+                className="fz-btn fz-btn--ghost h-8 w-8 shrink-0"
+                style={{ padding: 0 }}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
+
           <div className="flex items-end gap-2 pb-1">
             <button
               ref={plusRef}
@@ -141,6 +195,7 @@ export function FinzChatComposer({
               aria-label={sheetOpen ? "액션 닫기" : "파티 액션 열기"}
               aria-expanded={sheetOpen}
               onClick={() => setSheetOpen((v) => !v)}
+              disabled={Boolean(editingTarget)}
               className="fz-btn fz-btn--ghost h-11 w-11 shrink-0"
               style={{ padding: 0 }}
             >

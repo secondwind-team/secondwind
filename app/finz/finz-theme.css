@@ -114,6 +114,222 @@
   background: rgb(255 255 255 / 0.28);
   box-shadow: none;
 }
+
+.fz-reply-quote {
+  margin-bottom: 6px;
+  border-left: 3px solid var(--fz-coral);
+  padding-left: 8px;
+  line-height: 1.35;
+  opacity: 0.86;
+}
+.fz-reply-quote > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+}
+.fz-reply-quote > p {
+  margin: 1px 0 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.fz-msg--me .fz-reply-quote {
+  border-left-color: rgb(255 255 255 / 0.72);
+}
+
+.fz-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 80%;
+  padding: 2px 4px 0;
+}
+.fz-reactions--me {
+  justify-content: flex-end;
+}
+.fz-reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: var(--fz-r-full);
+  border: 1px solid var(--fz-line);
+  background: var(--fz-surface);
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: var(--fz-shadow-sm);
+}
+
+.fz-action-backdrop,
+.fz-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.fz-action-backdrop {
+  background: transparent;
+}
+.fz-modal-backdrop {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(43 38 34 / 0.22);
+  padding: 16px;
+}
+.fz-message-menu {
+  position: fixed;
+  width: 244px;
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r);
+  background: var(--fz-surface);
+  box-shadow: var(--fz-shadow);
+  padding: 8px;
+}
+.fz-message-menu__reactions {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--fz-line);
+}
+.fz-message-menu__reactions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: var(--fz-r-sm);
+  font-size: 20px;
+}
+.fz-message-menu__reactions button[aria-pressed="true"] {
+  background: var(--fz-coral-tint);
+  box-shadow: inset 0 0 0 1px rgb(200 65 47 / 0.2);
+}
+.fz-message-menu > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: var(--fz-r-sm);
+  padding: 10px 11px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--fz-ink);
+}
+.fz-message-menu button:hover {
+  background: var(--fz-surface-2);
+}
+.fz-message-menu__danger {
+  color: var(--fz-error) !important;
+}
+
+.fz-composer-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r);
+  background: var(--fz-surface-2);
+  padding: 9px 10px 9px 12px;
+}
+.fz-composer-context p {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 850;
+  color: var(--fz-coral-ink);
+}
+.fz-composer-context span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--fz-muted);
+}
+
+.fz-confirm,
+.fz-share-sheet {
+  width: min(100%, 420px);
+  border: 1px solid var(--fz-line);
+  border-radius: var(--fz-r-lg);
+  background: var(--fz-surface);
+  box-shadow: var(--fz-shadow);
+}
+.fz-confirm {
+  padding: 18px;
+}
+.fz-confirm h2,
+.fz-share-sheet h2 {
+  margin: 0;
+  font-family: var(--fz-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--fz-ink);
+}
+.fz-confirm p {
+  margin: 8px 0 18px;
+  font-size: 14px;
+  color: var(--fz-muted);
+}
+.fz-share-sheet {
+  max-height: min(78svh, 620px);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+.fz-share-preview {
+  margin-top: 12px;
+  max-height: 80px;
+  overflow: hidden;
+  border-radius: var(--fz-r);
+  background: var(--fz-surface-2);
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: var(--fz-muted);
+}
+.fz-share-list {
+  margin-top: 12px;
+  min-height: 80px;
+  overflow-y: auto;
+}
+.fz-share-list button,
+.fz-share-self {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: var(--fz-r-sm);
+  padding: 12px 10px;
+  text-align: left;
+}
+.fz-share-list button:hover,
+.fz-share-self:hover {
+  background: var(--fz-surface-2);
+}
+.fz-share-list span,
+.fz-share-self {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fz-ink);
+}
+.fz-share-list small {
+  flex: none;
+  font-size: 12px;
+  color: var(--fz-muted);
+}
+.fz-share-self {
+  margin-top: 8px;
+  border-top: 1px solid var(--fz-line);
+  border-radius: 0;
+  color: var(--fz-coral-ink);
+}
 /* 입력창에서 타이핑 중 멘션 강조(하이라이트 오버레이용) — textarea 글자와 1:1 정렬돼야 하므로
    padding/font-weight 로 글자 advance 폭을 바꾸지 않는다(캐럿 어긋남 방지). 배지 느낌은 배경+라운드+box-shadow 로만. */
 .fz-mention-live {
@@ -521,5 +737,16 @@
   .fz-switch,
   .fz-switch__thumb {
     transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .fz-message-menu {
+    left: 12px !important;
+    right: 12px;
+    top: auto !important;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: auto;
+    border-radius: var(--fz-r-lg);
   }
 }

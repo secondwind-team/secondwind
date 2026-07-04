@@ -18,8 +18,12 @@ import {
   touchRoomActivity,
 } from "./finz-group-store";
 import {
+  finzMessageSnippet,
+  isFinzReactionEmoji,
   isFinzStoredChatMessage,
+  type FinzReactionEmoji,
   type FinzChatMessage,
+  type FinzReplyReference,
   type FinzStoredChatMessage,
 } from "@/lib/common/services/finz-chat";
 import type { FinzPartyPick, FinzPartyStance, FinzPartySummary } from "@/lib/common/services/finz";
@@ -37,6 +41,9 @@ const SUMMARY_LOCK_TTL_SECONDS = 30;
 
 function chatKey(id: string): string {
   return `sw:finz:chat:${id}`;
+}
+function chatRevisionKey(id: string): string {
+  return `${chatKey(id)}:revision`;
 }
 function pickLockKey(id: string): string {
   return `${chatKey(id)}:pick-lock`;
@@ -80,12 +87,14 @@ async function appendChatMessage(
         createdAt: new Date().toISOString(),
       };
       await redis.rpush(chatKey(id), JSON.stringify(notice));
+      await bumpChatRevision(id);
       await refreshTtls(id);
     }
     return { status: "ok" };
   }
 
   await redis.rpush(chatKey(id), JSON.stringify(stored));
+  await bumpChatRevision(id);
   await refreshTtls(id);
   // 방을 멤버들의 "대화" 목록 상단으로(최근 활동순). best-effort — 실패해도 메시지는 저장됨.
   await touchRoomActivity(group).catch(() => {});
@@ -99,6 +108,22 @@ async function refreshTtls(id: string): Promise<void> {
   await redis.pipeline().expire(chatKey(id), FINZ_GROUP_TTL_SECONDS).expire(groupKey(id), FINZ_GROUP_TTL_SECONDS).exec();
 }
 
+async function bumpChatRevision(id: string): Promise<number> {
+  const redis = getClient();
+  if (!redis) return 0;
+  const next = await redis.incr(chatRevisionKey(id));
+  await redis.expire(chatRevisionKey(id), FINZ_GROUP_TTL_SECONDS);
+  return typeof next === "number" ? next : Number(next) || 0;
+}
+
+export async function getChatRevision(id: string): Promise<number> {
+  const redis = getClient();
+  if (!redis) return 0;
+  const raw = await redis.get(chatRevisionKey(id));
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // 멤버 자유 텍스트. LLM 절대 안 거침. members-guard + 서버 authorName + 길이/레이트 제한.
 // clientId(클라이언트 tempId)를 메시지 id 로 쓴다 — 응답 유실 후 재시도해도 같은 id 라 dedup 으로 합쳐진다.
 export async function appendTextMessage(
@@ -106,6 +131,7 @@ export async function appendTextMessage(
   memberId: string,
   text: string,
   clientId?: string,
+  replyToId?: string,
 ): Promise<{ status: "ok" | "not-found" | "not-member" | "rate-limited" | "empty"; message?: FinzStoredChatMessage }> {
   // role/authorId 를 봇/시스템으로 위조하는 것은 하드 거절(멤버는 finz/system 가 될 수 없다).
   if (memberId === "finz" || memberId === "system") return { status: "not-member" };
@@ -143,7 +169,113 @@ export async function appendTextMessage(
     text: trimmed,
     createdAt: new Date().toISOString(),
   };
+  const replyTo = replyToId ? await buildReplyReference(id, replyToId) : null;
+  if (replyTo) stored.replyTo = replyTo;
   return appendChatMessage(id, stored);
+}
+
+async function buildReplyReference(id: string, messageId: string): Promise<FinzReplyReference | null> {
+  const all = await readWindow(id, HARD_CEILING);
+  const target = all.find((m) => m.id === messageId);
+  if (!target || target.kind === "system") return null;
+  return {
+    id: target.id,
+    authorName: target.role === "finz" ? "FINZ" : target.authorName || "친구",
+    snippet: finzMessageSnippet(target, 72),
+    kind: target.kind,
+  };
+}
+
+type UpdateStatus =
+  | { status: "ok"; message: FinzChatMessage; revision: number }
+  | { status: "not-found" | "not-member" | "forbidden" | "invalid" };
+
+async function updateChatMessage(
+  id: string,
+  messageId: string,
+  updater: (message: FinzChatMessage) => FinzStoredChatMessage | null,
+): Promise<UpdateStatus> {
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+  const group = await getFinzGroup(id);
+  if (!group) return { status: "not-found" };
+  const raw = await redis.lrange(chatKey(id), 0, -1);
+  const hydrated = hydrate(raw, 0);
+  const current = hydrated.find((m) => m.id === messageId);
+  if (!current) return { status: "not-found" };
+  const index = current.seq;
+  const next = updater(current);
+  if (!next) return { status: "invalid" };
+  await redis.lset(chatKey(id), index, JSON.stringify(next));
+  const revision = await bumpChatRevision(id);
+  await refreshTtls(id);
+  await touchRoomActivity(group).catch(() => {});
+  return { status: "ok", message: { ...next, seq: index } as FinzChatMessage, revision };
+}
+
+export async function setMessageReaction(
+  id: string,
+  memberId: string,
+  messageId: string,
+  emoji: FinzReactionEmoji | null,
+): Promise<UpdateStatus> {
+  if (memberId === "finz" || memberId === "system") return { status: "not-member" };
+  const group = await getFinzGroup(id);
+  if (!group) return { status: "not-found" };
+  if (!group.members.some((m) => m.memberId === memberId)) return { status: "not-member" };
+  if (emoji !== null && !isFinzReactionEmoji(emoji)) return { status: "invalid" };
+
+  return updateChatMessage(id, messageId, (message) => {
+    if (message.kind === "system" || message.deletedAt) return null;
+    const reactions = { ...(message.reactions ?? {}) };
+    if (emoji === null || reactions[memberId] === emoji) delete reactions[memberId];
+    else reactions[memberId] = emoji;
+    const { seq: _seq, ...stored } = message;
+    const next: FinzStoredChatMessage = { ...stored };
+    if (Object.keys(reactions).length > 0) next.reactions = reactions;
+    else delete next.reactions;
+    return next;
+  });
+}
+
+export async function editTextMessage(
+  id: string,
+  memberId: string,
+  messageId: string,
+  text: string,
+): Promise<UpdateStatus | { status: "empty" }> {
+  if (memberId === "finz" || memberId === "system") return { status: "not-member" };
+  const group = await getFinzGroup(id);
+  if (!group) return { status: "not-found" };
+  if (!group.members.some((m) => m.memberId === memberId)) return { status: "not-member" };
+  const trimmed = text.trim().slice(0, MAX_TEXT_LENGTH);
+  if (!trimmed) return { status: "empty" };
+
+  return updateChatMessage(id, messageId, (message) => {
+    if (message.kind !== "text" || message.role !== "member") return null;
+    if (message.authorId !== memberId) return null;
+    if (message.deletedAt) return null;
+    const { seq: _seq, ...stored } = message;
+    return { ...stored, text: trimmed, editedAt: new Date().toISOString() };
+  });
+}
+
+export async function softDeleteMessage(id: string, memberId: string, messageId: string): Promise<UpdateStatus> {
+  if (memberId === "finz" || memberId === "system") return { status: "not-member" };
+  const group = await getFinzGroup(id);
+  if (!group) return { status: "not-found" };
+  if (!group.members.some((m) => m.memberId === memberId)) return { status: "not-member" };
+
+  return updateChatMessage(id, messageId, (message) => {
+    if (message.role !== "member" || message.authorId !== memberId) return null;
+    if (message.deletedAt) return null;
+    if (message.kind !== "text" && message.kind !== "position") return null;
+    const { seq: _seq, ...stored } = message;
+    if (stored.kind === "text") {
+      return { ...stored, text: "삭제된 메시지입니다", deletedAt: new Date().toISOString(), reactions: undefined };
+    }
+    return { ...stored, deletedAt: new Date().toISOString(), reactions: undefined };
+  });
 }
 
 // 멤버 한 줄 포지션. 매번 새 메시지(upsert 안 함 — 입장 바꾼 이력이 채팅에 남는다).
@@ -295,17 +427,19 @@ function hydrate(raw: unknown[], windowStart: number): FinzChatMessage[] {
 export async function getChatTail(
   id: string,
   afterSeq: number,
-): Promise<{ messages: FinzChatMessage[]; cursor: number; total: number }> {
+  forceAll = false,
+): Promise<{ messages: FinzChatMessage[]; cursor: number; total: number; revision: number }> {
   const redis = getClient();
-  if (!redis) return { messages: [], cursor: afterSeq, total: 0 };
+  if (!redis) return { messages: [], cursor: afterSeq, total: 0, revision: 0 };
+  const revision = await getChatRevision(id);
   const total = await redis.llen(chatKey(id));
-  if (total === 0) return { messages: [], cursor: afterSeq < 0 ? -1 : afterSeq, total: 0 };
+  if (total === 0) return { messages: [], cursor: afterSeq < 0 ? -1 : afterSeq, total: 0, revision };
 
   const windowStart = Math.max(0, total - INITIAL_WINDOW);
   const raw = await redis.lrange(chatKey(id), windowStart, -1);
   const all = hydrate(raw, windowStart);
-  const messages = all.filter((m) => m.seq > afterSeq);
-  return { messages, cursor: total - 1, total };
+  const messages = forceAll ? all : all.filter((m) => m.seq > afterSeq);
+  return { messages, cursor: total - 1, total, revision };
 }
 
 // 대화방 목록 미리보기 — 마지막 메시지 1개만 읽어 텍스트/시각을 도출(cheap: lrange -1 -1).
@@ -317,7 +451,9 @@ export async function getRoomLastMessage(id: string): Promise<{ text: string; cr
   const obj = parseJsonSafe(raw[0]);
   if (!obj || !isFinzStoredChatMessage(obj)) return null;
   let text: string;
-  switch (obj.kind) {
+  if (obj.deletedAt) {
+    text = "삭제된 메시지입니다";
+  } else switch (obj.kind) {
     case "text":
       text = obj.role === "finz" ? `🤖 ${obj.text}` : obj.text;
       break;

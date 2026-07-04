@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
-import type { FinzRoomKind } from "@/lib/common/services/finz-account";
+import type { FinzRoomKind, FinzRoomSummary } from "@/lib/common/services/finz-account";
 import {
   computeNextNudge,
+  finzMessageSnippet,
+  FINZ_REACTION_EMOJIS,
+  type FinzReactionEmoji,
   mentionsFinz,
   normalizeChartSymbol,
   selectLatestPick,
@@ -42,6 +45,7 @@ export function FinzPartyRoom({
   initialMembers,
   initialMessages,
   initialCursor,
+  initialRevision,
   initialFull,
   initialKind,
   initialTitle,
@@ -50,6 +54,7 @@ export function FinzPartyRoom({
   initialMembers: FinzChatMemberLite[];
   initialMessages: FinzChatMessage[];
   initialCursor: number;
+  initialRevision: number;
   initialFull: boolean;
   initialKind: FinzRoomKind;
   initialTitle: string;
@@ -62,9 +67,15 @@ export function FinzPartyRoom({
   const [full, setFull] = useState(initialFull); // 서버 의미: 2명 이상(파티 준비)
   const [messages, setMessages] = useState<FinzChatMessage[]>(initialMessages);
   const cursorRef = useRef(initialCursor);
+  const revisionRef = useRef(initialRevision);
 
   const [shareUrl, setShareUrl] = useState("");
   const [pending, setPending] = useState<PendingText[]>([]);
+  const [actionMenu, setActionMenu] = useState<{ message: FinzChatMessage; x: number; y: number } | null>(null);
+  const [replyTarget, setReplyTarget] = useState<FinzChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Extract<FinzChatMessage, { kind: "text" }> | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FinzChatMessage | null>(null);
+  const [shareTarget, setShareTarget] = useState<FinzChatMessage | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
   const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴/nudge)
   const [askBusy, setAskBusy] = useState(false);
@@ -80,6 +91,7 @@ export function FinzPartyRoom({
   const [inviteOpen, setInviteOpen] = useState(false);
 
   const bumpStick = useCallback(() => setStickSignal((s) => s + 1), []);
+  const handleShareError = useCallback((message: string) => setActionError(message), []);
 
   // 폴링이 비동기로 state 를 바꾸므로, handleMention 이 분류 응답(~1s)을 기다린 뒤 가드할 때
   // 클로저 옛값 대신 "최신 커밋된" 상태를 읽도록 ref 로 미러링한다(스테일 가드 메시지 방지).
@@ -94,6 +106,11 @@ export function FinzPartyRoom({
   useEffect(() => {
     if (typeof window !== "undefined") setShareUrl(window.location.href);
   }, [groupId]);
+
+  const applyUpdatedMessage = useCallback((message: FinzChatMessage, revision?: number) => {
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)).sort((a, b) => a.seq - b.seq));
+    if (typeof revision === "number" && revision > revisionRef.current) revisionRef.current = revision;
+  }, []);
 
   // 모바일 키보드 대응: visualViewport 높이에 맞춰 입력바가 키보드 뒤로 숨지 않게.
   useEffect(() => {
@@ -114,7 +131,9 @@ export function FinzPartyRoom({
 
   const refetch = useCallback(async () => {
     try {
-      const res = await fetch(`/api/finz/party/${groupId}/chat?after=${cursorRef.current}`, { cache: "no-store" });
+      const res = await fetch(`/api/finz/party/${groupId}/chat?after=${cursorRef.current}&rev=${revisionRef.current}`, {
+        cache: "no-store",
+      });
       if (!res.ok) return;
       const json = (await res.json()) as {
         status: string;
@@ -122,6 +141,7 @@ export function FinzPartyRoom({
         full?: boolean;
         messages?: FinzChatMessage[];
         cursor?: number;
+        revision?: number;
       };
       if (json.status !== "ok") return;
       if (json.members) {
@@ -136,7 +156,8 @@ export function FinzPartyRoom({
           const byId = new Map(prev.map((m) => [m.id, m]));
           let changed = false;
           for (const m of incoming) {
-            if (!byId.has(m.id)) {
+            const prevMsg = byId.get(m.id);
+            if (!prevMsg || JSON.stringify(prevMsg) !== JSON.stringify(m)) {
               byId.set(m.id, m);
               changed = true;
             }
@@ -147,6 +168,9 @@ export function FinzPartyRoom({
       }
       if (typeof json.cursor === "number" && json.cursor > cursorRef.current) {
         cursorRef.current = json.cursor;
+      }
+      if (typeof json.revision === "number" && json.revision > revisionRef.current) {
+        revisionRef.current = json.revision;
       }
     } catch {
       // 일시적 네트워크 실패 무시 — 다음 틱 재시도.
@@ -227,7 +251,7 @@ export function FinzPartyRoom({
     }
   }
 
-  async function sendText(text: string, reuseId?: string, attempt = 0) {
+  async function sendText(text: string, reuseId?: string, attempt = 0, replyToId?: string) {
     const tempId = reuseId ?? crypto.randomUUID();
     if (attempt === 0) {
       setPending((p) => [...p, { tempId, text, status: "sending" }]);
@@ -237,17 +261,18 @@ export function FinzPartyRoom({
       const res = await fetch(`/api/finz/party/${groupId}/message`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId: myMemberId, text, id: tempId }),
+        body: JSON.stringify({ memberId: myMemberId, text, id: tempId, replyToId }),
       });
       // 빠른 연속 전송이 800ms 레이트리밋(429)에 걸려도 '전송 실패'로 보이지 않게 — 같은 id 라 서버가
       // 멱등 처리하므로 잠깐 뒤 1회 자동 재전송한다('보내는 중'이 잠깐 길어질 뿐, 메시지는 안 잃는다).
       if (res.status === 429 && attempt < 1) {
         await new Promise((r) => setTimeout(r, 900));
-        return sendText(text, tempId, attempt + 1);
+        return sendText(text, tempId, attempt + 1, replyToId);
       }
       const json = (await res.json().catch(() => ({}))) as { status?: string };
       if (!res.ok || json.status !== "ok") throw new Error("send-failed");
       await refetch();
+      setReplyTarget(null);
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200);
       if (mentionsFinz(text)) {
@@ -262,6 +287,80 @@ export function FinzPartyRoom({
     } catch {
       setPending((p) => p.map((x) => (x.tempId === tempId ? { ...x, status: "failed" } : x)));
     }
+  }
+
+  async function mutateMessage(
+    messageId: string,
+    body: { action: "react"; emoji: FinzReactionEmoji | null } | { action: "edit"; text: string } | { action: "delete" },
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/message/${messageId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, ...body }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        status?: string;
+        message?: FinzChatMessage;
+        revision?: number;
+        reason?: string;
+      };
+      if (!res.ok || json.status !== "ok" || !json.message) {
+        setActionError(json.reason === "empty" ? "수정할 내용을 입력해줘." : "메시지를 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+        return false;
+      }
+      applyUpdatedMessage(json.message, json.revision);
+      return true;
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+      return false;
+    }
+  }
+
+  async function reactToMessage(message: FinzChatMessage, emoji: FinzReactionEmoji) {
+    setActionMenu(null);
+    await mutateMessage(message.id, { action: "react", emoji });
+  }
+
+  function replyToMessage(message: FinzChatMessage) {
+    setActionMenu(null);
+    setEditingMessage(null);
+    setReplyTarget(message);
+    bumpStick();
+  }
+
+  function editMessage(message: FinzChatMessage) {
+    setActionMenu(null);
+    if (message.kind !== "text" || message.authorId !== myMemberId || message.role !== "member" || message.deletedAt) return;
+    setReplyTarget(null);
+    setEditingMessage(message);
+    bumpStick();
+  }
+
+  async function submitEdit(text: string) {
+    if (!editingMessage) return;
+    const ok = await mutateMessage(editingMessage.id, { action: "edit", text });
+    if (ok) {
+      setEditingMessage(null);
+      bumpStick();
+    }
+  }
+
+  function askDeleteMessage(message: FinzChatMessage) {
+    setActionMenu(null);
+    if (message.authorId !== myMemberId || message.role !== "member" || message.deletedAt) return;
+    setDeleteTarget(message);
+  }
+
+  async function confirmDeleteMessage() {
+    if (!deleteTarget) return;
+    const ok = await mutateMessage(deleteTarget.id, { action: "delete" });
+    if (ok) setDeleteTarget(null);
+  }
+
+  function shareMessage(message: FinzChatMessage) {
+    setActionMenu(null);
+    setShareTarget(message);
   }
 
   // @finz 멘션 → 서버에 의도 분류 요청 후 분기. 분류 실패/qa 면 기존 그라운딩 답변(ask)으로 폴백.
@@ -597,6 +696,23 @@ export function FinzPartyRoom({
   const isGroup = initialKind === "group";
   // 나와의 채팅에선 "친구 초대/우정주" 코칭이 어색하니 nudge 생략(자유 대화·@finz 만).
   const nudge = isSelf ? null : computeNextNudge(messages, members, myMemberId);
+  const replyReference = replyTarget
+    ? {
+        id: replyTarget.id,
+        authorName: replyTarget.role === "finz" ? "FINZ" : replyTarget.authorName || "친구",
+        snippet: finzMessageSnippet(replyTarget),
+        kind: replyTarget.kind,
+      }
+    : null;
+  const editingReference = editingMessage
+    ? {
+        id: editingMessage.id,
+        authorName: editingMessage.authorName || "나",
+        snippet: finzMessageSnippet(editingMessage),
+        kind: editingMessage.kind,
+        text: editingMessage.text,
+      }
+    : null;
 
   return (
     <div
@@ -623,7 +739,25 @@ export function FinzPartyRoom({
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}
         onRetryPending={retryPending}
+        onOpenMessageActions={(message, point) => {
+          if (message.kind === "system" || message.deletedAt) return;
+          setActionMenu({ message, x: point.x, y: point.y });
+        }}
       />
+      {actionMenu && (
+        <FinzMessageActionMenu
+          message={actionMenu.message}
+          x={actionMenu.x}
+          y={actionMenu.y}
+          myMemberId={myMemberId}
+          onClose={() => setActionMenu(null)}
+          onReact={(emoji) => void reactToMessage(actionMenu.message, emoji)}
+          onReply={() => replyToMessage(actionMenu.message)}
+          onShare={() => shareMessage(actionMenu.message)}
+          onEdit={() => editMessage(actionMenu.message)}
+          onDelete={() => askDeleteMessage(actionMenu.message)}
+        />
+      )}
       {actionError && (
         <div className="flex-none px-4 pt-1">
           <p className="fz-alert">{actionError}</p>
@@ -640,12 +774,36 @@ export function FinzPartyRoom({
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
         mentionNames={members.map((m) => m.displayName)}
+        replyTarget={replyReference}
+        editingTarget={editingReference}
         onSetStanceMode={setStanceMode}
-        onSendText={sendText}
+        onSendText={(text, replyToId) => void sendText(text, undefined, 0, replyToId)}
+        onEditText={(text) => void submitEdit(text)}
+        onCancelReply={() => setReplyTarget(null)}
+        onCancelEdit={() => setEditingMessage(null)}
         onPick={() => void openPick(false)}
         onPosition={submitPosition}
         onRecap={() => void openRecap()}
       />
+      {deleteTarget && (
+        <FinzDeleteConfirm
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void confirmDeleteMessage()}
+        />
+      )}
+      {shareTarget && (
+        <FinzShareSheet
+          currentRoomId={groupId}
+          sourceMessage={shareTarget}
+          myMemberId={myMemberId}
+          onClose={() => setShareTarget(null)}
+          onSent={() => {
+            setShareTarget(null);
+            setActionError(null);
+          }}
+          onError={handleShareError}
+        />
+      )}
       {inviteOpen && (
         <FinzInviteSheet
           shareUrl={shareUrl}
@@ -654,6 +812,187 @@ export function FinzPartyRoom({
           onClose={() => setInviteOpen(false)}
         />
       )}
+    </div>
+  );
+}
+
+function FinzMessageActionMenu({
+  message,
+  x,
+  y,
+  myMemberId,
+  onClose,
+  onReact,
+  onReply,
+  onShare,
+  onEdit,
+  onDelete,
+}: {
+  message: FinzChatMessage;
+  x: number;
+  y: number;
+  myMemberId: string;
+  onClose: () => void;
+  onReact: (emoji: FinzReactionEmoji) => void;
+  onReply: () => void;
+  onShare: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const mine = message.authorId === myMemberId && message.role === "member";
+  const canEdit = mine && message.kind === "text" && !message.deletedAt;
+  const canDelete = mine && (message.kind === "text" || message.kind === "position") && !message.deletedAt;
+  const selectedEmoji = message.reactions?.[myMemberId] ?? null;
+
+  return (
+    <div className="fz-action-backdrop" onClick={onClose}>
+      <div
+        className="fz-message-menu"
+        role="menu"
+        aria-label="메시지 액션"
+        style={{ left: `min(${Math.max(12, x)}px, calc(100vw - 256px))`, top: `min(${Math.max(12, y)}px, calc(100vh - 320px))` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="fz-message-menu__reactions" aria-label="기본 반응">
+          {FINZ_REACTION_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              aria-label={`반응 ${emoji}`}
+              aria-pressed={selectedEmoji === emoji}
+              onClick={() => onReact(emoji)}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        <button type="button" role="menuitem" onClick={onReply}>답장</button>
+        <button type="button" role="menuitem" onClick={onShare}>공유</button>
+        {canEdit && <button type="button" role="menuitem" onClick={onEdit}>수정</button>}
+        {canDelete && <button type="button" role="menuitem" className="fz-message-menu__danger" onClick={onDelete}>삭제</button>}
+      </div>
+    </div>
+  );
+}
+
+function FinzDeleteConfirm({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fz-modal-backdrop" role="presentation">
+      <div className="fz-confirm" role="dialog" aria-modal="true" aria-labelledby="finz-delete-title">
+        <h2 id="finz-delete-title">메시지를 삭제할까요?</h2>
+        <p>대화방에는 “삭제된 메시지입니다”로 남아요.</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="fz-btn fz-btn--ghost" onClick={onCancel}>취소</button>
+          <button type="button" className="fz-btn" onClick={onConfirm}>삭제</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinzShareSheet({
+  currentRoomId,
+  sourceMessage,
+  myMemberId,
+  onClose,
+  onSent,
+  onError,
+}: {
+  currentRoomId: string;
+  sourceMessage: FinzChatMessage;
+  myMemberId: string;
+  onClose: () => void;
+  onSent: () => void;
+  onError: (message: string) => void;
+}) {
+  const [rooms, setRooms] = useState<FinzRoomSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/finz/rooms", { cache: "no-store" });
+        const json = (await res.json().catch(() => ({}))) as { status?: string; rooms?: FinzRoomSummary[] };
+        if (!cancelled && res.ok && json.status === "ok") setRooms(json.rooms ?? []);
+      } catch {
+        if (!cancelled) onError("공유할 대화방 목록을 불러오지 못했어.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [onError]);
+
+  const shareText = `공유한 메시지\n${sourceMessage.role === "finz" ? "FINZ" : sourceMessage.authorName || "친구"}: ${finzMessageSnippet(sourceMessage, 160)}`;
+  const visibleRooms = rooms.filter((r) => r.roomId !== currentRoomId && r.kind !== "self");
+
+  async function sendToRoom(roomId: string, mode: "room" | "self") {
+    setSendingTo(mode === "self" ? "self" : roomId);
+    try {
+      let targetRoomId = roomId;
+      if (mode === "self") {
+        const selfRes = await fetch("/api/finz/rooms/self", { method: "POST" });
+        const selfJson = (await selfRes.json().catch(() => ({}))) as { status?: string; roomId?: string };
+        if (!selfRes.ok || selfJson.status !== "ok" || !selfJson.roomId) throw new Error("self-room");
+        targetRoomId = selfJson.roomId;
+      }
+      const res = await fetch(`/api/finz/party/${targetRoomId}/message`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, text: shareText, id: crypto.randomUUID() }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { status?: string };
+      if (!res.ok || json.status !== "ok") throw new Error("send");
+      onSent();
+    } catch {
+      onError("메시지를 공유하지 못했어. 잠시 뒤 다시 시도해줘.");
+    } finally {
+      setSendingTo(null);
+    }
+  }
+
+  return (
+    <div className="fz-modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="fz-share-sheet" role="dialog" aria-modal="true" aria-labelledby="finz-share-title" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="finz-share-title">공유할 채팅방</h2>
+          <button type="button" className="fz-btn fz-btn--ghost h-8 w-8" style={{ padding: 0 }} aria-label="닫기" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="fz-share-preview">{shareText}</div>
+        <div className="fz-share-list">
+          {loading && <p className="px-2 py-3 text-sm text-[var(--fz-muted)]">대화방을 불러오는 중…</p>}
+          {!loading && visibleRooms.length === 0 && (
+            <p className="px-2 py-3 text-sm text-[var(--fz-muted)]">공유할 다른 대화방이 아직 없어요.</p>
+          )}
+          {visibleRooms.map((room) => (
+            <button
+              key={room.roomId}
+              type="button"
+              disabled={sendingTo != null}
+              onClick={() => void sendToRoom(room.roomId, "room")}
+            >
+              <span>{room.title}</span>
+              <small>{room.kind === "group" ? "그룹 채팅" : "1:1 채팅"}</small>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="fz-share-self"
+          disabled={sendingTo != null}
+          onClick={() => void sendToRoom("", "self")}
+        >
+          나에게 보내기
+        </button>
+      </div>
     </div>
   );
 }

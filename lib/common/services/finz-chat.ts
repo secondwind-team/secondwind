@@ -1,6 +1,7 @@
 // FINZ 채팅 모델 — 클라이언트/서버 공용(순수). 카카오톡식 단일 타임라인이 곧 상태다.
-// 자유 텍스트·우정주 픽·멤버 포지션·AI 요약·시스템 알림이 모두 "메시지"로 append-only 로 쌓인다.
-// "저장" 개념 없음 — append 가 유일한 변경 연산. seq 는 KV LIST 인덱스(읽기 시점 부여, 저장 안 함).
+// 자유 텍스트·우정주 픽·멤버 포지션·AI 요약·시스템 알림이 모두 "메시지"로 쌓인다.
+// 본문 메시지는 append 중심이고, 반응/답장/수정/삭제 같은 액션 메타데이터만 기존 메시지에 얹는다.
+// seq 는 KV LIST 인덱스(읽기 시점 부여, 저장 안 함).
 //
 // nudge('이제 뭐 할지') 는 메시지가 아니다 — 현재 상태에서 클라이언트가 매 렌더 계산하는
 // 비저장 코칭 버블이다(중복 저장·스팸 방지). computeNextNudge 참조.
@@ -22,6 +23,18 @@ export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
 export type FinzChartPayload = { symbol: string; label: string };
 
+export const FINZ_REACTION_EMOJIS = ["❤️", "👍", "✅", "😂", "😮", "😢"] as const;
+export type FinzReactionEmoji = (typeof FINZ_REACTION_EMOJIS)[number];
+
+export type FinzReplyReference = {
+  id: string;
+  authorName: string;
+  snippet: string;
+  kind: FinzChatKind;
+};
+
+export type FinzMessageReactions = Record<string, FinzReactionEmoji>;
+
 // kind 별 페이로드/필수 필드를 base 제네릭으로 분기 — stored(저장형, seq 없음)와 message(읽기형, seq 있음)를
 // 같은 모양으로 한 번에 정의한다.
 type FinzChatVariants<B> =
@@ -39,6 +52,10 @@ type FinzStoredBase = {
   authorId: string; // memberId, 또는 리터럴 "finz" / "system"
   authorName: string; // member.displayName(서버 조회), 또는 "FINZ" / ""
   createdAt: string; // ISO
+  reactions?: FinzMessageReactions; // memberId -> emoji. 같은 사람이 누르면 변경/해제된다.
+  replyTo?: FinzReplyReference; // 답장 작성 시점의 원본 메시지 스냅샷.
+  editedAt?: string; // 일반 text 메시지 수정 시각.
+  deletedAt?: string; // soft delete 시각. UI/LLM 에는 삭제 안내문으로 노출.
 };
 
 // KV LIST 에 JSON.stringify 되는 값 — seq 없음(읽기 시점 인덱스로 부여).
@@ -67,10 +84,41 @@ export type FinzChatResponse = {
   full?: boolean;
   messages?: FinzChatMessage[];
   cursor?: number; // 응답에 담긴 최대 seq — 클라이언트는 로컬 cursor 를 이 값으로 전진
+  revision?: number; // 과거 메시지 메타데이터 변경 감지용(room-level mutation counter)
   expiresAt?: string;
   deduped?: boolean; // pick/summary 라우트 전용 — 락에 막혀 기존 결과를 반환했음
   nudged?: boolean; // summary 라우트 전용 — 선행 조건 미충족(에러 대신 클라이언트 nudge 유도)
 };
+
+export function isFinzReactionEmoji(value: unknown): value is FinzReactionEmoji {
+  return (FINZ_REACTION_EMOJIS as readonly unknown[]).includes(value);
+}
+
+function isReplyReference(value: unknown): value is FinzReplyReference {
+  if (!value || typeof value !== "object") return false;
+  const r = value as Partial<FinzReplyReference>;
+  return (
+    typeof r.id === "string" &&
+    r.id.length > 0 &&
+    typeof r.authorName === "string" &&
+    typeof r.snippet === "string" &&
+    typeof r.kind === "string" &&
+    ["text", "system", "pick", "position", "summary", "chart", "portfolio"].includes(r.kind)
+  );
+}
+
+function hasValidMessageMetadata(m: Record<string, unknown>): boolean {
+  if (m.reactions !== undefined) {
+    if (!m.reactions || typeof m.reactions !== "object" || Array.isArray(m.reactions)) return false;
+    for (const [memberId, emoji] of Object.entries(m.reactions as Record<string, unknown>)) {
+      if (!memberId || !isFinzReactionEmoji(emoji)) return false;
+    }
+  }
+  if (m.replyTo !== undefined && !isReplyReference(m.replyTo)) return false;
+  if (m.editedAt !== undefined && typeof m.editedAt !== "string") return false;
+  if (m.deletedAt !== undefined && typeof m.deletedAt !== "string") return false;
+  return true;
+}
 
 function isPositionPayload(value: unknown): value is FinzPositionPayload {
   if (!value || typeof value !== "object") return false;
@@ -98,6 +146,7 @@ export function isFinzStoredChatMessage(value: unknown): value is FinzStoredChat
   if (typeof m.authorId !== "string" || m.authorId.length === 0) return false;
   if (typeof m.authorName !== "string") return false;
   if (typeof m.createdAt !== "string") return false;
+  if (!hasValidMessageMetadata(m)) return false;
   switch (m.kind) {
     case "text":
     case "system":
@@ -115,6 +164,39 @@ export function isFinzStoredChatMessage(value: unknown): value is FinzStoredChat
     default:
       return false;
   }
+}
+
+export function isFinzDeletedMessage(message: Pick<FinzChatMessage, "deletedAt">): boolean {
+  return typeof message.deletedAt === "string" && message.deletedAt.length > 0;
+}
+
+export function finzMessageSnippet(message: FinzChatMessage | FinzStoredChatMessage, max = 64): string {
+  if ("deletedAt" in message && message.deletedAt) return "삭제된 메시지입니다";
+  let text: string;
+  switch (message.kind) {
+    case "text":
+    case "system":
+      text = message.text;
+      break;
+    case "pick":
+      text = `우정주 · ${message.payload.name}`;
+      break;
+    case "summary":
+      text = `요약 · ${message.payload.summary}`;
+      break;
+    case "position":
+      text = `입장 · ${message.payload.stance}${message.payload.note ? " · " + message.payload.note : ""}`;
+      break;
+    case "chart":
+      text = `차트 · ${message.payload.label || message.payload.symbol}`;
+      break;
+    case "portfolio":
+      text = message.payload.view === "sector" ? "섹터 분석" : `포트폴리오 · ${message.payload.scopeLabel}`;
+      break;
+  }
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, Math.max(0, max - 1))}…`;
 }
 
 export function isFinzNudgeCta(value: unknown): value is FinzNudgeCta {
@@ -241,6 +323,7 @@ export function selectLatestPositionsByMember(
 ): Map<string, LatestPosition> {
   const byMember = new Map<string, LatestPosition>();
   for (const m of messages) {
+    if (m.deletedAt) continue;
     if (m.kind !== "position" || m.seq <= sincePickSeq) continue;
     const prev = byMember.get(m.authorId);
     if (!prev || m.seq > prev.seq) {
@@ -264,7 +347,7 @@ export function countMemberMessagesSinceFinz(messages: FinzChatMessage[]): numbe
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const m = messages[i];
     if (!m || m.role === "finz") break;
-    if (m.role === "member" && m.kind === "text") count += 1;
+    if (!m.deletedAt && m.role === "member" && m.kind === "text") count += 1;
   }
   return count;
 }
@@ -273,7 +356,7 @@ export function countMemberMessagesSinceFinz(messages: FinzChatMessage[]): numbe
 // 멤버 대화가 충분히 쌓였을 때만. (멘션 답변과 별개의 선제 개입. 빈도는 서버 쿨다운 락이 추가로 제한.)
 export function shouldFinzProactivelySpeak(messages: FinzChatMessage[], threshold = 3): boolean {
   const last = messages[messages.length - 1];
-  if (!last || last.role !== "member" || last.kind !== "text") return false;
+  if (!last || last.deletedAt || last.role !== "member" || last.kind !== "text") return false;
   return countMemberMessagesSinceFinz(messages) >= threshold;
 }
 
@@ -293,7 +376,8 @@ export function buildFinzTranscript(
   const recent = messages.slice(-maxTurns);
   const turns: FinzTranscriptTurn[] = [];
   for (const m of recent) {
-    if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
+    if (m.deletedAt) turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: "삭제된 메시지입니다" });
+    else if (m.kind === "text") turns.push({ speaker: m.role === "finz" ? "finz" : nameOf(m.authorId), text: m.text });
     else if (m.kind === "pick") turns.push({ speaker: "finz", text: `(우정주 테마 '${m.payload.name}' 를 뽑음)` });
     else if (m.kind === "summary") turns.push({ speaker: "finz", text: `(파티 요약) ${m.payload.summary}` });
     else if (m.kind === "chart") turns.push({ speaker: "finz", text: `(${m.payload.label} 차트를 보여줌)` });

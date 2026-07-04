@@ -260,6 +260,15 @@ describe("isFinzStoredChatMessage", () => {
   const base = { id: "x", authorId: "a", authorName: "지헌", createdAt: "t" };
   it("kind 별 유효 메시지 통과", () => {
     expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "text", text: "hi" })).toBe(true);
+    expect(isFinzStoredChatMessage({
+      ...base,
+      role: "member",
+      kind: "text",
+      text: "hi",
+      reactions: { a: "❤️", b: "👍" },
+      replyTo: { id: "m1", authorName: "태훈", snippet: "원본", kind: "text" },
+      editedAt: "t2",
+    })).toBe(true);
     expect(isFinzStoredChatMessage({ ...base, role: "system", authorId: "system", kind: "system", text: "joined" })).toBe(true);
     expect(isFinzStoredChatMessage({ ...base, role: "finz", authorId: "finz", kind: "pick", payload: PICK })).toBe(true);
     expect(isFinzStoredChatMessage({ ...base, role: "finz", authorId: "finz", kind: "summary", payload: SUMMARY })).toBe(true);
@@ -274,6 +283,8 @@ describe("isFinzStoredChatMessage", () => {
     expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { symbol: "", label: "x" } })).toBe(false); // 빈 심볼
     expect(isFinzStoredChatMessage({ ...base, role: "finz", kind: "chart", payload: { label: "x" } })).toBe(false); // symbol 누락
     expect(isFinzStoredChatMessage({ ...base, role: "bot", kind: "text", text: "x" })).toBe(false); // 잘못된 role
+    expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "text", text: "x", reactions: { a: "🔥" } })).toBe(false);
+    expect(isFinzStoredChatMessage({ ...base, role: "member", kind: "text", text: "x", replyTo: { id: "", snippet: "x" } })).toBe(false);
   });
 });
 
@@ -316,6 +327,13 @@ describe("buildFinzTranscript", () => {
       { speaker: "지헌", text: "안녕" },
       { speaker: "finz", text: "응" },
     ]);
+  });
+
+  it("삭제된 text 는 원문 대신 삭제 안내만 맥락에 넣는다", () => {
+    const deleted: FinzChatMessage = {
+      id: "d1", seq: 1, role: "member", authorId: "a", authorName: "a", kind: "text", text: "원문", createdAt: "t", deletedAt: "t2",
+    };
+    expect(buildFinzTranscript([deleted], MEMBERS)).toEqual([{ speaker: "지헌", text: "삭제된 메시지입니다" }]);
   });
 
   it("최근 maxTurns 발화만 남긴다(기본 8)", () => {

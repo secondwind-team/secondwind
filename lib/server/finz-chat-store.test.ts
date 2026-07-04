@@ -25,6 +25,23 @@ const h = vi.hoisted(() => {
       lists.set(key, arr);
       return arr.length;
     },
+    async lset(key: string, index: number, val: unknown) {
+      const arr = lists.get(key) ?? [];
+      arr[index] = val;
+      lists.set(key, arr);
+      return "OK";
+    },
+    async incr(key: string) {
+      const next = Number(kv.get(key) ?? "0") + 1;
+      kv.set(key, String(next));
+      return next;
+    },
+    async get(key: string) {
+      return kv.get(key) ?? null;
+    },
+    async expire() {
+      return 1;
+    },
     async set(key: string, val: string, opts?: { nx?: boolean }) {
       if (opts?.nx && kv.has(key)) return null;
       kv.set(key, val);
@@ -62,7 +79,10 @@ vi.mock("./finz-group-store", async (importOriginal) => {
 import {
   acquirePickLock,
   appendTextMessage,
+  editTextMessage,
   getChatTail,
+  setMessageReaction,
+  softDeleteMessage,
 } from "./finz-chat-store";
 
 const CHAT_KEY = "sw:finz:chat:abc123";
@@ -145,6 +165,58 @@ describe("appendTextMessage", () => {
     expect(retry.status).toBe("ok");
     expect(retry.message?.id).toBe("dup-1");
     expect(h.lists.get(CHAT_KEY)).toHaveLength(1); // 물리적 중복 없음
+  });
+  it("replyToId 를 주면 서버가 원본 메시지 스냅샷을 저장한다", async () => {
+    const first = await appendTextMessage("abc123", "a", "원본 메시지", "reply-src");
+    expect(first.status).toBe("ok");
+    await new Promise((r) => setTimeout(r, 810));
+    const reply = await appendTextMessage("abc123", "b", "답장", "reply-1", "reply-src");
+    expect(reply.status).toBe("ok");
+    if (reply.message?.kind !== "text") throw new Error("text expected");
+    expect(reply.message.replyTo).toMatchObject({ id: "reply-src", authorName: "지헌", snippet: "원본 메시지", kind: "text" });
+  });
+});
+
+describe("message action mutations", () => {
+  it("반응은 멤버별로 추가/변경/토글된다", async () => {
+    await appendTextMessage("abc123", "a", "hi", "react-1");
+    const like = await setMessageReaction("abc123", "b", "react-1", "👍");
+    expect(like.status).toBe("ok");
+    if (like.status !== "ok") throw new Error("ok expected");
+    expect(like.message.reactions?.b).toBe("👍");
+
+    const heart = await setMessageReaction("abc123", "b", "react-1", "❤️");
+    expect(heart.status).toBe("ok");
+    if (heart.status !== "ok") throw new Error("ok expected");
+    expect(heart.message.reactions?.b).toBe("❤️");
+
+    const off = await setMessageReaction("abc123", "b", "react-1", "❤️");
+    expect(off.status).toBe("ok");
+    if (off.status !== "ok") throw new Error("ok expected");
+    expect(off.message.reactions?.b).toBeUndefined();
+  });
+
+  it("내 일반 text 메시지만 수정할 수 있다", async () => {
+    await appendTextMessage("abc123", "a", "before", "edit-1");
+    const edited = await editTextMessage("abc123", "a", "edit-1", "after");
+    expect(edited.status).toBe("ok");
+    if (edited.status !== "ok") throw new Error("ok expected");
+    expect(edited.message.kind).toBe("text");
+    if (edited.message.kind === "text") expect(edited.message.text).toBe("after");
+    expect(edited.message.editedAt).toBeTruthy();
+
+    const other = await editTextMessage("abc123", "b", "edit-1", "nope");
+    expect(other.status).toBe("invalid");
+  });
+
+  it("삭제는 soft delete 로 남기고 본문을 삭제 안내로 바꾼다", async () => {
+    await appendTextMessage("abc123", "a", "지울 메시지", "delete-1");
+    const deleted = await softDeleteMessage("abc123", "a", "delete-1");
+    expect(deleted.status).toBe("ok");
+    if (deleted.status !== "ok") throw new Error("ok expected");
+    expect(deleted.message.deletedAt).toBeTruthy();
+    expect(deleted.message.kind).toBe("text");
+    if (deleted.message.kind === "text") expect(deleted.message.text).toBe("삭제된 메시지입니다");
   });
 });
 
