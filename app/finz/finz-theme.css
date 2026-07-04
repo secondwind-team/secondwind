@@ -85,6 +85,10 @@
 /* 채팅 메시지 정렬(카톡식): 기본 왼쪽 흰색, --me 는 오른쪽 코랄 */
 .fz-msg {
   max-width: 80%;
+  /* flex 자식의 기본 min-width:auto 는 긴 단어/URL 의 min-content 만큼 말풍선을 강제로 넓혀
+     모바일에서 가로로 넘쳐 잘린다. min-width:0 로 축소를 허용하고, overflow-wrap 으로 긴 토큰을 접는다. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   border-radius: var(--fz-r-lg);
   border: 1px solid var(--fz-line);
   background: var(--fz-surface);
