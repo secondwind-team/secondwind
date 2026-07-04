@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { mentionsMember } from "@/lib/common/services/finz-chat";
+import { finzMessageSnippet, mentionsMember } from "@/lib/common/services/finz-chat";
 import { getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { appendTextMessage } from "@/lib/server/finz-chat-store";
 import { getRoomMutesForAccounts, isFinzPushConfigured, sendToAccounts } from "@/lib/server/finz-push-store";
 
 export const runtime = "nodejs";
 
-type Body = { memberId?: unknown; text?: unknown; id?: unknown; replyToId?: unknown };
+type Body = { memberId?: unknown; text?: unknown; id?: unknown; replyToId?: unknown; attachments?: unknown };
 
 // 멤버 자유 텍스트 전송. LLM 절대 안 거침. authorName 은 서버 조회(클라이언트 값 무시),
 // 280자/멤버당 레이트 제한은 store 에서. 권위 있는 echo 메시지(실 id)를 돌려줘 클라이언트가
@@ -28,8 +28,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   const text = typeof body.text === "string" ? body.text : "";
   const clientId = typeof body.id === "string" ? body.id : undefined;
   const replyToId = typeof body.replyToId === "string" ? body.replyToId : undefined;
+  const attachments = body.attachments; // 서버(store)에서 Blob URL·개수·용량 재검증
 
-  const result = await appendTextMessage(groupId, memberId, text, clientId, replyToId);
+  const result = await appendTextMessage(groupId, memberId, text, clientId, replyToId, attachments);
   if (result.status === "not-found") return NextResponse.json({ status: "not-found" }, { status: 404 });
   if (result.status === "not-member")
     return NextResponse.json({ status: "error", reason: "not-member" }, { status: 403 });
@@ -39,13 +40,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     return NextResponse.json({ status: "error", reason: "empty" }, { status: 400 });
 
   // 저장 성공 → 방의 다른 멤버 전원에게 푸시(best-effort — 저장 응답을 막지 않는다).
-  void notifyRoomMembers(groupId, memberId, text).catch(() => {});
+  // 미리보기는 저장된 메시지 기준(첨부만 있으면 "📷 사진" 등), 멘션 예외 판정은 원문 캡션 기준.
+  const preview = result.message ? finzMessageSnippet(result.message, 80) : text;
+  void notifyRoomMembers(groupId, memberId, text, preview).catch(() => {});
   return NextResponse.json({ status: "ok", message: result.message });
 }
 
 // 새 멤버 메시지를 방의 다른 멤버(발신자 제외) 모든 기기로 푸시.
 // 대상은 group.members(서버 진실)에서 도출하므로 memberId 위조와 무관하다. self 방·혼자면 0명.
-async function notifyRoomMembers(groupId: string, senderId: string, text: string): Promise<void> {
+// text=원문 캡션(멘션 예외 판정용), preview=푸시 본문 표시용(첨부만 있으면 "📷 사진" 등).
+async function notifyRoomMembers(groupId: string, senderId: string, text: string, preview: string): Promise<void> {
   if (!isFinzPushConfigured()) return;
   const group = await getFinzGroup(groupId);
   if (!group) return;
@@ -71,7 +75,6 @@ async function notifyRoomMembers(groupId: string, senderId: string, text: string
 
   const senderName = group.members.find((m) => m.memberId === senderId)?.displayName ?? "친구";
   const isGroup = group.kind === "group" && group.title.length > 0;
-  const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
   await sendToAccounts(recipients, {
     title: isGroup ? group.title : senderName,
     body: isGroup ? `${senderName}: ${preview}` : preview,

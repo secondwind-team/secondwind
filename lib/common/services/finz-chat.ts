@@ -27,6 +27,19 @@ export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
 export type FinzChartPayload = { symbol: string; label: string };
 
+// 메시지 첨부(이미지/파일). 바이트는 Vercel Blob 에 있고 메시지엔 public URL 만 저장한다. 캡션(text)과 공존 가능.
+export type FinzAttachmentKind = "image" | "file";
+export type FinzAttachment = {
+  kind: FinzAttachmentKind;
+  url: string; // Vercel Blob public URL (https://<store>.public.blob.vercel-storage.com/...)
+  name: string; // 표시용 원본 파일명
+  size: number; // bytes
+  contentType: string;
+  width?: number; // 이미지 원본 픽셀(선택 — 종횡비 힌트)
+  height?: number;
+};
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
 export const FINZ_REACTION_EMOJIS = ["❤️", "👍", "✅", "😂", "😮", "😢"] as const;
 export type FinzReactionEmoji = (typeof FINZ_REACTION_EMOJIS)[number];
 
@@ -60,6 +73,7 @@ type FinzStoredBase = {
   replyTo?: FinzReplyReference; // 답장 작성 시점의 원본 메시지 스냅샷.
   editedAt?: string; // 일반 text 메시지 수정 시각.
   deletedAt?: string; // soft delete 시각. UI/LLM 에는 삭제 안내문으로 노출.
+  attachments?: FinzAttachment[]; // 이미지/파일 첨부(Blob). text(캡션)와 함께 올 수 있다.
 };
 
 // KV LIST 에 JSON.stringify 되는 값 — seq 없음(읽기 시점 인덱스로 부여).
@@ -112,6 +126,19 @@ function isReplyReference(value: unknown): value is FinzReplyReference {
   );
 }
 
+export function isFinzAttachment(value: unknown): value is FinzAttachment {
+  if (!value || typeof value !== "object") return false;
+  const a = value as Record<string, unknown>;
+  if (a.kind !== "image" && a.kind !== "file") return false;
+  if (typeof a.url !== "string" || !/^https:\/\//i.test(a.url)) return false;
+  if (typeof a.name !== "string") return false;
+  if (typeof a.size !== "number" || !Number.isFinite(a.size) || a.size < 0) return false;
+  if (typeof a.contentType !== "string") return false;
+  if (a.width !== undefined && (typeof a.width !== "number" || !Number.isFinite(a.width))) return false;
+  if (a.height !== undefined && (typeof a.height !== "number" || !Number.isFinite(a.height))) return false;
+  return true;
+}
+
 function hasValidMessageMetadata(m: Record<string, unknown>): boolean {
   if (m.reactions !== undefined) {
     if (!m.reactions || typeof m.reactions !== "object" || Array.isArray(m.reactions)) return false;
@@ -122,6 +149,10 @@ function hasValidMessageMetadata(m: Record<string, unknown>): boolean {
   if (m.replyTo !== undefined && !isReplyReference(m.replyTo)) return false;
   if (m.editedAt !== undefined && typeof m.editedAt !== "string") return false;
   if (m.deletedAt !== undefined && typeof m.deletedAt !== "string") return false;
+  if (m.attachments !== undefined) {
+    if (!Array.isArray(m.attachments) || m.attachments.length > MAX_ATTACHMENTS_PER_MESSAGE) return false;
+    for (const a of m.attachments) if (!isFinzAttachment(a)) return false;
+  }
   return true;
 }
 
@@ -175,11 +206,21 @@ export function isFinzDeletedMessage(message: Pick<FinzChatMessage, "deletedAt">
   return typeof message.deletedAt === "string" && message.deletedAt.length > 0;
 }
 
+export function attachmentSnippet(attachments: FinzAttachment[]): string {
+  if (attachments.length === 0) return "";
+  const allImages = attachments.every((a) => a.kind === "image");
+  if (allImages) return attachments.length > 1 ? `📷 사진 ${attachments.length}장` : "📷 사진";
+  return attachments.length > 1 ? `📎 첨부 ${attachments.length}개` : `📎 ${attachments[0]!.name}`;
+}
+
 export function finzMessageSnippet(message: FinzChatMessage | FinzStoredChatMessage, max = 64): string {
   if ("deletedAt" in message && message.deletedAt) return "삭제된 메시지입니다";
   let text: string;
   switch (message.kind) {
     case "text":
+      // 캡션 없이 첨부만 있으면 첨부를 요약(답장 인용·공유·푸시 미리보기용).
+      text = message.text.trim() || attachmentSnippet(message.attachments ?? []);
+      break;
     case "system":
       text = message.text;
       break;

@@ -1,10 +1,31 @@
 "use client";
 
-import { Plus, Send, Sparkles, X } from "lucide-react";
+import { FileText, Plus, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
-import { splitByMentionTokens, type FinzChatKind } from "@/lib/common/services/finz-chat";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  splitByMentionTokens,
+  type FinzAttachment,
+  type FinzAttachmentKind,
+  type FinzChatKind,
+} from "@/lib/common/services/finz-chat";
 import { FinzPositionInput } from "./finz-position-input";
+
+// 첨부 업로드 상한(업로드 라우트·store 재검증과 정합). 클라이언트에서 1차 거른다.
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+const ATTACH_ACCEPT =
+  "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
+
+// 컴포저에 잠깐 얹혀 업로드 중/완료를 보여주는 스테이징 첨부.
+type StagedAttachment = {
+  tempId: string;
+  name: string;
+  kind: FinzAttachmentKind;
+  previewUrl?: string; // 이미지 로컬 미리보기(object URL)
+  status: "uploading" | "done" | "error";
+  attachment?: FinzAttachment; // 업로드 완료 시 실제 Blob 첨부
+};
 
 type ComposerReference = { id: string; authorName: string; snippet: string; kind: FinzChatKind };
 
@@ -45,7 +66,7 @@ export function FinzChatComposer({
   replyTarget: ComposerReference | null;
   editingTarget: (ComposerReference & { text: string }) | null;
   onSetStanceMode: (v: boolean) => void;
-  onSendText: (text: string, replyToId?: string) => void;
+  onSendText: (text: string, replyToId?: string, attachments?: FinzAttachment[]) => void;
   onEditText: (text: string) => void;
   onCancelReply: () => void;
   onCancelEdit: () => void;
@@ -59,6 +80,9 @@ export function FinzChatComposer({
   const plusRef = useRef<HTMLButtonElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
+  const [staged, setStaged] = useState<StagedAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // textarea 가 내부 스크롤되면 백드롭(하이라이트)도 같은 위치로 맞춘다(긴 글 줄바꿈 정렬).
   function syncScroll() {
@@ -98,13 +122,91 @@ export function FinzChatComposer({
     });
   }, [editingTarget]);
 
+  // ── 첨부(이미지·파일) ── + 메뉴의 '사진·파일'이 숨은 file input 을 연다. 고른 파일은 즉시 업로드해
+  // 스테이징 스트립에 썸네일로 얹고, 전송 시 완료된 것만 메시지에 담는다(캡션 text 와 공존).
+  function openFilePicker() {
+    setAttachError(null);
+    fileInputRef.current?.click();
+  }
+
+  async function uploadOne(file: File, tempId: string) {
+    try {
+      // @vercel/blob 클라이언트 SDK 는 첨부를 실제로 고를 때만 로드(초기 채팅 번들에서 제외).
+      const { upload } = await import("@vercel/blob/client");
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/finz/upload",
+        contentType: file.type || undefined,
+      });
+      const kind: FinzAttachmentKind = file.type.startsWith("image/") ? "image" : "file";
+      const attachment: FinzAttachment = {
+        kind,
+        url: blob.url,
+        name: file.name,
+        size: file.size,
+        contentType: file.type || "application/octet-stream",
+      };
+      setStaged((s) => s.map((x) => (x.tempId === tempId ? { ...x, status: "done", attachment } : x)));
+    } catch {
+      setAttachError("첨부 업로드에 실패했어. 잠시 뒤 다시 시도해줘.");
+      setStaged((s) => s.map((x) => (x.tempId === tempId ? { ...x, status: "error" } : x)));
+    }
+  }
+
+  function onFilesPicked(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setAttachError(null);
+    const room = MAX_ATTACHMENTS_PER_MESSAGE - staged.length;
+    if (room <= 0) {
+      setAttachError(`첨부는 한 번에 ${MAX_ATTACHMENTS_PER_MESSAGE}개까지야.`);
+      return;
+    }
+    for (const file of Array.from(files).slice(0, room)) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setAttachError(`${file.name} 은(는) 너무 커 (최대 12MB).`);
+        continue;
+      }
+      const tempId = crypto.randomUUID();
+      const isImage = file.type.startsWith("image/");
+      const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      setStaged((s) => [
+        ...s,
+        { tempId, name: file.name, kind: isImage ? "image" : "file", previewUrl, status: "uploading" },
+      ]);
+      void uploadOne(file, tempId);
+    }
+  }
+
+  function removeStaged(tempId: string) {
+    setStaged((s) => {
+      const item = s.find((x) => x.tempId === tempId);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return s.filter((x) => x.tempId !== tempId);
+    });
+  }
+
+  function clearStaged() {
+    setStaged((s) => {
+      for (const x of s) if (x.previewUrl) URL.revokeObjectURL(x.previewUrl);
+      return [];
+    });
+  }
+
+  const doneAttachments = staged.filter((s) => s.status === "done" && s.attachment).map((s) => s.attachment!);
+  const uploading = staged.some((s) => s.status === "uploading");
+  // 편집은 텍스트 전용. 새 전송은 캡션 또는 완료된 첨부 중 하나만 있어도 가능(단, 업로드 진행 중이면 대기).
+  const canSend = editingTarget
+    ? Boolean(text.trim())
+    : !uploading && (Boolean(text.trim()) || doneAttachments.length > 0);
+
   function send() {
+    if (!canSend || sending) return;
     const t = text.trim();
-    if (!t || sending) return;
     if (editingTarget) {
       onEditText(t);
     } else {
-      onSendText(t, replyTarget?.id);
+      onSendText(t, replyTarget?.id, doneAttachments.length > 0 ? doneAttachments : undefined);
+      clearStaged();
     }
     setText("");
   }
@@ -150,6 +252,7 @@ export function FinzChatComposer({
         <>
           {sheetOpen && (
             <div ref={sheetRef} role="menu" aria-label="파티 액션" className="mb-2 space-y-1.5 rounded-[var(--fz-r)] border border-[var(--fz-line)] bg-[var(--fz-surface)] p-2 shadow-[var(--fz-shadow-sm)]">
+              <SheetItem label="🖼 사진·파일" reason="" onClick={() => runAction(openFilePicker)} />
               <SheetItem label="🤖 FINZ에게 물어보기" reason="" onClick={askFinz} />
               <SheetItem label="🎴 우정주 뽑기" reason={pickReason} busy={pickBusy} onClick={() => runAction(onPick)} />
               <SheetItem
@@ -185,6 +288,57 @@ export function FinzChatComposer({
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
+            </div>
+          )}
+
+          {/* 숨은 파일 입력 — + 메뉴 '사진·파일'이 연다. 다중 선택. 같은 파일 재선택 가능하게 value 초기화. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ATTACH_ACCEPT}
+            className="hidden"
+            onChange={(e) => {
+              onFilesPicked(e.target.files);
+              e.target.value = "";
+            }}
+          />
+
+          {attachError && <p className="fz-alert mb-2">{attachError}</p>}
+
+          {staged.length > 0 && (
+            <div className="fz-staged mb-2">
+              {staged.map((s) => (
+                <div key={s.tempId} className={`fz-staged__item ${s.status === "error" ? "fz-staged__item--error" : ""}`}>
+                  {s.kind === "image" && s.previewUrl ? (
+                    // 로컬 미리보기(object URL) — 업로드 완료 여부와 무관하게 즉시 보임.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.previewUrl} alt={s.name} className="fz-staged__thumb" />
+                  ) : (
+                    <span className="fz-staged__file">
+                      <FileText className="h-6 w-6" aria-hidden />
+                    </span>
+                  )}
+                  {s.status === "uploading" && (
+                    <span className="fz-staged__overlay" aria-label="업로드 중">
+                      <span className="fz-typing">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    </span>
+                  )}
+                  {s.status === "error" && <span className="fz-staged__overlay fz-staged__overlay--error">!</span>}
+                  <button
+                    type="button"
+                    onClick={() => removeStaged(s.tempId)}
+                    aria-label={`${s.name} 첨부 제거`}
+                    className="fz-staged__remove"
+                  >
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -245,7 +399,7 @@ export function FinzChatComposer({
             <button
               type="button"
               onClick={send}
-              disabled={!text.trim() || sending}
+              disabled={!canSend || sending}
               aria-label="보내기"
               className="fz-btn h-11 w-11 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
               style={{ padding: 0 }}

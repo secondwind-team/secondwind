@@ -19,8 +19,11 @@ import {
 } from "./finz-group-store";
 import {
   finzMessageSnippet,
+  isFinzAttachment,
   isFinzReactionEmoji,
   isFinzStoredChatMessage,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  type FinzAttachment,
   type FinzReactionEmoji,
   type FinzChatMessage,
   type FinzReplyReference,
@@ -31,6 +34,8 @@ import type { FinzPortfolioCardPayload } from "@/lib/common/services/finz-portfo
 
 export const MAX_TEXT_LENGTH = 280;
 export const TEXT_RATE_LIMIT_MS = 800;
+const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024; // 개별 첨부 상한(업로드 라우트와 정합)
+const BLOB_HOST_SUFFIX = ".blob.vercel-storage.com"; // 첨부 URL 은 우리 Vercel Blob 스토어만 허용
 const HARD_CEILING = 400; // 이 이상이면 새 메시지 거부(+ 1회 안내)
 // 읽기 창 = 하드 실링과 동일. 리스트가 HARD_CEILING 을 넘지 못하므로 항상 전체(seq 0..end)를 읽는다.
 // selectLatestPick / 포지션 / 요약 같은 결정 로직이 부분 뷰에서 돌면 잘못된 nudge·LLM 중복 호출이 나기 때문.
@@ -126,12 +131,43 @@ export async function getChatRevision(id: string): Promise<number> {
 
 // 멤버 자유 텍스트. LLM 절대 안 거침. members-guard + 서버 authorName + 길이/레이트 제한.
 // clientId(클라이언트 tempId)를 메시지 id 로 쓴다 — 응답 유실 후 재시도해도 같은 id 라 dedup 으로 합쳐진다.
+// 클라이언트가 보낸 첨부를 서버에서 재검증한다 — Vercel Blob URL(우리 스토어)만, 개수·용량 상한, 필드 정리.
+// (URL 은 업로드 라우트가 requireAccount 로 게이트한 토큰으로만 생성되지만, 여기서 URL 위조·과다 첨부를 한 번 더 막는다.)
+function sanitizeAttachments(input: unknown): FinzAttachment[] {
+  if (!Array.isArray(input)) return [];
+  const out: FinzAttachment[] = [];
+  for (const raw of input) {
+    if (!isFinzAttachment(raw)) continue;
+    let host = "";
+    try {
+      host = new URL(raw.url).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
+    if (!host.endsWith(BLOB_HOST_SUFFIX)) continue;
+    if (raw.size > MAX_ATTACHMENT_BYTES) continue;
+    const clean: FinzAttachment = {
+      kind: raw.kind,
+      url: raw.url,
+      name: raw.name.slice(0, 200),
+      size: Math.floor(raw.size),
+      contentType: raw.contentType.slice(0, 120),
+    };
+    if (typeof raw.width === "number") clean.width = Math.floor(raw.width);
+    if (typeof raw.height === "number") clean.height = Math.floor(raw.height);
+    out.push(clean);
+    if (out.length >= MAX_ATTACHMENTS_PER_MESSAGE) break;
+  }
+  return out;
+}
+
 export async function appendTextMessage(
   id: string,
   memberId: string,
   text: string,
   clientId?: string,
   replyToId?: string,
+  attachments?: unknown,
 ): Promise<{ status: "ok" | "not-found" | "not-member" | "rate-limited" | "empty"; message?: FinzStoredChatMessage }> {
   // role/authorId 를 봇/시스템으로 위조하는 것은 하드 거절(멤버는 finz/system 가 될 수 없다).
   if (memberId === "finz" || memberId === "system") return { status: "not-member" };
@@ -141,7 +177,9 @@ export async function appendTextMessage(
   if (!member) return { status: "not-member" };
 
   const trimmed = text.trim().slice(0, MAX_TEXT_LENGTH);
-  if (trimmed.length === 0) return { status: "empty" };
+  const safeAttachments = sanitizeAttachments(attachments);
+  // 텍스트도 첨부도 없으면 빈 메시지. 첨부만 있는 메시지(캡션 없음)는 허용한다.
+  if (trimmed.length === 0 && safeAttachments.length === 0) return { status: "empty" };
 
   const recent = await readWindow(id, 24);
 
@@ -169,6 +207,7 @@ export async function appendTextMessage(
     text: trimmed,
     createdAt: new Date().toISOString(),
   };
+  if (safeAttachments.length > 0) stored.attachments = safeAttachments;
   const replyTo = replyToId ? await buildReplyReference(id, replyToId) : null;
   if (replyTo) stored.replyTo = replyTo;
   return appendChatMessage(id, stored);
