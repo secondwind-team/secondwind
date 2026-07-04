@@ -41,7 +41,7 @@ export default async function FinzPartyRoomPage({ params }: Props) {
   // 멤버 미리보기(아바타·제목)는 group.members 로 충분하므로 그대로 시드한다.
   const me = await resolveAccount();
   const isMember = me.status === "ok" && group.members.some((m) => m.memberId === me.account.accountId);
-  const tail = isMember ? await getChatTail(groupId, -1) : { messages: [], cursor: -1 };
+  const tail = isMember ? await getChatTail(groupId, -1) : { messages: [], cursor: -1, revision: 0 };
 
   return (
     <FinzPartyRoom
@@ -54,6 +54,7 @@ export default async function FinzPartyRoomPage({ params }: Props) {
       }))}
       initialMessages={tail.messages}
       initialCursor={tail.cursor}
+      initialRevision={tail.revision}
       initialFull={group.members.length >= 2}
       initialKind={group.kind}
       initialTitle={group.title}
