@@ -11,6 +11,13 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      provider?: string; // "google" | "password" — 인증 제공자(provider-agnostic authlink 조회용)
     };
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    provider?: string;
   }
 }
