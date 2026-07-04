@@ -743,6 +743,7 @@ export function FinzPartyRoom({
           if (message.kind === "system" || message.deletedAt) return;
           setActionMenu({ message, x: point.x, y: point.y });
         }}
+        onReplyTargetUnavailable={() => setActionError("원문 메시지를 찾을 수 없어요.")}
       />
       {actionMenu && (
         <FinzMessageActionMenu
@@ -858,8 +859,14 @@ function FinzMessageActionMenu({
             <button
               key={emoji}
               type="button"
+              draggable={false}
               aria-label={`반응 ${emoji}`}
               aria-pressed={selectedEmoji === emoji}
+              onDragStart={(e) => e.preventDefault()}
+              onPointerDown={(e) => {
+                if (e.pointerType !== "mouse" && e.cancelable) e.preventDefault();
+                window.getSelection()?.removeAllRanges();
+              }}
               onClick={() => onReact(emoji)}
             >
               {emoji}

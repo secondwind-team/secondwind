@@ -39,6 +39,11 @@ function MsgTime({ iso }: { iso: string }) {
   return <time className="mb-0.5 shrink-0 text-[10px] leading-none text-[var(--fz-muted)]">{t}</time>;
 }
 
+function clearSelection() {
+  if (typeof window === "undefined") return;
+  window.getSelection()?.removeAllRanges();
+}
+
 function ActionableMessage({
   children,
   onOpenActions,
@@ -65,6 +70,7 @@ function ActionableMessage({
       onContextMenu={(e) => {
         if (isInteractive(e.target)) return;
         e.preventDefault();
+        clearSelection();
         onOpenActions({ x: e.clientX, y: e.clientY });
       }}
       onPointerDown={(e) => {
@@ -72,6 +78,8 @@ function ActionableMessage({
         startRef.current = { x: e.clientX, y: e.clientY };
         timerRef.current = setTimeout(() => {
           timerRef.current = null;
+          if (e.cancelable) e.preventDefault();
+          clearSelection();
           onOpenActions({ x: e.clientX, y: e.clientY });
         }, 520);
       }}
@@ -89,12 +97,29 @@ function ActionableMessage({
   );
 }
 
-function ReplyQuote({ message }: { message: FinzChatMessage }) {
+function ReplyQuote({ message, onJump }: { message: FinzChatMessage; onJump?: (messageId: string) => void }) {
   if (!message.replyTo) return null;
-  return (
-    <div className="fz-reply-quote">
+  const inner = (
+    <>
       <span>{message.replyTo.authorName}</span>
       <p>{message.replyTo.snippet}</p>
+    </>
+  );
+  if (onJump) {
+    return (
+      <button
+        type="button"
+        className="fz-reply-quote fz-reply-quote--button"
+        onClick={() => onJump(message.replyTo!.id)}
+        aria-label={`${message.replyTo.authorName}님의 원문 메시지로 이동`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div className="fz-reply-quote">
+      {inner}
     </div>
   );
 }
@@ -159,6 +184,7 @@ export function FinzChatMessageView({
   superseded,
   changed,
   onOpenActions,
+  onReplyQuoteJump,
 }: {
   message: FinzChatMessage;
   myMemberId: string | null;
@@ -168,6 +194,7 @@ export function FinzChatMessageView({
   superseded?: boolean;
   changed?: boolean;
   onOpenActions?: (point: { x: number; y: number }) => void;
+  onReplyQuoteJump?: (messageId: string) => void;
 }) {
   if (message.kind === "system") {
     // 시스템 알림은 시각을 붙이지 않는다(카카오톡과 동일 — 가운데 회색 pill).
@@ -306,7 +333,7 @@ export function FinzChatMessageView({
         {!mine && <span className="px-1 text-xs text-[var(--fz-muted)]">{message.authorName}</span>}
         <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
           <div className={`fz-msg whitespace-pre-wrap break-words ${mine ? "fz-msg--me" : ""}`}>
-            <ReplyQuote message={message} />
+            <ReplyQuote message={message} onJump={onReplyQuoteJump} />
             {message.deletedAt ? (
               <DeletedText />
             ) : (
