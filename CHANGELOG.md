@@ -2,6 +2,11 @@
 
 secondwind 의 주요 변경 사항을 기록합니다. 날짜 포맷은 `YYYY-MM-DD`, 버전은 4자리 `MAJOR.MINOR.PATCH.MICRO`.
 
+## [0.1.33.1] - 2026-07-05
+
+### Changed
+- **첨부 이미지·파일을 비공개(private)로 전환 + 방 멤버 게이트 프록시.** 0.1.33.0 의 첨부는 world-readable URL(누구나 URL 만 알면 열람)이었는데, 채팅 사진 프라이버시를 위해 **기본 비공개**로 바꾸고 열람을 방 멤버만 통과하는 프록시(`/api/finz/party/[id]/attachment`)로 게이트했다. 메시지엔 URL 대신 blob pathname 만 저장하고, 프록시가 *로그인 · 방 멤버 · 그 방에 올라온 첨부인지*를 확인한 뒤에만 스트리밍한다. SSRF 방어(pathname 은 bare path 만) + 오리진 XSS 방어(비이미지는 강제 다운로드 + `nosniff`). **Blob 스토어는 Private 로 생성**한다. 아직 스토어 미연결이라 사용자 영향 없음(코드 정비).
+
 ## [0.1.33.0] - 2026-07-05
 
 ### Added
