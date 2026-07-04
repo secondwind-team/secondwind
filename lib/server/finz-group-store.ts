@@ -257,6 +257,10 @@ function roomsIndexKey(accountId: string): string {
   return `sw:finz:rooms:${accountId}`;
 }
 
+function allRoomsIndexKey(): string {
+  return "sw:finz:rooms:all";
+}
+
 // 여러 멤버로 새 방을 만든다. kind/title 지정. 모든 멤버의 방 인덱스에 등록한다.
 export async function createFinzRoom(input: {
   members: FinzGroupMember[];
@@ -322,6 +326,7 @@ async function indexRoomForMembers(group: FinzGroup, scoreMs: number): Promise<v
   const redis = getClient();
   if (!redis) return;
   const pipe = redis.pipeline();
+  pipe.zadd(allRoomsIndexKey(), { score: scoreMs, member: group.id });
   for (const m of group.members) {
     pipe.zadd(roomsIndexKey(m.memberId), { score: scoreMs, member: group.id });
   }
@@ -338,6 +343,13 @@ export async function listRoomIdsForAccount(accountId: string): Promise<string[]
   const redis = getClient();
   if (!redis) return [];
   const ids = (await redis.zrange(roomsIndexKey(accountId), 0, -1, { rev: true })) as string[];
+  return ids.filter((id) => typeof id === "string" && isFinzGroupId(id));
+}
+
+export async function listAllFinzRoomIds(): Promise<string[]> {
+  const redis = getClient();
+  if (!redis) return [];
+  const ids = (await redis.zrange(allRoomsIndexKey(), 0, -1, { rev: true })) as string[];
   return ids.filter((id) => typeof id === "string" && isFinzGroupId(id));
 }
 
