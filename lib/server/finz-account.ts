@@ -12,10 +12,11 @@ import { getAccountForAuth } from "@/lib/server/finz-account-store";
 export type ResolvedAuth = { provider: string; providerId: string; email: string; name: string | null };
 
 // 현재 로그인 사용자의 인증 신원(계정 유무와 무관). 미로그인이면 null.
+// provider 는 세션에서(google | password). providerId 는 token.sub — google=sub, password=정규화 이메일.
 export async function resolveAuth(): Promise<ResolvedAuth | null> {
   const user = await getCurrentUser();
   if (!user || !user.id) return null;
-  return { provider: "google", providerId: user.id, email: user.email, name: user.name ?? null };
+  return { provider: user.provider ?? "google", providerId: user.id, email: user.email, name: user.name ?? null };
 }
 
 export type AccountResolution =
