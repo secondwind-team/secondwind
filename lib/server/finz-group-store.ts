@@ -12,6 +12,7 @@
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
 import { buildFinzProfile } from "@/lib/common/services/finz";
+import type { FinzChatMode } from "@/lib/common/services/finz-chat";
 import type { FinzRoomKind } from "@/lib/common/services/finz-account";
 
 // 메신저 시대: 대화방을 일주일 만에 잃지 않도록 TTL 을 30일로(기존 7일에서 상향).
@@ -44,6 +45,7 @@ export type FinzGroup = {
   expiresAt: string;
   kind: FinzRoomKind; // "1on1" | "group"
   title: string; // 그룹방 이름(1on1 은 빈 문자열 — 표시명은 상대 이름으로 도출)
+  chatMode: FinzChatMode; // "linear"(기본) | "thread". 방 단위 대화 방식(전 멤버 공유). 옛 blob 은 linear 로 도출.
 };
 
 export type JoinResult =
@@ -148,6 +150,7 @@ export async function createFinzGroup(member: FinzGroupMember): Promise<{ id: st
       expiresAt: new Date(now + FINZ_GROUP_TTL_SECONDS * 1000).toISOString(),
       kind: "1on1",
       title: "",
+      chatMode: "linear",
     };
     await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
     return { id, group };
@@ -180,6 +183,25 @@ export async function joinFinzGroup(
     await redis.set(groupKey(id), JSON.stringify(result.group), { ex: FINZ_GROUP_TTL_SECONDS });
   }
   return { status: result.status, group: result.group };
+}
+
+// 방 대화 방식(linear/thread) 전환 — 방 단위 설정. joinFinzGroup 과 동일한 fetch→mutate→set+TTL 패턴.
+// 같은 값이면 no-op. 멤버십/권한 검증은 라우트에서(requireAccount + members-guard).
+export async function setFinzGroupChatMode(
+  id: string,
+  mode: FinzChatMode,
+): Promise<{ status: "ok" | "not-found"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+  if (current.chatMode === mode) return { status: "ok", group: current };
+
+  const next: FinzGroup = { ...current, chatMode: mode };
+  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
+  return { status: "ok", group: next };
 }
 
 export function isFinzGroupMember(value: unknown): value is FinzGroupMember {
@@ -219,10 +241,12 @@ export function parseGroup(raw: unknown): FinzGroup | null {
       ? "group"
       : "1on1";
   const title = typeof parsed.title === "string" ? parsed.title.slice(0, 40) : "";
+  // 대화 방식 — 옛 blob(없음)/이상값은 기본 linear(무서프라이즈).
+  const chatMode: FinzChatMode = parsed.chatMode === "thread" ? "thread" : "linear";
 
   // 레거시 blob 의 pick/positions/summary 필드는 무시한다(대화는 채팅 LIST 로 이동).
   // 이런 옛 필드가 있어도 거절하지 않고 신원만 뽑아 유효한 그룹으로 돌려준다.
-  return { id, members, createdAt, expiresAt, kind, title };
+  return { id, members, createdAt, expiresAt, kind, title, chatMode };
 }
 
 function generateGroupId(): string {
@@ -280,6 +304,7 @@ export async function createFinzRoom(input: {
       expiresAt: new Date(now + FINZ_GROUP_TTL_SECONDS * 1000).toISOString(),
       kind: input.kind,
       title: input.title.slice(0, 40),
+      chatMode: "linear",
     };
     await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
     await indexRoomForMembers(group, now);

@@ -10,11 +10,15 @@ import {
   type FinzReactionEmoji,
   mentionsFinz,
   normalizeChartSymbol,
+  resolveThreadRootId,
   selectLatestPick,
   selectLatestPositionsByMember,
+  selectThreadRoots,
   stripFinzMention,
+  threadStats,
   type FinzChatMemberLite,
   type FinzChatMessage,
+  type FinzChatMode,
   type FinzNudge,
   type LatestPosition,
 } from "@/lib/common/services/finz-chat";
@@ -22,6 +26,7 @@ import { useFinzAccount } from "./finz-account-context";
 import { FinzChatComposer } from "./finz-chat-composer";
 import { FinzChatHeader } from "./finz-chat-header";
 import { FinzChatTimeline, type PendingText } from "./finz-chat-timeline";
+import { FinzThreadView } from "./finz-thread-view";
 import { FinzRoomFullNotice } from "./finz-room-full-notice";
 import { FinzRoomJoinView } from "./finz-room-join-view";
 import { FinzInviteSheet } from "./finz-invite-sheet";
@@ -49,6 +54,7 @@ export function FinzPartyRoom({
   initialFull,
   initialKind,
   initialTitle,
+  initialChatMode,
 }: {
   groupId: string;
   initialMembers: FinzChatMemberLite[];
@@ -58,6 +64,7 @@ export function FinzPartyRoom({
   initialFull: boolean;
   initialKind: FinzRoomKind;
   initialTitle: string;
+  initialChatMode: FinzChatMode;
 }) {
   // 메신저: 방 멤버 = 로그인 계정. memberId 는 곧 내 accountId(게이트 통과 → 항상 존재).
   const account = useFinzAccount();
@@ -66,6 +73,8 @@ export function FinzPartyRoom({
   const [members, setMembers] = useState<FinzChatMemberLite[]>(initialMembers);
   const [full, setFull] = useState(initialFull); // 서버 의미: 2명 이상(파티 준비)
   const [messages, setMessages] = useState<FinzChatMessage[]>(initialMessages);
+  const [chatMode, setChatMode] = useState<FinzChatMode>(initialChatMode); // 방 대화 방식(폴링으로 갱신)
+  const [openThreadRootId, setOpenThreadRootId] = useState<string | null>(null); // 열려 있는 스레드의 root id
   const cursorRef = useRef(initialCursor);
   const revisionRef = useRef(initialRevision);
 
@@ -142,6 +151,7 @@ export function FinzPartyRoom({
         messages?: FinzChatMessage[];
         cursor?: number;
         revision?: number;
+        chatMode?: FinzChatMode;
       };
       if (json.status !== "ok") return;
       if (json.members) {
@@ -150,6 +160,9 @@ export function FinzPartyRoom({
       }
       const nextFull = Boolean(json.full);
       setFull((prev) => (prev === nextFull ? prev : nextFull));
+      if (json.chatMode === "linear" || json.chatMode === "thread") {
+        setChatMode((prev) => (prev === json.chatMode ? prev : json.chatMode!)); // 토글이 폴링으로 전 멤버 전파
+      }
       const incoming = json.messages ?? [];
       if (incoming.length) {
         setMessages((prev) => {
@@ -254,7 +267,8 @@ export function FinzPartyRoom({
   async function sendText(text: string, reuseId?: string, attempt = 0, replyToId?: string) {
     const tempId = reuseId ?? crypto.randomUUID();
     if (attempt === 0) {
-      setPending((p) => [...p, { tempId, text, status: "sending" }]);
+      // parentId 를 실어 스레드 답글 pending 은 스레드 뷰에만, 최상위 pending 은 메인에만 뜨게 한다.
+      setPending((p) => [...p, { tempId, text, status: "sending", parentId: replyToId }]);
       bumpStick();
     }
     try {
@@ -276,10 +290,10 @@ export function FinzPartyRoom({
       setPending((p) => p.filter((x) => x.tempId !== tempId));
       setTimeout(() => void refetch(), 1200);
       if (mentionsFinz(text)) {
-        // @finz 멘션 → 의도 분류 후 분기(우정주/요약/입장/질문).
         const q = stripFinzMention(text);
-        if (q) void handleMention(q);
-        else setActionError("@finz 뒤에 궁금한 걸 적어줘.");
+        if (!q) setActionError("@finz 뒤에 궁금한 걸 적어줘.");
+        else if (replyToId) void ask(q, replyToId); // 스레드 안 @finz = qa 답변을 그 스레드에(카드/부작용 인텐트는 최상위 전용)
+        else void handleMention(q); // 최상위 @finz → 의도 분류 후 분기(우정주/요약/입장/차트/질문)
       } else {
         // 멘션이 아니면 finz 가 선제 개입할 맥락인지 서버가 판단(조건·쿨다운 통과 시에만 발화).
         void triggerProactive();
@@ -324,9 +338,26 @@ export function FinzPartyRoom({
 
   function replyToMessage(message: FinzChatMessage) {
     setActionMenu(null);
+    // 스레드 모드: 답장 = 그 메시지가 속한 스레드를 연다(별도 스레드 화면에서 답글). 인라인 인용답장은 일반 모드 전용.
+    if (chatMode === "thread") {
+      openThread(resolveThreadRootId(new Map(liveRef.current.messages.map((m) => [m.id, m])), message));
+      return;
+    }
     setEditingMessage(null);
     setReplyTarget(message);
     bumpStick();
+  }
+
+  // 스레드 열기 — root id 로. (root 로 이미 해석된 id 를 받는다.)
+  function openThread(rootId: string) {
+    setActionMenu(null);
+    setReplyTarget(null);
+    setOpenThreadRootId(rootId);
+  }
+
+  // 스레드 답글 전송 — 항상 root 에 대한 답장(replyTo=rootId)으로 2단계 유지. @finz 포함 시 sendText 가 스레드로 라우팅.
+  function sendReplyInThread(text: string, rootId: string) {
+    void sendText(text, undefined, 0, rootId);
   }
 
   function editMessage(message: FinzChatMessage) {
@@ -538,7 +569,8 @@ export function FinzPartyRoom({
     }
   }
 
-  async function ask(question: string) {
+  // replyToId 를 주면(스레드 안 @finz) 그 스레드에 묶어 답한다 — 서버가 답변을 replyTo=대상 으로 append.
+  async function ask(question: string, replyToId?: string) {
     setAskBusy(true);
     setActionError(null);
     bumpStick();
@@ -546,7 +578,7 @@ export function FinzPartyRoom({
       const res = await fetch(`/api/finz/party/${groupId}/ask`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberId: myMemberId, question }),
+        body: JSON.stringify({ memberId: myMemberId, question, replyToId }),
       });
       const json = (await res.json().catch(() => ({}))) as { busy?: boolean };
       if (!res.ok) setActionError("finz 가 답하지 못했어. 잠시 뒤 다시 @finz 로 물어봐줘.");
@@ -714,6 +746,12 @@ export function FinzPartyRoom({
       }
     : null;
 
+  // 스레드 모드: 메인 타임라인엔 '원글'만(답글은 스레드로), 답글 수 어포던스용 stats, pending 은 최상위만.
+  const threadMode = chatMode === "thread";
+  const timelineMessages = threadMode ? selectThreadRoots(messages) : messages;
+  const stats = threadMode ? threadStats(messages) : undefined;
+  const mainPending = threadMode ? pending.filter((p) => !p.parentId) : pending;
+
   return (
     <div
       className={`flex min-h-0 flex-col ${viewportH ? "" : "flex-1"}`}
@@ -729,13 +767,16 @@ export function FinzPartyRoom({
         onInvite={isSelf ? undefined : () => setInviteOpen(true)}
       />
       <FinzChatTimeline
-        messages={messages}
-        pending={pending}
+        messages={timelineMessages}
+        pending={mainPending}
         myMemberId={myMemberId}
         mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
         aiBusy={pickBusy || recapBusy || askBusy || mentionBusy}
         stickSignal={stickSignal}
+        chatMode={chatMode}
+        threadStats={stats}
+        onOpenThread={openThread}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}
         onRetryPending={retryPending}
@@ -775,7 +816,7 @@ export function FinzPartyRoom({
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
         mentionNames={members.map((m) => m.displayName)}
-        replyTarget={replyReference}
+        replyTarget={threadMode ? null : replyReference}
         editingTarget={editingReference}
         onSetStanceMode={setStanceMode}
         onSendText={(text, replyToId) => void sendText(text, undefined, 0, replyToId)}
@@ -811,6 +852,20 @@ export function FinzPartyRoom({
           existingMemberIds={members.map((m) => m.memberId)}
           onInvite={inviteFriends}
           onClose={() => setInviteOpen(false)}
+        />
+      )}
+      {openThreadRootId && (
+        <FinzThreadView
+          rootId={openThreadRootId}
+          messages={messages}
+          pending={pending.filter((p) => p.parentId === openThreadRootId)}
+          myMemberId={myMemberId}
+          mentionNames={members.map((m) => m.displayName)}
+          aiBusy={askBusy || mentionBusy}
+          viewportH={viewportH}
+          onClose={() => setOpenThreadRootId(null)}
+          onSendReply={sendReplyInThread}
+          onRetryPending={retryPending}
         />
       )}
     </div>

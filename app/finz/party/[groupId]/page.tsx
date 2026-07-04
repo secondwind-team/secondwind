@@ -58,6 +58,7 @@ export default async function FinzPartyRoomPage({ params }: Props) {
       initialFull={group.members.length >= 2}
       initialKind={group.kind}
       initialTitle={group.title}
+      initialChatMode={group.chatMode}
     />
   );
 }

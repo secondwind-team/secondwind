@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { callLlm } from "@/lib/common/llm";
-import { buildFinzTranscript, type FinzTranscriptTurn } from "@/lib/common/services/finz-chat";
+import { buildFinzTranscript, selectThreadMessages, type FinzTranscriptTurn } from "@/lib/common/services/finz-chat";
 import { MAX_MEMBERS, getFinzGroup, isFinzGroupId } from "@/lib/server/finz-group-store";
 import { acquireAskLock, appendAnswerMessage, getChatTail, releaseAskLock } from "@/lib/server/finz-chat-store";
 import { getBlockedModels, recordCall, recordLlmQuota } from "@/lib/server/quota-store";
 
 export const runtime = "nodejs";
 
-type Body = { memberId?: unknown; question?: unknown };
+type Body = { memberId?: unknown; question?: unknown; replyToId?: unknown };
 
 const MAX_QUESTION_LENGTH = 500;
 
@@ -28,6 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
   }
   const memberId = typeof body.memberId === "string" ? body.memberId : "";
   const question = (typeof body.question === "string" ? body.question : "").trim().slice(0, MAX_QUESTION_LENGTH);
+  const replyToId = typeof body.replyToId === "string" && body.replyToId.length > 0 ? body.replyToId : undefined;
   if (!question) return NextResponse.json({ status: "error", reason: "empty" }, { status: 400 });
 
   const group = await getFinzGroup(groupId);
@@ -42,7 +43,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
 
   try {
     const tail = await getChatTail(groupId, -1);
-    const transcript = buildFinzTranscript(tail.messages, group.members);
+    // 스레드 안 @finz 면 그 스레드(원글+답글)만 맥락으로 — 답변도 그 스레드에 묶는다. 아니면 방 전체.
+    const scoped = replyToId ? selectThreadMessages(tail.messages, replyToId) : tail.messages;
+    const transcript = buildFinzTranscript(scoped, group.members);
 
     const skipModels = await getBlockedModels();
     const result = await callLlm(
@@ -62,7 +65,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
       void recordCall(result.model, result.usage.total).catch(() => {});
       // 면책 문구는 서버 불변식으로 — 모델이 빠뜨려도 반드시 붙는다(금융 맥락 안전).
       const answer = withSources(ensureDisclaimer(result.text.trim()), result.sources);
-      const appended = await appendAnswerMessage(groupId, answer);
+      const appended = await appendAnswerMessage(groupId, answer, replyToId);
       return NextResponse.json({ status: "ok", message: appended.message });
     }
 
@@ -70,6 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ groupId
     const appended = await appendAnswerMessage(
       groupId,
       "지금은 답하기가 어려워 😢 잠시 뒤 다시 @finz 로 물어봐줘.",
+      replyToId,
     );
     return NextResponse.json({ status: "ok", fallback: true, message: appended.message });
   } finally {

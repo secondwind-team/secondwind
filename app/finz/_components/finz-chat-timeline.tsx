@@ -2,13 +2,13 @@
 
 import { ArrowDown } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FinzChatMessage, FinzNudge } from "@/lib/common/services/finz-chat";
+import type { FinzChatMessage, FinzChatMode, FinzNudge, FinzThreadStat } from "@/lib/common/services/finz-chat";
 import { selectLatestPick } from "@/lib/common/services/finz-chat";
-import { formatKstDate, kstDayKey } from "@/lib/common/services/finz-time";
+import { formatKstDate, formatKstTime, kstDayKey } from "@/lib/common/services/finz-time";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import { FinzNudgeBubble } from "./finz-nudge-bubble";
 
-export type PendingText = { tempId: string; text: string; status: "sending" | "failed" };
+export type PendingText = { tempId: string; text: string; status: "sending" | "failed"; parentId?: string };
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -37,6 +37,9 @@ export function FinzChatTimeline({
   nudge,
   aiBusy,
   stickSignal,
+  chatMode = "linear",
+  threadStats,
+  onOpenThread,
   onReroll,
   onNudgeCta,
   onRetryPending,
@@ -50,6 +53,9 @@ export function FinzChatTimeline({
   nudge: FinzNudge | null;
   aiBusy: boolean;
   stickSignal: number;
+  chatMode?: FinzChatMode;
+  threadStats?: Map<string, FinzThreadStat>;
+  onOpenThread?: (rootId: string) => void;
   onReroll: () => void;
   onNudgeCta: (cta: FinzNudge["cta"]) => void;
   onRetryPending: (tempId: string) => void;
@@ -193,6 +199,22 @@ export function FinzChatTimeline({
                   onReplyQuoteJump={jumpToMessage}
                 />
               </div>
+              {chatMode === "thread" && onOpenThread && m.kind !== "system" && (
+                <div className={m.authorId === myMemberId ? "px-1 text-right" : "px-1"}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenThread(m.id)}
+                    className="mt-0.5 text-xs font-semibold text-[var(--fz-coral-ink)]"
+                  >
+                    {(() => {
+                      const st = threadStats?.get(m.id);
+                      if (!st) return "답글 달기";
+                      const t = formatKstTime(st.lastReplyAt);
+                      return `💬 답글 ${st.count}개${t ? " · " + t : ""}`;
+                    })()}
+                  </button>
+                </div>
+              )}
             </Fragment>
           );
         })}
