@@ -20,6 +20,7 @@ import {
   firstUrlInText,
   stripFinzMention,
   isFinzAttachment,
+  isValidAttachmentPathname,
   attachmentSnippet,
   finzMessageSnippet,
   type FinzAttachment,
@@ -473,14 +474,14 @@ describe("firstUrlInText", () => {
 describe("첨부(attachments)", () => {
   const img: FinzAttachment = {
     kind: "image",
-    url: "https://x.public.blob.vercel-storage.com/a.jpg",
+    pathname: "finz/a-x7f.jpg",
     name: "a.jpg",
     size: 1234,
     contentType: "image/jpeg",
   };
   const file: FinzAttachment = {
     kind: "file",
-    url: "https://x.public.blob.vercel-storage.com/doc.pdf",
+    pathname: "finz/doc-q1.pdf",
     name: "doc.pdf",
     size: 5000,
     contentType: "application/pdf",
@@ -490,10 +491,21 @@ describe("첨부(attachments)", () => {
     expect(isFinzAttachment(img)).toBe(true);
     expect(isFinzAttachment(file)).toBe(true);
     expect(isFinzAttachment({ ...img, kind: "video" })).toBe(false); // 허용 안 되는 kind
-    expect(isFinzAttachment({ ...img, url: "ftp://x/a.jpg" })).toBe(false); // http(s) 아님
+    expect(isFinzAttachment({ ...img, pathname: "https://evil.com/a.jpg" })).toBe(false); // URL/스킴 금지(SSRF 방어)
+    expect(isFinzAttachment({ ...img, pathname: "" })).toBe(false); // 빈 pathname
     expect(isFinzAttachment({ ...img, size: -1 })).toBe(false);
     expect(isFinzAttachment({ ...img, size: "big" })).toBe(false);
     expect(isFinzAttachment(null)).toBe(false);
+  });
+
+  it("isValidAttachmentPathname: bare path 만 허용(URL/스킴 거절 — SSRF 방어)", () => {
+    expect(isValidAttachmentPathname("finz/a-x7f.jpg")).toBe(true);
+    expect(isValidAttachmentPathname("a.png")).toBe(true);
+    expect(isValidAttachmentPathname("https://evil.com/x")).toBe(false);
+    expect(isValidAttachmentPathname("http://169.254.169.254/latest")).toBe(false);
+    expect(isValidAttachmentPathname("ftp://x/y")).toBe(false);
+    expect(isValidAttachmentPathname("")).toBe(false);
+    expect(isValidAttachmentPathname(42)).toBe(false);
   });
 
   it("attachmentSnippet: 이미지/파일/혼합 요약", () => {

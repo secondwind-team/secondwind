@@ -35,7 +35,6 @@ import type { FinzPortfolioCardPayload } from "@/lib/common/services/finz-portfo
 export const MAX_TEXT_LENGTH = 280;
 export const TEXT_RATE_LIMIT_MS = 800;
 const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024; // 개별 첨부 상한(업로드 라우트와 정합)
-const BLOB_HOST_SUFFIX = ".blob.vercel-storage.com"; // 첨부 URL 은 우리 Vercel Blob 스토어만 허용
 const HARD_CEILING = 400; // 이 이상이면 새 메시지 거부(+ 1회 안내)
 // 읽기 창 = 하드 실링과 동일. 리스트가 HARD_CEILING 을 넘지 못하므로 항상 전체(seq 0..end)를 읽는다.
 // selectLatestPick / 포지션 / 요약 같은 결정 로직이 부분 뷰에서 돌면 잘못된 nudge·LLM 중복 호출이 나기 때문.
@@ -61,6 +60,18 @@ function rerollLockKey(id: string): string {
 }
 function askLockKey(id: string): string {
   return `${chatKey(id)}:ask-lock`;
+}
+// 이 방에 실제로 올라온 첨부 pathname 들의 SET — 프록시가 "이 방에 이 첨부가 있나"를 O(1)로 검증.
+function attachmentsSetKey(id: string): string {
+  return `${chatKey(id)}:attachments`;
+}
+
+// 프록시 게이트용: pathname 이 이 방에 올라온 첨부인지. (방 멤버 검증은 라우트가 세션으로 별도로 한다.)
+export async function roomHasAttachment(id: string, pathname: string): Promise<boolean> {
+  const redis = getClient();
+  if (!redis || !pathname) return false;
+  const hit = await redis.sismember(attachmentsSetKey(id), pathname);
+  return hit === 1;
 }
 
 function newId(): string {
@@ -101,6 +112,14 @@ async function appendChatMessage(
   await redis.rpush(chatKey(id), JSON.stringify(stored));
   await bumpChatRevision(id);
   await refreshTtls(id);
+  // 첨부가 있으면 pathname 을 방 SET 에 등록 — 프록시가 "이 방에 이 첨부가 있나"를 검증하는 근거.
+  if (stored.attachments && stored.attachments.length > 0) {
+    const paths = stored.attachments.map((a) => a.pathname).filter(Boolean);
+    if (paths.length > 0) {
+      await redis.sadd(attachmentsSetKey(id), paths[0]!, ...paths.slice(1));
+      await redis.expire(attachmentsSetKey(id), FINZ_GROUP_TTL_SECONDS);
+    }
+  }
   // 방을 멤버들의 "대화" 목록 상단으로(최근 활동순). best-effort — 실패해도 메시지는 저장됨.
   await touchRoomActivity(group).catch(() => {});
   return { status: "ok", message: stored };
@@ -131,24 +150,18 @@ export async function getChatRevision(id: string): Promise<number> {
 
 // 멤버 자유 텍스트. LLM 절대 안 거침. members-guard + 서버 authorName + 길이/레이트 제한.
 // clientId(클라이언트 tempId)를 메시지 id 로 쓴다 — 응답 유실 후 재시도해도 같은 id 라 dedup 으로 합쳐진다.
-// 클라이언트가 보낸 첨부를 서버에서 재검증한다 — Vercel Blob URL(우리 스토어)만, 개수·용량 상한, 필드 정리.
-// (URL 은 업로드 라우트가 requireAccount 로 게이트한 토큰으로만 생성되지만, 여기서 URL 위조·과다 첨부를 한 번 더 막는다.)
+// 클라이언트가 보낸 첨부를 서버에서 재검증한다 — pathname 형식(스킴/URL 불가) · 개수·용량 상한 · 필드 정리.
+// (blob 은 업로드 라우트가 requireAccount 로 게이트한 토큰으로만 생성된다. pathname 은 프록시가 get() 에 넘기므로
+//  bare path 만 허용해 SSRF 를 원천 차단하고, 존재하지 않는 pathname 은 프록시 get() 에서 자연히 404 가 된다.)
 function sanitizeAttachments(input: unknown): FinzAttachment[] {
   if (!Array.isArray(input)) return [];
   const out: FinzAttachment[] = [];
   for (const raw of input) {
-    if (!isFinzAttachment(raw)) continue;
-    let host = "";
-    try {
-      host = new URL(raw.url).hostname.toLowerCase();
-    } catch {
-      continue;
-    }
-    if (!host.endsWith(BLOB_HOST_SUFFIX)) continue;
+    if (!isFinzAttachment(raw)) continue; // isValidAttachmentPathname 포함
     if (raw.size > MAX_ATTACHMENT_BYTES) continue;
     const clean: FinzAttachment = {
       kind: raw.kind,
-      url: raw.url,
+      pathname: raw.pathname,
       name: raw.name.slice(0, 200),
       size: Math.floor(raw.size),
       contentType: raw.contentType.slice(0, 120),

@@ -27,11 +27,13 @@ export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
 export type FinzChartPayload = { symbol: string; label: string };
 
-// 메시지 첨부(이미지/파일). 바이트는 Vercel Blob 에 있고 메시지엔 public URL 만 저장한다. 캡션(text)과 공존 가능.
+// 메시지 첨부(이미지/파일). 바이트는 Vercel Blob 에 비공개(access:private)로 저장하고, 메시지엔 public URL 이 아니라
+// blob pathname 만 담는다. 열람은 방 멤버 게이트 프록시(/api/finz/party/[id]/attachment?p=pathname)를 거친다.
+// (world-readable URL 을 남기지 않는다 — 채팅 사진 프라이버시.) 캡션(text)과 공존 가능.
 export type FinzAttachmentKind = "image" | "file";
 export type FinzAttachment = {
   kind: FinzAttachmentKind;
-  url: string; // Vercel Blob public URL (https://<store>.public.blob.vercel-storage.com/...)
+  pathname: string; // Vercel Blob pathname(스토어 상대경로). 프록시가 get(pathname,{access:"private"})로 스트리밍.
   name: string; // 표시용 원본 파일명
   size: number; // bytes
   contentType: string;
@@ -126,11 +128,25 @@ function isReplyReference(value: unknown): value is FinzReplyReference {
   );
 }
 
+// pathname 은 스토어 상대경로여야 한다 — 스킴(://)이나 http 로 시작하면 거절한다.
+// (프록시가 이 값을 get(pathname) 에 넘기는데, get 은 URL 을 받으면 그 URL 을 직접 fetch 하므로
+//  임의 URL 주입 시 SSRF 가 될 수 있다. bare path 만 허용해 원천 차단.)
+export function isValidAttachmentPathname(p: unknown): p is string {
+  return (
+    typeof p === "string" &&
+    p.length > 0 &&
+    p.length <= 1024 &&
+    !p.includes("://") &&
+    !/^https?:/i.test(p) &&
+    !p.includes("\n")
+  );
+}
+
 export function isFinzAttachment(value: unknown): value is FinzAttachment {
   if (!value || typeof value !== "object") return false;
   const a = value as Record<string, unknown>;
   if (a.kind !== "image" && a.kind !== "file") return false;
-  if (typeof a.url !== "string" || !/^https:\/\//i.test(a.url)) return false;
+  if (!isValidAttachmentPathname(a.pathname)) return false;
   if (typeof a.name !== "string") return false;
   if (typeof a.size !== "number" || !Number.isFinite(a.size) || a.size < 0) return false;
   if (typeof a.contentType !== "string") return false;

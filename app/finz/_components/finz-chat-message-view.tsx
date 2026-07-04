@@ -188,6 +188,7 @@ function FinzHeader({ label, iso, amber }: { label: string; iso: string; amber?:
 export function FinzChatMessageView({
   message,
   myMemberId,
+  groupId,
   mentionNames = [],
   isLatestPick,
   onReroll,
@@ -198,6 +199,7 @@ export function FinzChatMessageView({
 }: {
   message: FinzChatMessage;
   myMemberId: string | null;
+  groupId: string; // 첨부 게이트 프록시 URL 구성용
   mentionNames?: string[];
   isLatestPick?: boolean;
   onReroll?: () => void;
@@ -349,7 +351,7 @@ export function FinzChatMessageView({
         {!mine && <span className="px-1 text-xs text-[var(--fz-muted)]">{message.authorName}</span>}
         {attachments.length > 0 && (
           <div className={`flex items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
-            <FinzAttachmentList attachments={attachments} mine={mine} />
+            <FinzAttachmentList attachments={attachments} groupId={groupId} mine={mine} />
             {!showBubble && <MsgTime iso={message.createdAt} />}
           </div>
         )}

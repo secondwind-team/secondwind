@@ -780,6 +780,7 @@ export function FinzPartyRoom({
         messages={timelineMessages}
         pending={mainPending}
         myMemberId={myMemberId}
+        groupId={groupId}
         mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
         aiBusy={pickBusy || recapBusy || askBusy || mentionBusy}
@@ -871,6 +872,7 @@ export function FinzPartyRoom({
           messages={messages}
           pending={pending.filter((p) => p.parentId === openThreadRootId)}
           myMemberId={myMemberId}
+          groupId={groupId}
           mentionNames={members.map((m) => m.displayName)}
           aiBusy={askBusy || mentionBusy}
           viewportH={viewportH}

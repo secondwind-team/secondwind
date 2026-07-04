@@ -14,6 +14,7 @@ export function FinzThreadView({
   messages,
   pending,
   myMemberId,
+  groupId,
   mentionNames,
   aiBusy,
   viewportH,
@@ -25,6 +26,7 @@ export function FinzThreadView({
   messages: FinzChatMessage[];
   pending: PendingText[]; // 이 스레드 답글 pending(부모가 parentId 로 필터)
   myMemberId: string | null;
+  groupId: string; // 첨부 게이트 프록시 URL 구성용
   mentionNames: string[];
   aiBusy: boolean;
   viewportH: number | null;
@@ -68,7 +70,7 @@ export function FinzThreadView({
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {/* 원글 */}
-        <FinzChatMessageView message={root} myMemberId={myMemberId} mentionNames={mentionNames} />
+        <FinzChatMessageView message={root} myMemberId={myMemberId} groupId={groupId} mentionNames={mentionNames} />
         <div className="flex items-center gap-2 py-1">
           <div className="h-px flex-1 bg-[var(--fz-line)]" />
           <span className="text-[11px] font-medium text-[var(--fz-muted)]">답글 {replies.length}개</span>
@@ -76,7 +78,7 @@ export function FinzThreadView({
         </div>
         {/* 답글들 */}
         {replies.map((m) => (
-          <FinzChatMessageView key={m.id} message={m} myMemberId={myMemberId} mentionNames={mentionNames} />
+          <FinzChatMessageView key={m.id} message={m} myMemberId={myMemberId} groupId={groupId} mentionNames={mentionNames} />
         ))}
         {/* 내 답글 pending(낙관적) */}
         {pending.map((p) => (
