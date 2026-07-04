@@ -135,15 +135,16 @@ export function FinzChatComposer({
     try {
       // @vercel/blob 클라이언트 SDK 는 첨부를 실제로 고를 때만 로드(초기 채팅 번들에서 제외).
       const { upload } = await import("@vercel/blob/client");
+      // access:"private" — world-readable URL 을 만들지 않는다. 열람은 방 멤버 게이트 프록시를 거친다.
       const blob = await upload(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/finz/upload",
         contentType: file.type || undefined,
       });
       const kind: FinzAttachmentKind = file.type.startsWith("image/") ? "image" : "file";
       const attachment: FinzAttachment = {
         kind,
-        url: blob.url,
+        pathname: blob.pathname, // URL 이 아니라 pathname 저장 — 프록시가 get(pathname,{access:"private"})로 스트리밍
         name: file.name,
         size: file.size,
         contentType: file.type || "application/octet-stream",

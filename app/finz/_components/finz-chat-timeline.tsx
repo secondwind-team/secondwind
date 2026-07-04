@@ -9,9 +9,8 @@ import type {
   FinzNudge,
   FinzThreadStat,
 } from "@/lib/common/services/finz-chat";
-import { selectLatestPick } from "@/lib/common/services/finz-chat";
+import { attachmentSnippet, selectLatestPick } from "@/lib/common/services/finz-chat";
 import { formatKstDate, formatKstTime, kstDayKey } from "@/lib/common/services/finz-time";
-import { FinzAttachmentList } from "./finz-attachment-list";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import { FinzNudgeBubble } from "./finz-nudge-bubble";
 
@@ -20,7 +19,7 @@ export type PendingText = {
   text: string;
   status: "sending" | "failed";
   parentId?: string;
-  attachments?: FinzAttachment[]; // 낙관적 버블 썸네일(업로드 완료된 Blob 첨부)
+  attachments?: FinzAttachment[]; // 전송 중 표시용(비공개 blob 이라 썸네일 대신 "전송 중" 라벨). 재전송에도 사용.
 };
 
 function prefersReducedMotion(): boolean {
@@ -46,6 +45,7 @@ export function FinzChatTimeline({
   messages,
   pending,
   myMemberId,
+  groupId,
   mentionNames,
   nudge,
   aiBusy,
@@ -62,6 +62,7 @@ export function FinzChatTimeline({
   messages: FinzChatMessage[];
   pending: PendingText[];
   myMemberId: string | null;
+  groupId: string; // 첨부 게이트 프록시 URL 구성용
   mentionNames: string[];
   nudge: FinzNudge | null;
   aiBusy: boolean;
@@ -203,6 +204,7 @@ export function FinzChatTimeline({
                 <FinzChatMessageView
                   message={m}
                   myMemberId={myMemberId}
+                  groupId={groupId}
                   mentionNames={mentionNames}
                   isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
                   onReroll={onReroll}
@@ -237,9 +239,8 @@ export function FinzChatTimeline({
         {pending.map((p) => (
           <div key={p.tempId} className="flex flex-col items-end gap-0.5">
             {p.attachments && p.attachments.length > 0 && (
-              <div className="opacity-70">
-                <FinzAttachmentList attachments={p.attachments} mine />
-              </div>
+              // 비공개 첨부는 저장 전이라 프록시로 못 보여준다 → 라벨만. 실제 썸네일은 전송 완료 후 뜬다(~1s).
+              <span className="px-1 text-[11px] font-medium text-[var(--fz-muted)]">{attachmentSnippet(p.attachments)}</span>
             )}
             {p.text && <div className="fz-msg fz-msg--me whitespace-pre-wrap break-words opacity-70">{p.text}</div>}
             {p.status === "failed" ? (
