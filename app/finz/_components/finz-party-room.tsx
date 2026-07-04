@@ -56,6 +56,7 @@ export function FinzPartyRoom({
   initialKind,
   initialTitle,
   initialChatMode,
+  attachmentsEnabled = false,
 }: {
   groupId: string;
   initialMembers: FinzChatMemberLite[];
@@ -66,6 +67,7 @@ export function FinzPartyRoom({
   initialKind: FinzRoomKind;
   initialTitle: string;
   initialChatMode: FinzChatMode;
+  attachmentsEnabled?: boolean; // Blob 스토어 연결 여부 — 첨부 UI 노출 게이트
 }) {
   // 메신저: 방 멤버 = 로그인 계정. memberId 는 곧 내 accountId(게이트 통과 → 항상 존재).
   const account = useFinzAccount();
@@ -823,6 +825,7 @@ export function FinzPartyRoom({
         myLatestStance={myPos?.stance ?? null}
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
+        attachmentsEnabled={attachmentsEnabled}
         mentionNames={members.map((m) => m.displayName)}
         replyTarget={threadMode ? null : replyReference}
         editingTarget={editingReference}

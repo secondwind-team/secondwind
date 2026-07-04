@@ -41,6 +41,7 @@ export function FinzChatComposer({
   myLatestStance,
   myLatestNote,
   stanceMode,
+  attachmentsEnabled,
   mentionNames,
   replyTarget,
   editingTarget,
@@ -62,6 +63,7 @@ export function FinzChatComposer({
   myLatestStance: FinzPartyStance | null;
   myLatestNote: string;
   stanceMode: boolean;
+  attachmentsEnabled: boolean; // Blob 스토어 연결 시에만 '사진·파일' 노출
   mentionNames: string[]; // 멤버 이름들(@남덕우 처럼 입력 중 배지 강조용)
   replyTarget: ComposerReference | null;
   editingTarget: (ComposerReference & { text: string }) | null;
@@ -252,7 +254,9 @@ export function FinzChatComposer({
         <>
           {sheetOpen && (
             <div ref={sheetRef} role="menu" aria-label="파티 액션" className="mb-2 space-y-1.5 rounded-[var(--fz-r)] border border-[var(--fz-line)] bg-[var(--fz-surface)] p-2 shadow-[var(--fz-shadow-sm)]">
-              <SheetItem label="🖼 사진·파일" reason="" onClick={() => runAction(openFilePicker)} />
+              {attachmentsEnabled && (
+                <SheetItem label="🖼 사진·파일" reason="" onClick={() => runAction(openFilePicker)} />
+              )}
               <SheetItem label="🤖 FINZ에게 물어보기" reason="" onClick={askFinz} />
               <SheetItem label="🎴 우정주 뽑기" reason={pickReason} busy={pickBusy} onClick={() => runAction(onPick)} />
               <SheetItem
