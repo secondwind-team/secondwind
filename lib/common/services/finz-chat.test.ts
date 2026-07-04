@@ -16,6 +16,8 @@ import {
   shouldFinzProactivelySpeak,
   splitByMention,
   splitByMentionTokens,
+  splitMessageBody,
+  firstUrlInText,
   stripFinzMention,
   type FinzChatMemberLite,
   type FinzChatMessage,
@@ -399,5 +401,67 @@ describe("스레드 셀렉터 (replyTo 기반)", () => {
     const flat = [text(1, "a"), text(2, "b")];
     expect(threadStats(flat).size).toBe(0);
     expect(selectThreadRoots(flat).map((m) => m.id)).toEqual(["t1", "t2"]);
+  });
+});
+
+describe("splitMessageBody (평문 URL + 멘션 링크화)", () => {
+  const reassemble = (segs: ReturnType<typeof splitMessageBody>) => segs.map((s) => s.text).join("");
+
+  it("URL 이 없으면 텍스트/멘션만(원문 보존)", () => {
+    const segs = splitMessageBody("안녕 @finz 오늘 어때", ["지헌"]);
+    expect(reassemble(segs)).toBe("안녕 @finz 오늘 어때");
+    expect(segs.some((s) => s.type === "mention")).toBe(true);
+    expect(segs.some((s) => s.type === "url")).toBe(false);
+  });
+
+  it("평문 http(s) URL 을 url 세그먼트로 분리", () => {
+    const segs = splitMessageBody("이거 봐 https://example.com/path 좋지", []);
+    const url = segs.find((s) => s.type === "url");
+    expect(url).toBeDefined();
+    expect(url).toMatchObject({ type: "url", href: "https://example.com/path", text: "https://example.com/path" });
+    expect(reassemble(segs)).toBe("이거 봐 https://example.com/path 좋지");
+  });
+
+  it("URL 뒤 문장부호는 링크에서 제외(재조립 시 원문 유지)", () => {
+    const segs = splitMessageBody("확인: https://example.com.", []);
+    const url = segs.find((s) => s.type === "url")!;
+    expect(url.href).toBe("https://example.com"); // 끝 '.' 제외
+    expect(reassemble(segs)).toBe("확인: https://example.com."); // 원문은 그대로
+  });
+
+  it("괄호로 감싼 URL 은 끝 ')' 를 링크에서 제외", () => {
+    const segs = splitMessageBody("(링크: https://example.com)", []);
+    const url = segs.find((s) => s.type === "url")!;
+    expect(url.href).toBe("https://example.com");
+  });
+
+  it("URL 안의 균형 잡힌 괄호는 유지(위키백과류)", () => {
+    const segs = splitMessageBody("https://en.wikipedia.org/wiki/Foo_(bar) 참고", []);
+    const url = segs.find((s) => s.type === "url")!;
+    expect(url.href).toBe("https://en.wikipedia.org/wiki/Foo_(bar)");
+  });
+
+  it("URL 안의 @ 는 멘션으로 오인하지 않는다", () => {
+    const segs = splitMessageBody("https://x.com/@finz 확인", []);
+    const mentions = segs.filter((s) => s.type === "mention");
+    expect(mentions).toHaveLength(0);
+    expect(segs.find((s) => s.type === "url")!.href).toBe("https://x.com/@finz");
+  });
+
+  it("여러 URL 을 모두 분리", () => {
+    const segs = splitMessageBody("http://a.com 와 https://b.com/c", []);
+    expect(segs.filter((s) => s.type === "url").map((s) => s.text)).toEqual(["http://a.com", "https://b.com/c"]);
+  });
+});
+
+describe("firstUrlInText", () => {
+  it("첫 URL 을 반환(문장부호 제외)", () => {
+    expect(firstUrlInText("보자 https://example.com/a, 그리고 http://b.com")).toBe("https://example.com/a");
+  });
+  it("마크다운 링크 안의 href 도 추출(끝 ')' 제외)", () => {
+    expect(firstUrlInText("[여기](https://example.com/x) 클릭")).toBe("https://example.com/x");
+  });
+  it("URL 없으면 null", () => {
+    expect(firstUrlInText("그냥 텍스트 @finz")).toBeNull();
   });
 });
