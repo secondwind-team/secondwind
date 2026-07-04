@@ -4,10 +4,12 @@ import { Sparkles } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import {
   FINZ_REACTION_EMOJIS,
-  splitByMentionTokens,
+  firstUrlInText,
+  splitMessageBody,
   type FinzChatMessage,
 } from "@/lib/common/services/finz-chat";
 import { formatKstTime } from "@/lib/common/services/finz-time";
+import { FinzLinkPreview } from "./finz-link-preview";
 import { FinzRichText } from "./finz-rich-text";
 import { FinzPartyPickResult } from "./finz-party-pick-result";
 import { FinzPartySummaryCard } from "./finz-party-summary";
@@ -15,19 +17,26 @@ import { FinzChartBubble } from "./finz-chart-bubble";
 import { FinzPortfolioCard } from "./finz-portfolio-card";
 import { STANCE_EMOJI } from "./finz-position-input";
 
-// 메시지 본문 — @finz·@멤버 멘션 토큰만 .fz-mention 칩으로 강조(나머지는 그대로).
+// 메시지 본문 — @finz·@멤버 멘션은 .fz-mention 칩으로, 평문 http(s) URL 은 클릭 가능한 링크로,
+// 나머지는 그대로. (finz 봇 답변은 FinzRichText 가 마크다운 링크까지 처리하므로 이 경로는 멤버 메시지용.)
 function MessageBody({ text, mentionNames }: { text: string; mentionNames: string[] }) {
   return (
     <>
-      {splitByMentionTokens(text, mentionNames).map((seg, i) =>
-        seg.isMention ? (
-          <span key={i} className="fz-mention">
-            {seg.text}
-          </span>
-        ) : (
-          <span key={i}>{seg.text}</span>
-        ),
-      )}
+      {splitMessageBody(text, mentionNames).map((seg, i) => {
+        if (seg.type === "mention")
+          return (
+            <span key={i} className="fz-mention">
+              {seg.text}
+            </span>
+          );
+        if (seg.type === "url")
+          return (
+            <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer">
+              {seg.text}
+            </a>
+          );
+        return <span key={i}>{seg.text}</span>;
+      })}
     </>
   );
 }
@@ -327,6 +336,7 @@ export function FinzChatMessageView({
   }
 
   // text (멤버)
+  const previewUrl = message.deletedAt ? null : firstUrlInText(message.text);
   return (
     <ActionableMessage onOpenActions={onOpenActions}>
       <div className={`flex flex-col gap-0.5 ${mine ? "items-end" : "items-start"}`}>
@@ -345,6 +355,7 @@ export function FinzChatMessageView({
           </div>
           <MsgTime iso={message.createdAt} />
         </div>
+        {previewUrl && <FinzLinkPreview url={previewUrl} mine={mine} />}
         <ReactionBar message={message} mine={mine} />
       </div>
     </ActionableMessage>

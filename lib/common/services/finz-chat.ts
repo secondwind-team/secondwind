@@ -301,6 +301,75 @@ export function splitByMention(text: string): Array<{ text: string; isMention: b
   return splitByMentionTokens(text, []);
 }
 
+// ── 평문 URL 링크화(멤버 메시지) ── finz 봇 메시지는 마크다운 링크([label](url))를 finz-markdown 이
+// 이미 처리한다. 멤버가 그냥 붙여넣은 http(s) URL 을 다른 메신저처럼 클릭 가능한 링크로 만든다.
+// 순수 함수(단위 테스트) — 렌더는 finz-chat-message-view 가 담당.
+
+// http(s):// 로 시작하는 URL. 공백/따옴표/꺾쇠에서 멈춘다. 뒤따르는 문장부호는 아래에서 별도로 다듬는다.
+const URL_MATCH_RE = /https?:\/\/[^\s<>"'`]+/gi;
+
+// URL 끝에 딸려온 문장부호를 링크에서 떼어낸다. "(링크: https://ex.com)" → 끝 ')' 는 링크가 아님.
+// 단 URL 안에 '(' 가 있으면(위키백과 Foo_(bar)) 균형 잡힌 ')' 로 보고 유지한다(GitHub 오토링커와 동일 휴리스틱).
+function trimTrailingUrlPunct(url: string): string {
+  let u = url;
+  while (u.length > 0) {
+    const ch = u[u.length - 1]!;
+    if (".,;:!?…\"'”’」』".includes(ch) || ch === "]" || ch === "}" || ch === ">") {
+      u = u.slice(0, -1);
+      continue;
+    }
+    if (ch === ")" && !u.includes("(")) {
+      u = u.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return u;
+}
+
+export type FinzBodySegment =
+  | { type: "text"; text: string }
+  | { type: "mention"; text: string }
+  | { type: "url"; text: string; href: string };
+
+function pushTextWithMentions(out: FinzBodySegment[], text: string, names: string[]): void {
+  if (!text) return;
+  for (const seg of splitByMentionTokens(text, names)) {
+    out.push(seg.isMention ? { type: "mention", text: seg.text } : { type: "text", text: seg.text });
+  }
+}
+
+// 메시지 본문을 text / mention / url 세그먼트로 분해한다. URL 을 먼저 떼고, 그 사이 텍스트만 멘션 분해한다
+// (URL 안의 @ 를 멘션으로 오인하지 않게). 렌더 순서·문자열은 원문과 1:1(재조립하면 원문과 동일 — trailing punct 포함).
+export function splitMessageBody(text: string, names: string[] = []): FinzBodySegment[] {
+  const out: FinzBodySegment[] = [];
+  const re = new RegExp(URL_MATCH_RE.source, "gi");
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const trimmed = trimTrailingUrlPunct(m[0]);
+    if (trimmed.length === 0) {
+      // http:// 만 있고 본체가 없는 기이한 케이스 — 무한루프 방지로 한 칸 전진.
+      if (re.lastIndex === m.index) re.lastIndex += 1;
+      continue;
+    }
+    if (m.index > last) pushTextWithMentions(out, text.slice(last, m.index), names);
+    out.push({ type: "url", text: trimmed, href: trimmed });
+    last = m.index + trimmed.length;
+    re.lastIndex = last; // 떼어낸 문장부호는 다음 반복에서 일반 텍스트로 처리된다.
+  }
+  if (last < text.length) pushTextWithMentions(out, text.slice(last), names);
+  return out;
+}
+
+// 메시지에서 첫 http(s) URL 하나(링크 미리보기 카드 대상). 없으면 null.
+export function firstUrlInText(text: string): string | null {
+  const m = new RegExp(URL_MATCH_RE.source, "i").exec(text);
+  if (!m) return null;
+  const trimmed = trimTrailingUrlPunct(m[0]);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // 메시지가 특정 멤버를 멘션(@표시이름)했는지 — 방 음소거 시 "멘션 예외" 판단용.
 // 멤버 멘션 기준(@displayName)은 splitByMentionTokens 와 동일. 빈 이름은 false.
 export function mentionsMember(text: string, displayName: string): boolean {
