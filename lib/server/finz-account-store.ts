@@ -19,6 +19,7 @@ import {
   type FinzFriendEntry,
   type FinzFriendsView,
 } from "@/lib/common/services/finz-account";
+import { hashPassword, verifyPassword } from "@/lib/server/finz-password";
 
 let client: NeonQueryFunction<false, false> | null = null;
 let schemaReady: Promise<void> | null = null;
@@ -83,6 +84,16 @@ async function ensureSchema() {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           )
         `,
+        // 이메일/비밀번호 로그인 자격증명. 이메일(정규화)로 조회, 해시는 scrypt(finz-password).
+        // 계정 연결은 finz_auth_links(provider="password", provider_id=email) 가 담당(온보딩 시 생성).
+        sql`
+          CREATE TABLE IF NOT EXISTS finz_password_credentials (
+            email TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `,
       ]);
       await sql`
         CREATE INDEX IF NOT EXISTS finz_feed_actor_idx
@@ -122,6 +133,40 @@ export async function getAccountForAuth(provider: string, providerId: string): P
     LIMIT 1
   `;
   return row ? rowToAccount(row) : null;
+}
+
+// ── 이메일/비밀번호 자격증명 ── (계정 연결은 auth_links(provider="password", email) 가 담당) ──
+
+// 회원가입: 이미 있으면 "exists", 아니면 해시 저장 후 "ok". ON CONFLICT 로 동시 가입 레이스 방지.
+export async function registerPasswordCredential(
+  email: string,
+  password: string,
+): Promise<"ok" | "exists"> {
+  await ensureSchema();
+  const passwordHash = await hashPassword(password);
+  const rows = await getSql()`
+    INSERT INTO finz_password_credentials (email, password_hash)
+    VALUES (${email}, ${passwordHash})
+    ON CONFLICT (email) DO NOTHING
+    RETURNING email
+  `;
+  return rows.length > 0 ? "ok" : "exists";
+}
+
+export async function passwordCredentialExists(email: string): Promise<boolean> {
+  await ensureSchema();
+  const [row] = await getSql()`SELECT 1 FROM finz_password_credentials WHERE email = ${email} LIMIT 1`;
+  return Boolean(row);
+}
+
+// 로그인 검증: 이메일의 저장 해시와 비교(scrypt, timingSafeEqual). 존재하지 않으면 false.
+export async function verifyPasswordCredential(email: string, password: string): Promise<boolean> {
+  await ensureSchema();
+  const [row] = await getSql()`
+    SELECT password_hash FROM finz_password_credentials WHERE email = ${email} LIMIT 1
+  `;
+  if (!row) return false;
+  return verifyPassword(password, row.password_hash as string);
 }
 
 export async function getAccount(accountId: string): Promise<FinzAccount | null> {
