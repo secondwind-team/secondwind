@@ -41,6 +41,7 @@ export function FinzChatTimeline({
   onNudgeCta,
   onRetryPending,
   onOpenMessageActions,
+  onReplyTargetUnavailable,
 }: {
   messages: FinzChatMessage[];
   pending: PendingText[];
@@ -53,11 +54,14 @@ export function FinzChatTimeline({
   onNudgeCta: (cta: FinzNudge["cta"]) => void;
   onRetryPending: (tempId: string) => void;
   onOpenMessageActions: (message: FinzChatMessage, point: { x: number; y: number }) => void;
+  onReplyTargetUnavailable: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const messageRefs = useRef(new Map<string, HTMLDivElement>());
   const nearBottomRef = useRef(true);
   const prevCountRef = useRef(0);
   const [showChip, setShowChip] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const latestPick = useMemo(() => selectLatestPick(messages), [messages]);
 
@@ -96,6 +100,20 @@ export function FinzChatTimeline({
     if (!el) return;
     nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     if (nearBottomRef.current) setShowChip(false);
+  }
+
+  function jumpToMessage(messageId: string) {
+    const target = messages.find((m) => m.id === messageId);
+    const el = messageRefs.current.get(messageId);
+    if (!target || target.deletedAt || !el) {
+      onReplyTargetUnavailable();
+      return;
+    }
+    el.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((cur) => (cur === messageId ? null : cur));
+    }, 1500);
   }
 
   // 첫 렌더에 바닥으로(레이아웃 직후).
@@ -155,16 +173,26 @@ export function FinzChatTimeline({
           return (
             <Fragment key={m.id}>
               {showDate && <DateDivider iso={m.createdAt} />}
-              <FinzChatMessageView
-                message={m}
-                myMemberId={myMemberId}
-                mentionNames={mentionNames}
-                isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
-                onReroll={onReroll}
-                superseded={m.kind === "position" && supersededIds.has(m.id)}
-                changed={m.kind === "position" && changedIds.has(m.id)}
-                onOpenActions={(point) => onOpenMessageActions(m, point)}
-              />
+              <div
+                ref={(node) => {
+                  if (node) messageRefs.current.set(m.id, node);
+                  else messageRefs.current.delete(m.id);
+                }}
+                data-finz-message-id={m.id}
+                className={highlightedMessageId === m.id ? "fz-message-jump-highlight" : undefined}
+              >
+                <FinzChatMessageView
+                  message={m}
+                  myMemberId={myMemberId}
+                  mentionNames={mentionNames}
+                  isLatestPick={m.kind === "pick" && latestPick?.id === m.id}
+                  onReroll={onReroll}
+                  superseded={m.kind === "position" && supersededIds.has(m.id)}
+                  changed={m.kind === "position" && changedIds.has(m.id)}
+                  onOpenActions={(point) => onOpenMessageActions(m, point)}
+                  onReplyQuoteJump={jumpToMessage}
+                />
+              </div>
             </Fragment>
           );
         })}
