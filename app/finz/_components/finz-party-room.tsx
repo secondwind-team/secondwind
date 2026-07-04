@@ -78,6 +78,7 @@ export function FinzPartyRoom({
   const [shareTarget, setShareTarget] = useState<FinzChatMessage | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
   const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴/nudge)
+  const [monthlyReviewBusy, setMonthlyReviewBusy] = useState(false);
   const [askBusy, setAskBusy] = useState(false);
   const [mentionBusy, setMentionBusy] = useState(false); // @finz 의도 분류~기능 응답까지 타이핑 인디케이터 유지
   const [positionSubmitting, setPositionSubmitting] = useState(false);
@@ -396,6 +397,10 @@ export function FinzPartyRoom({
 
       // 분류 대기 중 폴링으로 상태가 바뀌었을 수 있으니 최신 커밋 상태(ref)로 가드한다.
       const live = liveRef.current;
+      if (/월간\s*리뷰|월간리뷰/.test(question)) {
+        await openMonthlyReview();
+        return;
+      }
       if (intent === "pick") {
         if (!live.full) {
           setActionError("친구가 들어와야 우정주를 뽑을 수 있어. 먼저 초대해봐!");
@@ -645,6 +650,27 @@ export function FinzPartyRoom({
     }
   }
 
+  async function openMonthlyReview() {
+    setMonthlyReviewBusy(true);
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/monthly-review`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId, kind: "manual-interim" }),
+      });
+      if (!res.ok) setActionError("월간 리뷰를 만들지 못했어. 잠시 뒤 다시 @finz 로 불러줘.");
+      await refetch();
+      setTimeout(() => void refetch(), 1500);
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 @finz 로 불러줘.");
+    } finally {
+      setMonthlyReviewBusy(false);
+      bumpStick();
+    }
+  }
+
   async function inviteFriends(accountIds: string[]) {
     if (accountIds.length === 0) return;
     try {
@@ -734,7 +760,7 @@ export function FinzPartyRoom({
         myMemberId={myMemberId}
         mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
-        aiBusy={pickBusy || recapBusy || askBusy || mentionBusy}
+        aiBusy={pickBusy || recapBusy || askBusy || mentionBusy || monthlyReviewBusy}
         stickSignal={stickSignal}
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}
