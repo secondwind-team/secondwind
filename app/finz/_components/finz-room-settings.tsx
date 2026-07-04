@@ -12,6 +12,7 @@ import {
   type FinzRecurringMessage,
 } from "@/lib/common/services/finz-recurring";
 import type { FinzTrade } from "@/lib/common/services/finz-portfolio";
+import type { FinzChatMode } from "@/lib/common/services/finz-chat";
 import { useFinzAccount } from "./finz-account-context";
 import { FinzPortfolioSettings } from "./finz-portfolio-settings";
 
@@ -26,6 +27,7 @@ export function FinzRoomSettings({
   initialBriefingSubscribed,
   initialTrades,
   initialMute,
+  initialChatMode,
 }: {
   groupId: string;
   roomTitle: string;
@@ -34,6 +36,7 @@ export function FinzRoomSettings({
   initialBriefingSubscribed: boolean;
   initialTrades: FinzTrade[];
   initialMute: { muted: boolean; allowMentions: boolean };
+  initialChatMode: FinzChatMode;
 }) {
   const account = useFinzAccount();
   const memberId = account.accountId;
@@ -44,6 +47,8 @@ export function FinzRoomSettings({
   const [muted, setMuted] = useState(initialMute.muted);
   const [allowMentions, setAllowMentions] = useState(initialMute.allowMentions);
   const [muteBusy, setMuteBusy] = useState(false);
+  const [chatMode, setChatMode] = useState<FinzChatMode>(initialChatMode);
+  const [modeBusy, setModeBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FinzRecurringMessage | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -97,6 +102,27 @@ export function FinzRoomSettings({
       setError("알림 설정을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
     } finally {
       setMuteBusy(false);
+    }
+  }
+
+  // 대화 방식(일반/스레드) 전환 — 방 단위(전 멤버 공유). 낙관적 저장 후 실패 시 롤백.
+  async function saveMode(next: FinzChatMode) {
+    setError(null);
+    setModeBusy(true);
+    const prev = chatMode;
+    setChatMode(next);
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/mode`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setChatMode(prev); // 롤백
+      setError("대화 방식을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+    } finally {
+      setModeBusy(false);
     }
   }
 
@@ -191,6 +217,29 @@ export function FinzRoomSettings({
       {/* 본문 */}
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5">
         {error && <p className="fz-alert">{error}</p>}
+
+        {/* 대화 방식(일반/스레드) */}
+        <section className="space-y-2">
+          <h2 className="px-1 text-sm font-bold text-[var(--fz-ink)]">💬 대화 방식</h2>
+          <div className="fz-card divide-y divide-[var(--fz-line)]">
+            <div className="flex items-center gap-3 p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--fz-ink)]">스레드 모드</p>
+                <p className="text-xs leading-relaxed text-[var(--fz-muted)]">
+                  {chatMode === "thread"
+                    ? "메시지에 답글을 달면 별도 스레드로 모여요(슬랙식). 메인엔 원글만 보여요."
+                    : "지금은 일반 채팅이에요. 켜면 답글이 별도 스레드로 정리돼요."}
+                </p>
+              </div>
+              <Toggle
+                on={chatMode === "thread"}
+                onClick={() => void saveMode(chatMode === "thread" ? "linear" : "thread")}
+                disabled={modeBusy}
+                label="스레드 모드"
+              />
+            </div>
+          </div>
+        </section>
 
         {/* 알림 음소거 */}
         <section className="space-y-2">

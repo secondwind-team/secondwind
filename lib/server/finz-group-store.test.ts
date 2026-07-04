@@ -27,6 +27,7 @@ function group(members: FinzGroupMember[]): FinzGroup {
     expiresAt: "2026-06-21T00:00:00.000Z",
     kind: members.length > 2 ? "group" : "1on1",
     title: "",
+    chatMode: "linear",
   };
 }
 
@@ -104,6 +105,12 @@ describe("parseGroup", () => {
   it("null / 비객체 거절", () => {
     expect(parseGroup(null)).toBeNull();
     expect(parseGroup("not json")).toBeNull();
+  });
+  it("chatMode: 옛 blob(없음)·이상값은 linear 기본, 'thread' 는 보존", () => {
+    const { chatMode: _omit, ...noMode } = group([member("a")]);
+    expect(parseGroup(noMode)?.chatMode).toBe("linear"); // 필드 없는 레거시 blob
+    expect(parseGroup({ ...group([member("a")]), chatMode: "weird" })?.chatMode).toBe("linear");
+    expect(parseGroup({ ...group([member("a")]), chatMode: "thread" })?.chatMode).toBe("thread");
   });
 });
 

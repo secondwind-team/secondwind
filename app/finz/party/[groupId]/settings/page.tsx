@@ -57,6 +57,7 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
       initialBriefingSubscribed={briefingSubscribed}
       initialTrades={trades}
       initialMute={mute}
+      initialChatMode={group.chatMode}
     />
   );
 }

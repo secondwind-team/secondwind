@@ -19,6 +19,10 @@ import { isFinzPortfolioCardPayload, type FinzPortfolioCardPayload } from "./fin
 export type FinzChatRole = "member" | "finz" | "system";
 export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary" | "chart" | "portfolio";
 
+// 방 대화 방식(방 단위, 그룹 blob 에 저장). linear=평면 채팅(현행, 인라인 인용답장 포함),
+// thread=슬랙식 스레드(메인엔 원글만, 답글은 별도 스레드 화면). 기존 replyTo 로 스레드를 그룹핑한다.
+export type FinzChatMode = "linear" | "thread";
+
 export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
 export type FinzChartPayload = { symbol: string; label: string };
@@ -85,6 +89,7 @@ export type FinzChatResponse = {
   messages?: FinzChatMessage[];
   cursor?: number; // 응답에 담긴 최대 seq — 클라이언트는 로컬 cursor 를 이 값으로 전진
   revision?: number; // 과거 메시지 메타데이터 변경 감지용(room-level mutation counter)
+  chatMode?: FinzChatMode; // 방 대화 방식(폴링으로 전 멤버에 전파)
   expiresAt?: string;
   deduped?: boolean; // pick/summary 라우트 전용 — 락에 막혀 기존 결과를 반환했음
   nudged?: boolean; // summary 라우트 전용 — 선행 조건 미충족(에러 대신 클라이언트 nudge 유도)
@@ -331,6 +336,53 @@ export function selectLatestPositionsByMember(
     }
   }
   return byMember;
+}
+
+// ── 스레드(스레드/리플라이 모드) ── 새 필드 없이 기존 replyTo.id 로 그룹핑한다.
+// 답장은 replyTo.id 로 대상을 가리키고(체인 가능), 스레드 root = replyTo 체인을 거슬러 올라간 최상위 메시지.
+export type FinzThreadStat = { count: number; lastReplyAt: string; lastReplySeq: number };
+
+// m 이 속한 스레드 root 의 id. replyTo 가 없으면 자기 자신이 root. 대상이 창(window) 밖으로 밀렸거나
+// 순환이면 거기서 멈춰 그 지점을 root 로 본다(무손실 — 답글이 사라지지 않게).
+export function resolveThreadRootId(byId: Map<string, FinzChatMessage>, m: FinzChatMessage): string {
+  let cur = m;
+  let guard = 0;
+  while (cur.replyTo && guard++ < 256) {
+    const parent = byId.get(cur.replyTo.id);
+    if (!parent || parent.id === cur.id) break;
+    cur = parent;
+  }
+  return cur.id;
+}
+
+// 스레드 모드 메인 타임라인에 보일 '원글'들 — 자기 자신이 root 인 메시지만(답글은 스레드로 숨김).
+export function selectThreadRoots(messages: FinzChatMessage[]): FinzChatMessage[] {
+  const byId = new Map(messages.map((m) => [m.id, m]));
+  return messages.filter((m) => resolveThreadRootId(byId, m) === m.id);
+}
+
+// 한 스레드(root + 하위 답글 전부), seq 오름차순. 스레드 오버레이 + @finz 스레드 컨텍스트용.
+export function selectThreadMessages(messages: FinzChatMessage[], rootId: string): FinzChatMessage[] {
+  const byId = new Map(messages.map((m) => [m.id, m]));
+  return messages.filter((m) => m.id === rootId || resolveThreadRootId(byId, m) === rootId);
+}
+
+// root id -> {답글 수, 마지막 답글 시각/seq}. 스레드 모드 "💬 답글 N" 어포던스용(삭제 답글도 구조상 카운트).
+export function threadStats(messages: FinzChatMessage[]): Map<string, FinzThreadStat> {
+  const byId = new Map(messages.map((m) => [m.id, m]));
+  const stats = new Map<string, FinzThreadStat>();
+  for (const m of messages) {
+    const root = resolveThreadRootId(byId, m);
+    if (root === m.id) continue;
+    const prev = stats.get(root);
+    if (!prev) stats.set(root, { count: 1, lastReplyAt: m.createdAt, lastReplySeq: m.seq });
+    else if (m.seq > prev.lastReplySeq) {
+      stats.set(root, { count: prev.count + 1, lastReplyAt: m.createdAt, lastReplySeq: m.seq });
+    } else {
+      stats.set(root, { ...prev, count: prev.count + 1 });
+    }
+  }
+  return stats;
 }
 
 function maxSummarySeq(messages: FinzChatMessage[], sincePickSeq: number): number {

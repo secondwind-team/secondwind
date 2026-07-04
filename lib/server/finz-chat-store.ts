@@ -350,9 +350,12 @@ export async function appendSummaryMessage(
 }
 
 // @finz 질문에 대한 답변 — finz 의 자유 텍스트 메시지.
+// replyToId 를 주면(스레드 안에서 @finz 를 부른 경우) 그 메시지에 대한 답장으로 append —
+// 답변이 해당 스레드에 묶여 나온다. 대상이 없거나 system 이면 조용히 최상위 답변으로 fallback.
 export async function appendAnswerMessage(
   id: string,
   text: string,
+  replyToId?: string,
 ): Promise<{ status: "ok" | "not-found"; message?: FinzStoredChatMessage }> {
   const stored: FinzStoredChatMessage = {
     id: newId(),
@@ -363,6 +366,10 @@ export async function appendAnswerMessage(
     text,
     createdAt: new Date().toISOString(),
   };
+  if (replyToId) {
+    const replyTo = await buildReplyReference(id, replyToId);
+    if (replyTo) stored.replyTo = replyTo;
+  }
   return appendChatMessage(id, stored);
 }
 

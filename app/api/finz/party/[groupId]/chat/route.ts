@@ -49,6 +49,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ groupId:
     messages: tail.messages,
     cursor: tail.cursor,
     revision: tail.revision,
+    chatMode: group.chatMode, // 대화 방식 — 토글이 폴링(~3s)으로 전 멤버에 전파(리로드 불필요)
     expiresAt: group.expiresAt,
   });
 }
