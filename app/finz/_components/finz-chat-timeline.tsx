@@ -200,7 +200,8 @@ export function FinzChatTimeline({
                 />
               </div>
               {chatMode === "thread" && onOpenThread && m.kind !== "system" && (
-                <div className={m.authorId === myMemberId ? "px-1 text-right" : "px-1"}>
+                // 답글 어포던스는 원글 발신자와 무관하게 항상 오른쪽 정렬로 통일('답글 달기'/'답글 N개' 동일).
+                <div className="px-1 text-right">
                   <button
                     type="button"
                     onClick={() => onOpenThread(m.id)}
