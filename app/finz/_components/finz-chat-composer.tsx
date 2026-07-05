@@ -14,8 +14,14 @@ import { FinzPositionInput } from "./finz-position-input";
 
 // 첨부 업로드 상한(업로드 라우트·store 재검증과 정합). 클라이언트에서 1차 거른다.
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+// HEIC/HEIF 은 브라우저 파일 선택기에서 image/* 로 안 잡히는 경우가 있어 확장자를 명시적으로 추가.
 const ATTACH_ACCEPT =
-  "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
+  "image/*,.heic,.heif,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
+
+// HEIC/HEIF 판별 — file.type 이 비어 오는 경우가 잦아 확장자도 함께 본다.
+function isHeicFile(file: File): boolean {
+  return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+}
 
 // 컴포저에 잠깐 얹혀 업로드 중/완료를 보여주는 스테이징 첨부.
 type StagedAttachment = {
@@ -133,21 +139,45 @@ export function FinzChatComposer({
 
   async function uploadOne(file: File, tempId: string) {
     try {
+      let uploadFile = file;
+      let displayName = file.name;
+      let contentType = file.type || "application/octet-stream";
+
+      // HEIC/HEIF → JPEG 변환(크롬·안드로이드도 렌더 가능하게). 변환 라이브러리는 HEIC 고를 때만 lazy-load.
+      if (isHeicFile(file)) {
+        const { default: heic2any } = await import("heic2any");
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+        const jpeg = Array.isArray(converted) ? converted[0]! : converted;
+        displayName = `${file.name.replace(/\.(heic|heif)$/i, "")}.jpg`;
+        uploadFile = new File([jpeg], displayName, { type: "image/jpeg" });
+        contentType = "image/jpeg";
+        if (uploadFile.size > MAX_UPLOAD_BYTES) throw new Error("too-big-after-convert");
+        // 변환된 JPEG 로 미리보기 교체(원본 HEIC 은 브라우저가 못 그림).
+        const previewUrl = URL.createObjectURL(jpeg);
+        setStaged((s) =>
+          s.map((x) => {
+            if (x.tempId !== tempId) return x;
+            if (x.previewUrl) URL.revokeObjectURL(x.previewUrl);
+            return { ...x, previewUrl };
+          }),
+        );
+      }
+
       // @vercel/blob 클라이언트 SDK 는 첨부를 실제로 고를 때만 로드(초기 채팅 번들에서 제외).
       const { upload } = await import("@vercel/blob/client");
       // access:"private" — world-readable URL 을 만들지 않는다. 열람은 방 멤버 게이트 프록시를 거친다.
-      const blob = await upload(file.name, file, {
+      const blob = await upload(uploadFile.name, uploadFile, {
         access: "private",
         handleUploadUrl: "/api/finz/upload",
-        contentType: file.type || undefined,
+        contentType,
       });
-      const kind: FinzAttachmentKind = file.type.startsWith("image/") ? "image" : "file";
+      const kind: FinzAttachmentKind = contentType.startsWith("image/") ? "image" : "file";
       const attachment: FinzAttachment = {
         kind,
         pathname: blob.pathname, // URL 이 아니라 pathname 저장 — 프록시가 get(pathname,{access:"private"})로 스트리밍
-        name: file.name,
-        size: file.size,
-        contentType: file.type || "application/octet-stream",
+        name: displayName,
+        size: uploadFile.size,
+        contentType,
       };
       setStaged((s) => s.map((x) => (x.tempId === tempId ? { ...x, status: "done", attachment } : x)));
     } catch {
@@ -156,28 +186,49 @@ export function FinzChatComposer({
     }
   }
 
-  function onFilesPicked(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  // 파일 선택·드롭·붙여넣기 공통 진입점.
+  function addFiles(files: File[]) {
+    if (files.length === 0) return;
     setAttachError(null);
     const room = MAX_ATTACHMENTS_PER_MESSAGE - staged.length;
     if (room <= 0) {
       setAttachError(`첨부는 한 번에 ${MAX_ATTACHMENTS_PER_MESSAGE}개까지야.`);
       return;
     }
-    for (const file of Array.from(files).slice(0, room)) {
+    for (const file of files.slice(0, room)) {
       if (file.size > MAX_UPLOAD_BYTES) {
         setAttachError(`${file.name} 은(는) 너무 커 (최대 12MB).`);
         continue;
       }
       const tempId = crypto.randomUUID();
-      const isImage = file.type.startsWith("image/");
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      const heic = isHeicFile(file);
+      const isImage = heic || file.type.startsWith("image/");
+      // HEIC 미리보기는 변환 후 만든다(원본은 브라우저가 못 그림). 일반 이미지는 즉시.
+      const previewUrl = isImage && !heic ? URL.createObjectURL(file) : undefined;
       setStaged((s) => [
         ...s,
         { tempId, name: file.name, kind: isImage ? "image" : "file", previewUrl, status: "uploading" },
       ]);
       void uploadOne(file, tempId);
     }
+  }
+
+  // 텍스트박스에 이미지 붙여넣기(Cmd/Ctrl+V) → 첨부로. 텍스트 붙여넣기는 그대로 둔다.
+  function onPasteIntoInput(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (!attachmentsEnabled) return; // 스토어 미연결이면 기본 동작 유지
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const images: File[] = [];
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i]!;
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) images.push(f);
+      }
+    }
+    if (images.length === 0) return; // 이미지가 아니면 일반 텍스트 붙여넣기
+    e.preventDefault();
+    addFiles(images);
   }
 
   function removeStaged(tempId: string) {
@@ -304,7 +355,7 @@ export function FinzChatComposer({
             accept={ATTACH_ACCEPT}
             className="hidden"
             onChange={(e) => {
-              onFilesPicked(e.target.files);
+              addFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
           />
@@ -388,6 +439,7 @@ export function FinzChatComposer({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onScroll={syncScroll}
+                onPaste={onPasteIntoInput}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
