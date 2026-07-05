@@ -12,7 +12,12 @@
 import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
 import { buildFinzProfile } from "@/lib/common/services/finz";
-import type { FinzChatMode } from "@/lib/common/services/finz-chat";
+import {
+  FINZ_DEFAULT_IMAGE_QUALITY,
+  isFinzImageQuality,
+  type FinzChatMode,
+  type FinzImageQuality,
+} from "@/lib/common/services/finz-chat";
 import type { FinzRoomKind } from "@/lib/common/services/finz-account";
 
 // 메신저 시대: 대화방을 일주일 만에 잃지 않도록 TTL 을 30일로(기존 7일에서 상향).
@@ -46,6 +51,7 @@ export type FinzGroup = {
   kind: FinzRoomKind; // "1on1" | "group"
   title: string; // 그룹방 이름(1on1 은 빈 문자열 — 표시명은 상대 이름으로 도출)
   chatMode: FinzChatMode; // "linear"(기본) | "thread". 방 단위 대화 방식(전 멤버 공유). 옛 blob 은 linear 로 도출.
+  imageQuality: FinzImageQuality; // 이미지 업로드 화질(전 멤버 공유). 옛 blob 은 기본값(standard)으로 도출.
 };
 
 export type JoinResult =
@@ -151,6 +157,7 @@ export async function createFinzGroup(member: FinzGroupMember): Promise<{ id: st
       kind: "1on1",
       title: "",
       chatMode: "linear",
+      imageQuality: FINZ_DEFAULT_IMAGE_QUALITY,
     };
     await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
     return { id, group };
@@ -204,6 +211,23 @@ export async function setFinzGroupChatMode(
   return { status: "ok", group: next };
 }
 
+export async function setFinzGroupImageQuality(
+  id: string,
+  quality: FinzImageQuality,
+): Promise<{ status: "ok" | "not-found"; group?: FinzGroup }> {
+  if (!isFinzGroupId(id)) return { status: "not-found" };
+  const redis = getClient();
+  if (!redis) return { status: "not-found" };
+
+  const current = parseGroup(await redis.get(groupKey(id)));
+  if (!current) return { status: "not-found" };
+  if (current.imageQuality === quality) return { status: "ok", group: current };
+
+  const next: FinzGroup = { ...current, imageQuality: quality };
+  await redis.set(groupKey(id), JSON.stringify(next), { ex: FINZ_GROUP_TTL_SECONDS });
+  return { status: "ok", group: next };
+}
+
 export function isFinzGroupMember(value: unknown): value is FinzGroupMember {
   if (!value || typeof value !== "object") return false;
   const m = value as Partial<FinzGroupMember>;
@@ -243,10 +267,14 @@ export function parseGroup(raw: unknown): FinzGroup | null {
   const title = typeof parsed.title === "string" ? parsed.title.slice(0, 40) : "";
   // 대화 방식 — 옛 blob(없음)/이상값은 기본 linear(무서프라이즈).
   const chatMode: FinzChatMode = parsed.chatMode === "thread" ? "thread" : "linear";
+  // 이미지 화질 — 옛 blob(없음)/이상값은 기본 standard.
+  const imageQuality: FinzImageQuality = isFinzImageQuality(parsed.imageQuality)
+    ? parsed.imageQuality
+    : FINZ_DEFAULT_IMAGE_QUALITY;
 
   // 레거시 blob 의 pick/positions/summary 필드는 무시한다(대화는 채팅 LIST 로 이동).
   // 이런 옛 필드가 있어도 거절하지 않고 신원만 뽑아 유효한 그룹으로 돌려준다.
-  return { id, members, createdAt, expiresAt, kind, title, chatMode };
+  return { id, members, createdAt, expiresAt, kind, title, chatMode, imageQuality };
 }
 
 function generateGroupId(): string {
@@ -305,6 +333,7 @@ export async function createFinzRoom(input: {
       kind: input.kind,
       title: input.title.slice(0, 40),
       chatMode: "linear",
+      imageQuality: FINZ_DEFAULT_IMAGE_QUALITY,
     };
     await redis.set(key, JSON.stringify(group), { ex: FINZ_GROUP_TTL_SECONDS });
     await indexRoomForMembers(group, now);

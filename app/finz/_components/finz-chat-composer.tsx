@@ -4,16 +4,20 @@ import { FileText, Plus, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
 import {
+  FINZ_IMAGE_QUALITY_PRESETS,
   MAX_ATTACHMENTS_PER_MESSAGE,
   splitByMentionTokens,
   type FinzAttachment,
   type FinzAttachmentKind,
   type FinzChatKind,
+  type FinzImageQuality,
 } from "@/lib/common/services/finz-chat";
 import { FinzPositionInput } from "./finz-position-input";
 
 // 첨부 업로드 상한(업로드 라우트·store 재검증과 정합). 클라이언트에서 1차 거른다.
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+// 리사이즈될 이미지의 원본 상한(디코드 OOM 방지선). 리사이즈 후 크기는 uploadOne 에서 다시 12MB 로 검사.
+const MAX_SOURCE_BYTES = 50 * 1024 * 1024;
 // HEIC/HEIF 은 브라우저 파일 선택기에서 image/* 로 안 잡히는 경우가 있어 확장자를 명시적으로 추가.
 const ATTACH_ACCEPT =
   "image/*,.heic,.heif,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip";
@@ -21,6 +25,61 @@ const ATTACH_ACCEPT =
 // HEIC/HEIF 판별 — file.type 이 비어 오는 경우가 잦아 확장자도 함께 본다.
 function isHeicFile(file: File): boolean {
   return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+}
+function isImageFile(file: File): boolean {
+  return isHeicFile(file) || file.type.startsWith("image/");
+}
+
+// 이미지를 캔버스로 리사이즈해 JPEG 로 재인코딩. 긴 변이 maxLongSide 이하면 스케일 1(품질만 적용).
+async function resizeToJpeg(source: Blob, maxLongSide: number, quality: number): Promise<Blob> {
+  const bitmap = await createImageBitmap(source);
+  const long = Math.max(bitmap.width, bitmap.height) || 1;
+  const scale = long > maxLongSide ? maxLongSide / long : 1;
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close?.();
+    return source;
+  }
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+  const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  return out ?? source;
+}
+
+// 업로드 전 이미지 처리 — 방 화질 설정에 따라. original=원본(리사이즈 없음, HEIC 만 JPEG),
+// standard=긴 변 1600px, saver=긴 변 1024px. 비이미지는 그대로. heic2any 는 HEIC 일 때만 lazy-load.
+async function prepareUpload(
+  file: File,
+  quality: FinzImageQuality,
+): Promise<{ file: File; contentType: string; name: string }> {
+  if (!isImageFile(file)) {
+    return { file, contentType: file.type || "application/octet-stream", name: file.name };
+  }
+  const heic = isHeicFile(file);
+  let source: Blob = file;
+  if (heic) {
+    const { default: heic2any } = await import("heic2any");
+    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+    source = Array.isArray(converted) ? converted[0]! : converted;
+  }
+  const base = file.name.replace(/\.[^./\\]+$/, "") || "image";
+
+  if (quality === "original") {
+    if (heic) {
+      return { file: new File([source], `${base}.jpg`, { type: "image/jpeg" }), contentType: "image/jpeg", name: `${base}.jpg` };
+    }
+    return { file, contentType: file.type || "image/jpeg", name: file.name };
+  }
+
+  const preset = FINZ_IMAGE_QUALITY_PRESETS[quality]; // standard | saver
+  const resized = await resizeToJpeg(source, preset.maxLongSide, preset.quality);
+  const name = `${base}.jpg`;
+  return { file: new File([resized], name, { type: "image/jpeg" }), contentType: "image/jpeg", name };
 }
 
 // 컴포저에 잠깐 얹혀 업로드 중/완료를 보여주는 스테이징 첨부.
@@ -48,6 +107,7 @@ export function FinzChatComposer({
   myLatestNote,
   stanceMode,
   attachmentsEnabled,
+  imageQuality,
   mentionNames,
   replyTarget,
   editingTarget,
@@ -70,6 +130,7 @@ export function FinzChatComposer({
   myLatestNote: string;
   stanceMode: boolean;
   attachmentsEnabled: boolean; // Blob 스토어 연결 시에만 '사진·파일' 노출
+  imageQuality: FinzImageQuality; // 방 이미지 화질(원본/표준/저용량) — 업로드 전 처리 기준
   mentionNames: string[]; // 멤버 이름들(@남덕우 처럼 입력 중 배지 강조용)
   replyTarget: ComposerReference | null;
   editingTarget: (ComposerReference & { text: string }) | null;
@@ -139,25 +200,20 @@ export function FinzChatComposer({
 
   async function uploadOne(file: File, tempId: string) {
     try {
-      let uploadFile = file;
-      let displayName = file.name;
-      let contentType = file.type || "application/octet-stream";
+      // 방 화질 설정에 맞춰 이미지 처리(원본/표준 1600/저용량 1024) + HEIC→JPEG. 비이미지는 그대로.
+      const prepared = await prepareUpload(file, imageQuality);
+      if (prepared.file.size > MAX_UPLOAD_BYTES) throw new Error("too-big");
 
-      // HEIC/HEIF → JPEG 변환(크롬·안드로이드도 렌더 가능하게). 변환 라이브러리는 HEIC 고를 때만 lazy-load.
-      if (isHeicFile(file)) {
-        const { default: heic2any } = await import("heic2any");
-        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
-        const jpeg = Array.isArray(converted) ? converted[0]! : converted;
-        displayName = `${file.name.replace(/\.(heic|heif)$/i, "")}.jpg`;
-        uploadFile = new File([jpeg], displayName, { type: "image/jpeg" });
-        contentType = "image/jpeg";
-        if (uploadFile.size > MAX_UPLOAD_BYTES) throw new Error("too-big-after-convert");
-        // 변환된 JPEG 로 미리보기 교체(원본 HEIC 은 브라우저가 못 그림).
-        const previewUrl = URL.createObjectURL(jpeg);
+      // HEIC 은 addFiles 에서 미리보기를 못 만들었으니(브라우저가 원본을 못 그림) 처리된 JPEG 로 채운다.
+      if (isHeicFile(file) && prepared.contentType.startsWith("image/")) {
+        const previewUrl = URL.createObjectURL(prepared.file);
         setStaged((s) =>
           s.map((x) => {
             if (x.tempId !== tempId) return x;
-            if (x.previewUrl) URL.revokeObjectURL(x.previewUrl);
+            if (x.previewUrl) {
+              URL.revokeObjectURL(previewUrl);
+              return x;
+            }
             return { ...x, previewUrl };
           }),
         );
@@ -166,18 +222,18 @@ export function FinzChatComposer({
       // @vercel/blob 클라이언트 SDK 는 첨부를 실제로 고를 때만 로드(초기 채팅 번들에서 제외).
       const { upload } = await import("@vercel/blob/client");
       // access:"private" — world-readable URL 을 만들지 않는다. 열람은 방 멤버 게이트 프록시를 거친다.
-      const blob = await upload(uploadFile.name, uploadFile, {
+      const blob = await upload(prepared.file.name, prepared.file, {
         access: "private",
         handleUploadUrl: "/api/finz/upload",
-        contentType,
+        contentType: prepared.contentType,
       });
-      const kind: FinzAttachmentKind = contentType.startsWith("image/") ? "image" : "file";
+      const kind: FinzAttachmentKind = prepared.contentType.startsWith("image/") ? "image" : "file";
       const attachment: FinzAttachment = {
         kind,
         pathname: blob.pathname, // URL 이 아니라 pathname 저장 — 프록시가 get(pathname,{access:"private"})로 스트리밍
-        name: displayName,
-        size: uploadFile.size,
-        contentType,
+        name: prepared.name,
+        size: prepared.file.size,
+        contentType: prepared.contentType,
       };
       setStaged((s) => s.map((x) => (x.tempId === tempId ? { ...x, status: "done", attachment } : x)));
     } catch {
@@ -196,13 +252,16 @@ export function FinzChatComposer({
       return;
     }
     for (const file of files.slice(0, room)) {
-      if (file.size > MAX_UPLOAD_BYTES) {
-        setAttachError(`${file.name} 은(는) 너무 커 (최대 12MB).`);
+      const heic = isHeicFile(file);
+      const isImage = heic || file.type.startsWith("image/");
+      // 표준/저용량은 리사이즈로 줄어드니 큰 원본도 허용(디코드 OOM 방지선 50MB). 그 외는 업로드 상한 12MB.
+      const willResize = isImage && imageQuality !== "original";
+      const cap = willResize ? MAX_SOURCE_BYTES : MAX_UPLOAD_BYTES;
+      if (file.size > cap) {
+        setAttachError(`${file.name} 은(는) 너무 커 (최대 ${willResize ? "50MB" : "12MB"}).`);
         continue;
       }
       const tempId = crypto.randomUUID();
-      const heic = isHeicFile(file);
-      const isImage = heic || file.type.startsWith("image/");
       // HEIC 미리보기는 변환 후 만든다(원본은 브라우저가 못 그림). 일반 이미지는 즉시.
       const previewUrl = isImage && !heic ? URL.createObjectURL(file) : undefined;
       setStaged((s) => [

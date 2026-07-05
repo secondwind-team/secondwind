@@ -23,6 +23,20 @@ export type FinzChatKind = "text" | "system" | "pick" | "position" | "summary" |
 // thread=슬랙식 스레드(메인엔 원글만, 답글은 별도 스레드 화면). 기존 replyTo 로 스레드를 그룹핑한다.
 export type FinzChatMode = "linear" | "thread";
 
+// 방 단위 이미지 업로드 화질(그룹 blob 에 저장, 전 멤버 공유). 업로드 전 클라이언트에서 처리.
+//  original=원본 그대로(리사이즈 없음) / standard=표준(긴 변 1600px, 기본·권장) / saver=저용량(더 작게+더 압축).
+// (원본이 실제로 가장 고화질이라 중간값을 "고품질"이라 부르면 오해 → "표준"으로 명명.)
+export type FinzImageQuality = "original" | "standard" | "saver";
+export const FINZ_DEFAULT_IMAGE_QUALITY: FinzImageQuality = "standard";
+export function isFinzImageQuality(v: unknown): v is FinzImageQuality {
+  return v === "original" || v === "standard" || v === "saver";
+}
+// standard/saver 리사이즈 프리셋(긴 변 px + JPEG 품질). original 은 리사이즈 안 함.
+export const FINZ_IMAGE_QUALITY_PRESETS: Record<"standard" | "saver", { maxLongSide: number; quality: number }> = {
+  standard: { maxLongSide: 1600, quality: 0.85 },
+  saver: { maxLongSide: 1024, quality: 0.55 },
+};
+
 export type FinzPositionPayload = { stance: FinzPartyStance; note: string };
 // 차트 메시지 페이로드 — TradingView 심볼(거래소:티커)과 표시용 라벨만 저장(이미지 아님 → 매번 라이브 렌더).
 export type FinzChartPayload = { symbol: string; label: string };
@@ -106,6 +120,7 @@ export type FinzChatResponse = {
   cursor?: number; // 응답에 담긴 최대 seq — 클라이언트는 로컬 cursor 를 이 값으로 전진
   revision?: number; // 과거 메시지 메타데이터 변경 감지용(room-level mutation counter)
   chatMode?: FinzChatMode; // 방 대화 방식(폴링으로 전 멤버에 전파)
+  imageQuality?: FinzImageQuality; // 방 이미지 업로드 화질(폴링으로 전 멤버에 전파)
   expiresAt?: string;
   deduped?: boolean; // pick/summary 라우트 전용 — 락에 막혀 기존 결과를 반환했음
   nudged?: boolean; // summary 라우트 전용 — 선행 조건 미충족(에러 대신 클라이언트 nudge 유도)

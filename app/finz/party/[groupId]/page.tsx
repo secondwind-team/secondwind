@@ -59,6 +59,7 @@ export default async function FinzPartyRoomPage({ params }: Props) {
       initialKind={group.kind}
       initialTitle={group.title}
       initialChatMode={group.chatMode}
+      initialImageQuality={group.imageQuality}
       // Blob 스토어가 연결됐을 때만 첨부 UI 노출(미프로비저닝 시 깨진 버튼 방지 — 토큰 세팅 후 자동 표시).
       attachmentsEnabled={Boolean(process.env.BLOB_READ_WRITE_TOKEN)}
     />

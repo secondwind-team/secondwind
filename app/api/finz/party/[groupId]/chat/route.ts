@@ -50,6 +50,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ groupId:
     cursor: tail.cursor,
     revision: tail.revision,
     chatMode: group.chatMode, // 대화 방식 — 토글이 폴링(~3s)으로 전 멤버에 전파(리로드 불필요)
+    imageQuality: group.imageQuality, // 이미지 화질 — 설정 변경이 폴링으로 전 멤버에 전파
     expiresAt: group.expiresAt,
   });
 }

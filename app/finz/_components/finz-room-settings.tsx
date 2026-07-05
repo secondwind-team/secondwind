@@ -12,8 +12,15 @@ import {
   type FinzRecurringMessage,
 } from "@/lib/common/services/finz-recurring";
 import type { FinzTrade } from "@/lib/common/services/finz-portfolio";
-import type { FinzChatMode } from "@/lib/common/services/finz-chat";
+import type { FinzChatMode, FinzImageQuality } from "@/lib/common/services/finz-chat";
 import { useFinzAccount } from "./finz-account-context";
+
+// 사진 화질 옵션(방 단위). 원본이 실제로 가장 고화질이라 중간값은 "표준(권장)"으로 명명.
+const IMAGE_QUALITY_OPTIONS: { value: FinzImageQuality; label: string; hint: string }[] = [
+  { value: "original", label: "원본", hint: "리사이즈 없이 원본 그대로" },
+  { value: "standard", label: "표준", hint: "긴 변 1600px · 권장" },
+  { value: "saver", label: "저용량", hint: "긴 변 1024px · 데이터 절약" },
+];
 import { FinzPortfolioSettings } from "./finz-portfolio-settings";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -28,6 +35,7 @@ export function FinzRoomSettings({
   initialTrades,
   initialMute,
   initialChatMode,
+  initialImageQuality,
 }: {
   groupId: string;
   roomTitle: string;
@@ -37,6 +45,7 @@ export function FinzRoomSettings({
   initialTrades: FinzTrade[];
   initialMute: { muted: boolean; allowMentions: boolean };
   initialChatMode: FinzChatMode;
+  initialImageQuality: FinzImageQuality;
 }) {
   const account = useFinzAccount();
   const memberId = account.accountId;
@@ -49,6 +58,8 @@ export function FinzRoomSettings({
   const [muteBusy, setMuteBusy] = useState(false);
   const [chatMode, setChatMode] = useState<FinzChatMode>(initialChatMode);
   const [modeBusy, setModeBusy] = useState(false);
+  const [imageQuality, setImageQuality] = useState<FinzImageQuality>(initialImageQuality);
+  const [qualityBusy, setQualityBusy] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FinzRecurringMessage | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -123,6 +134,28 @@ export function FinzRoomSettings({
       setError("대화 방식을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
     } finally {
       setModeBusy(false);
+    }
+  }
+
+  // 사진 업로드 화질(원본/표준/저용량) — 방 단위(전 멤버 공유). 낙관적 저장 후 실패 시 롤백.
+  async function saveImageQuality(next: FinzImageQuality) {
+    if (next === imageQuality) return;
+    setError(null);
+    setQualityBusy(true);
+    const prev = imageQuality;
+    setImageQuality(next);
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/image-quality`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ quality: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setImageQuality(prev); // 롤백
+      setError("사진 화질을 바꾸지 못했어. 잠시 뒤 다시 시도해줘.");
+    } finally {
+      setQualityBusy(false);
     }
   }
 
@@ -238,6 +271,38 @@ export function FinzRoomSettings({
                 label="스레드 모드"
               />
             </div>
+          </div>
+        </section>
+
+        {/* 사진 업로드 화질(원본/표준/저용량) */}
+        <section className="space-y-2">
+          <h2 className="px-1 text-sm font-bold text-[var(--fz-ink)]">🖼 사진 화질</h2>
+          <div className="fz-card divide-y divide-[var(--fz-line)]" role="radiogroup" aria-label="사진 화질">
+            {IMAGE_QUALITY_OPTIONS.map((opt) => {
+              const on = imageQuality === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={qualityBusy}
+                  onClick={() => void saveImageQuality(opt.value)}
+                  className="flex w-full items-center gap-3 p-3.5 text-left disabled:opacity-60"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-[var(--fz-ink)]">{opt.label}</span>
+                    <span className="block text-xs leading-relaxed text-[var(--fz-muted)]">{opt.hint}</span>
+                  </span>
+                  <span
+                    aria-hidden
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${on ? "border-[var(--fz-coral)] bg-[var(--fz-coral)]" : "border-[var(--fz-line)]"}`}
+                  >
+                    {on && <span className="h-2 w-2 rounded-full bg-white" />}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
 
