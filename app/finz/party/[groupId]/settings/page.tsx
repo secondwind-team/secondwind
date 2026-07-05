@@ -58,6 +58,7 @@ export default async function FinzRoomSettingsPage({ params }: Props) {
       initialTrades={trades}
       initialMute={mute}
       initialChatMode={group.chatMode}
+      initialImageQuality={group.imageQuality}
     />
   );
 }

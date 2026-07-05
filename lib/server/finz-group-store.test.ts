@@ -28,6 +28,7 @@ function group(members: FinzGroupMember[]): FinzGroup {
     kind: members.length > 2 ? "group" : "1on1",
     title: "",
     chatMode: "linear",
+    imageQuality: "standard",
   };
 }
 
@@ -111,6 +112,13 @@ describe("parseGroup", () => {
     expect(parseGroup(noMode)?.chatMode).toBe("linear"); // 필드 없는 레거시 blob
     expect(parseGroup({ ...group([member("a")]), chatMode: "weird" })?.chatMode).toBe("linear");
     expect(parseGroup({ ...group([member("a")]), chatMode: "thread" })?.chatMode).toBe("thread");
+  });
+  it("imageQuality: 옛 blob(없음)·이상값은 standard 기본, 유효값은 보존", () => {
+    const { imageQuality: _omit, ...noQ } = group([member("a")]);
+    expect(parseGroup(noQ)?.imageQuality).toBe("standard"); // 필드 없는 레거시 blob
+    expect(parseGroup({ ...group([member("a")]), imageQuality: "weird" })?.imageQuality).toBe("standard");
+    expect(parseGroup({ ...group([member("a")]), imageQuality: "original" })?.imageQuality).toBe("original");
+    expect(parseGroup({ ...group([member("a")]), imageQuality: "saver" })?.imageQuality).toBe("saver");
   });
 });
 

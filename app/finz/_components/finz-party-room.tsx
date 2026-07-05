@@ -20,6 +20,7 @@ import {
   type FinzChatMemberLite,
   type FinzChatMessage,
   type FinzChatMode,
+  type FinzImageQuality,
   type FinzNudge,
   type LatestPosition,
 } from "@/lib/common/services/finz-chat";
@@ -56,6 +57,7 @@ export function FinzPartyRoom({
   initialKind,
   initialTitle,
   initialChatMode,
+  initialImageQuality,
   attachmentsEnabled = false,
 }: {
   groupId: string;
@@ -67,6 +69,7 @@ export function FinzPartyRoom({
   initialKind: FinzRoomKind;
   initialTitle: string;
   initialChatMode: FinzChatMode;
+  initialImageQuality: FinzImageQuality;
   attachmentsEnabled?: boolean; // Blob 스토어 연결 여부 — 첨부 UI 노출 게이트
 }) {
   // 메신저: 방 멤버 = 로그인 계정. memberId 는 곧 내 accountId(게이트 통과 → 항상 존재).
@@ -77,6 +80,7 @@ export function FinzPartyRoom({
   const [full, setFull] = useState(initialFull); // 서버 의미: 2명 이상(파티 준비)
   const [messages, setMessages] = useState<FinzChatMessage[]>(initialMessages);
   const [chatMode, setChatMode] = useState<FinzChatMode>(initialChatMode); // 방 대화 방식(폴링으로 갱신)
+  const [imageQuality, setImageQuality] = useState<FinzImageQuality>(initialImageQuality); // 방 이미지 화질(폴링으로 갱신)
   const [openThreadRootId, setOpenThreadRootId] = useState<string | null>(null); // 열려 있는 스레드의 root id
   const cursorRef = useRef(initialCursor);
   const revisionRef = useRef(initialRevision);
@@ -155,6 +159,7 @@ export function FinzPartyRoom({
         cursor?: number;
         revision?: number;
         chatMode?: FinzChatMode;
+        imageQuality?: FinzImageQuality;
       };
       if (json.status !== "ok") return;
       if (json.members) {
@@ -165,6 +170,10 @@ export function FinzPartyRoom({
       setFull((prev) => (prev === nextFull ? prev : nextFull));
       if (json.chatMode === "linear" || json.chatMode === "thread") {
         setChatMode((prev) => (prev === json.chatMode ? prev : json.chatMode!)); // 토글이 폴링으로 전 멤버 전파
+      }
+      if (json.imageQuality) {
+        const iq = json.imageQuality;
+        setImageQuality((prev) => (prev === iq ? prev : iq)); // 화질 설정 변경이 폴링으로 전 멤버 전파
       }
       const incoming = json.messages ?? [];
       if (incoming.length) {
@@ -827,6 +836,7 @@ export function FinzPartyRoom({
         myLatestNote={myPos?.note ?? ""}
         stanceMode={stanceMode}
         attachmentsEnabled={attachmentsEnabled}
+        imageQuality={imageQuality}
         mentionNames={members.map((m) => m.displayName)}
         replyTarget={threadMode ? null : replyReference}
         editingTarget={editingReference}

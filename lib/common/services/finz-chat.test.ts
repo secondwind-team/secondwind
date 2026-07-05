@@ -23,6 +23,9 @@ import {
   isValidAttachmentPathname,
   attachmentSnippet,
   finzMessageSnippet,
+  isFinzImageQuality,
+  FINZ_DEFAULT_IMAGE_QUALITY,
+  FINZ_IMAGE_QUALITY_PRESETS,
   type FinzAttachment,
   type FinzChatMemberLite,
   type FinzChatMessage,
@@ -468,6 +471,21 @@ describe("firstUrlInText", () => {
   });
   it("URL 없으면 null", () => {
     expect(firstUrlInText("그냥 텍스트 @finz")).toBeNull();
+  });
+});
+
+describe("이미지 화질(imageQuality)", () => {
+  it("isFinzImageQuality: 3개 값만 통과", () => {
+    expect(isFinzImageQuality("original")).toBe(true);
+    expect(isFinzImageQuality("standard")).toBe(true);
+    expect(isFinzImageQuality("saver")).toBe(true);
+    expect(isFinzImageQuality("high")).toBe(false);
+    expect(isFinzImageQuality(undefined)).toBe(false);
+  });
+  it("기본값은 standard, 프리셋 긴 변은 1600/1024", () => {
+    expect(FINZ_DEFAULT_IMAGE_QUALITY).toBe("standard");
+    expect(FINZ_IMAGE_QUALITY_PRESETS.standard.maxLongSide).toBe(1600);
+    expect(FINZ_IMAGE_QUALITY_PRESETS.saver.maxLongSide).toBe(1024);
   });
 });
 
