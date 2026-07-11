@@ -181,7 +181,7 @@ export const FINZ_DEFAULT_ASSET_CATALOG: FinzAssetCatalogItem[] = [
 
 const DIRECTION_KEYWORDS: Record<FinzMentionDirection, string[]> = {
   conditional: ["떨어지면", "빠지면", "조정 오면", "조건", "이면", "라면", "if "],
-  positive: ["좋", "오를", "상승", "롱", "매수", "살", "담", "기대", "끌림", "buy", "bull"],
+  positive: ["좋", "오를", "상승", "롱", "매수", "살", "담아", "담았", "담을", "담자", "기대", "끌림", "buy", "bull"],
   negative: ["싫", "내릴", "하락", "숏", "매도", "비싸", "고평가", "무섭", "위험", "sell", "bear"],
   watching: ["관망", "지켜", "대기", "보류", "애매", "모르", "watch"],
   mention: [],
