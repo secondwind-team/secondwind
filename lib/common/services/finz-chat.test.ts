@@ -30,6 +30,7 @@ import {
   type FinzChatMemberLite,
   type FinzChatMessage,
 } from "./finz-chat";
+import { canListenToFinzMessage, prepareFinzSpeechText } from "./finz-message-listen";
 import type { FinzPartyPick, FinzPartyStance, FinzPartySummary } from "./finz";
 
 const PICK: FinzPartyPick = {
@@ -80,6 +81,21 @@ describe("selectLatestPick", () => {
   });
   it("픽이 없으면 null", () => {
     expect(selectLatestPick([text(1, "a")])).toBeNull();
+  });
+});
+
+describe("message listen helpers", () => {
+  it("120자 이상이고 삭제되지 않은 text 메시지만 듣기 대상으로 고른다", () => {
+    const long: FinzChatMessage = { id: "listen-1", seq: 1, role: "member", authorId: "a", authorName: "a", kind: "text", text: "가".repeat(120), createdAt: "t" };
+    expect(canListenToFinzMessage(long)).toBe(true);
+    expect(canListenToFinzMessage({ ...long, text: "가".repeat(119) })).toBe(false);
+    expect(canListenToFinzMessage({ ...long, deletedAt: "t2" })).toBe(false);
+    expect(canListenToFinzMessage(pick(2))).toBe(false);
+  });
+
+  it("음성 재생용 텍스트만 URL/마크다운/HTML/@finz/이모지를 정리한다", () => {
+    const spoken = prepareFinzSpeechText("## @finz **뉴스** <b>요약</b>\nhttps://example.com/a/b 🙂 [자료](https://x.com)");
+    expect(spoken).toBe("핀즈 뉴스 요약 링크 자료 링크");
   });
 });
 

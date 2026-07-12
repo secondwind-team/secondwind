@@ -190,6 +190,45 @@
   text-decoration-color: rgb(255 255 255 / 0.72);
 }
 
+.fz-listen-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(138 127 118 / 0.18);
+}
+.fz-listen-btn {
+  min-height: 36px;
+  border-radius: var(--fz-r-full);
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--fz-coral-ink);
+  background: var(--fz-coral-tint);
+  transition: transform 0.09s ease, background 0.15s ease;
+}
+.fz-listen-btn:hover {
+  background: #ffe1db;
+}
+.fz-listen-btn:active {
+  transform: scale(0.97);
+}
+.fz-listen-btn--stop {
+  color: var(--fz-muted);
+  background: var(--fz-surface-2);
+}
+.fz-msg--me .fz-listen-controls {
+  border-top-color: rgb(255 255 255 / 0.22);
+}
+.fz-msg--me .fz-listen-btn {
+  color: #fff;
+  background: rgb(255 255 255 / 0.22);
+}
+.fz-msg--me .fz-listen-btn--stop {
+  background: rgb(255 255 255 / 0.14);
+}
+
 /* 링크 미리보기 카드 — 말풍선 아래 붙는 썸네일+제목+설명(카카오톡·슬랙식). 정렬은 부모 flex-col 의
    items-start/items-end 를 따른다(상대=왼쪽, 나=오른쪽). */
 .fz-link-preview {
@@ -992,7 +1031,8 @@
   .fz-chip,
   .fz-btn,
   .fz-switch,
-  .fz-switch__thumb {
+  .fz-switch__thumb,
+  .fz-listen-btn {
     transition: none;
   }
 }
