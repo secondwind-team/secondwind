@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
 import type { FinzRoomKind, FinzRoomSummary } from "@/lib/common/services/finz-account";
+import { canListenToFinzMessage } from "@/lib/common/services/finz-message-listen";
 import {
   computeNextNudge,
   finzMessageSnippet,
@@ -32,6 +33,7 @@ import { FinzThreadView } from "./finz-thread-view";
 import { FinzRoomFullNotice } from "./finz-room-full-notice";
 import { FinzRoomJoinView } from "./finz-room-join-view";
 import { FinzInviteSheet } from "./finz-invite-sheet";
+import { useFinzMessageSpeech } from "./use-finz-message-speech";
 
 // 그룹방 정원(서버 MAX_ROOM_MEMBERS 와 동일). 이 이상이면 비멤버는 못 들어옴.
 const ROOM_CAPACITY = 12;
@@ -108,6 +110,8 @@ export function FinzPartyRoom({
 
   const bumpStick = useCallback(() => setStickSignal((s) => s + 1), []);
   const handleShareError = useCallback((message: string) => setActionError(message), []);
+  const handleSpeechError = useCallback((message: string) => setActionError(message), []);
+  const messageSpeech = useFinzMessageSpeech(handleSpeechError);
 
   // 폴링이 비동기로 state 를 바꾸므로, handleMention 이 분류 응답(~1s)을 기다린 뒤 가드할 때
   // 클로저 옛값 대신 "최신 커밋된" 상태를 읽도록 ref 로 미러링한다(스테일 가드 메시지 방지).
@@ -800,6 +804,11 @@ export function FinzPartyRoom({
         onReroll={() => void openPick(true)}
         onNudgeCta={onNudgeCta}
         onRetryPending={retryPending}
+        speechSupported={messageSpeech.supported}
+        activeSpeechMessageId={messageSpeech.activeMessageId}
+        speechStatus={messageSpeech.status}
+        onToggleSpeech={messageSpeech.toggle}
+        onStopSpeech={messageSpeech.stop}
         onOpenMessageActions={(message, point) => {
           if (message.kind === "system" || message.deletedAt) return;
           setActionMenu({ message, x: point.x, y: point.y });
@@ -812,8 +821,13 @@ export function FinzPartyRoom({
           x={actionMenu.x}
           y={actionMenu.y}
           myMemberId={myMemberId}
+          speechSupported={messageSpeech.supported}
           onClose={() => setActionMenu(null)}
           onReact={(emoji) => void reactToMessage(actionMenu.message, emoji)}
+          onListen={() => {
+            messageSpeech.speak(actionMenu.message);
+            setActionMenu(null);
+          }}
           onReply={() => replyToMessage(actionMenu.message)}
           onShare={() => shareMessage(actionMenu.message)}
           onEdit={() => editMessage(actionMenu.message)}
@@ -889,6 +903,11 @@ export function FinzPartyRoom({
           onClose={() => setOpenThreadRootId(null)}
           onSendReply={sendReplyInThread}
           onRetryPending={retryPending}
+          speechSupported={messageSpeech.supported}
+          activeSpeechMessageId={messageSpeech.activeMessageId}
+          speechStatus={messageSpeech.status}
+          onToggleSpeech={messageSpeech.toggle}
+          onStopSpeech={messageSpeech.stop}
         />
       )}
     </div>
@@ -900,8 +919,10 @@ function FinzMessageActionMenu({
   x,
   y,
   myMemberId,
+  speechSupported,
   onClose,
   onReact,
+  onListen,
   onReply,
   onShare,
   onEdit,
@@ -911,8 +932,10 @@ function FinzMessageActionMenu({
   x: number;
   y: number;
   myMemberId: string;
+  speechSupported: boolean;
   onClose: () => void;
   onReact: (emoji: FinzReactionEmoji) => void;
+  onListen: () => void;
   onReply: () => void;
   onShare: () => void;
   onEdit: () => void;
@@ -921,6 +944,7 @@ function FinzMessageActionMenu({
   const mine = message.authorId === myMemberId && message.role === "member";
   const canEdit = mine && message.kind === "text" && !message.deletedAt;
   const canDelete = mine && (message.kind === "text" || message.kind === "position") && !message.deletedAt;
+  const canListen = speechSupported && canListenToFinzMessage(message);
   const selectedEmoji = message.reactions?.[myMemberId] ?? null;
 
   return (
@@ -951,6 +975,7 @@ function FinzMessageActionMenu({
             </button>
           ))}
         </div>
+        {canListen && <button type="button" role="menuitem" onClick={onListen}>읽어주기</button>}
         <button type="button" role="menuitem" onClick={onReply}>답장</button>
         <button type="button" role="menuitem" onClick={onShare}>공유</button>
         {canEdit && <button type="button" role="menuitem" onClick={onEdit}>수정</button>}

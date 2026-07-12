@@ -13,6 +13,7 @@ import { attachmentSnippet, selectLatestPick } from "@/lib/common/services/finz-
 import { formatKstDate, formatKstTime, kstDayKey } from "@/lib/common/services/finz-time";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import { FinzNudgeBubble } from "./finz-nudge-bubble";
+import type { FinzSpeechStatus } from "./use-finz-message-speech";
 
 export type PendingText = {
   tempId: string;
@@ -56,6 +57,11 @@ export function FinzChatTimeline({
   onReroll,
   onNudgeCta,
   onRetryPending,
+  speechSupported,
+  activeSpeechMessageId,
+  speechStatus,
+  onToggleSpeech,
+  onStopSpeech,
   onOpenMessageActions,
   onReplyTargetUnavailable,
 }: {
@@ -73,6 +79,11 @@ export function FinzChatTimeline({
   onReroll: () => void;
   onNudgeCta: (cta: FinzNudge["cta"]) => void;
   onRetryPending: (tempId: string) => void;
+  speechSupported: boolean;
+  activeSpeechMessageId: string | null;
+  speechStatus: FinzSpeechStatus;
+  onToggleSpeech: (message: FinzChatMessage) => void;
+  onStopSpeech: () => void;
   onOpenMessageActions: (message: FinzChatMessage, point: { x: number; y: number }) => void;
   onReplyTargetUnavailable: () => void;
 }) {
@@ -212,6 +223,10 @@ export function FinzChatTimeline({
                   changed={m.kind === "position" && changedIds.has(m.id)}
                   onOpenActions={(point) => onOpenMessageActions(m, point)}
                   onReplyQuoteJump={jumpToMessage}
+                  speechSupported={speechSupported}
+                  speechStatus={activeSpeechMessageId === m.id ? speechStatus : "idle"}
+                  onToggleSpeech={() => onToggleSpeech(m)}
+                  onStopSpeech={activeSpeechMessageId === m.id ? onStopSpeech : undefined}
                 />
               </div>
               {chatMode === "thread" && onOpenThread && m.kind !== "system" && (

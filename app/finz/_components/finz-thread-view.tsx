@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { selectThreadMessages, splitByMentionTokens, type FinzChatMessage } from "@/lib/common/services/finz-chat";
 import { FinzChatMessageView } from "./finz-chat-message-view";
 import type { PendingText } from "./finz-chat-timeline";
+import type { FinzSpeechStatus } from "./use-finz-message-speech";
 
 // 슬랙식 스레드 전용 화면(스레드 모드에서 답글 어포던스를 탭하면 열림). 방 위에 뜨는 전체화면 오버레이 —
 // 타임라인을 언마운트하지 않아 폴링/스크롤이 유지되고, 같은 messages 에서 selectThreadMessages 로 이 스레드만
@@ -21,6 +22,11 @@ export function FinzThreadView({
   onClose,
   onSendReply,
   onRetryPending,
+  speechSupported,
+  activeSpeechMessageId,
+  speechStatus,
+  onToggleSpeech,
+  onStopSpeech,
 }: {
   rootId: string;
   messages: FinzChatMessage[];
@@ -33,6 +39,11 @@ export function FinzThreadView({
   onClose: () => void;
   onSendReply: (text: string, rootId: string) => void;
   onRetryPending: (tempId: string) => void;
+  speechSupported: boolean;
+  activeSpeechMessageId: string | null;
+  speechStatus: FinzSpeechStatus;
+  onToggleSpeech: (message: FinzChatMessage) => void;
+  onStopSpeech: () => void;
 }) {
   const thread = selectThreadMessages(messages, rootId); // [root, ...답글]
   const root = thread[0];
@@ -70,7 +81,16 @@ export function FinzThreadView({
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {/* 원글 */}
-        <FinzChatMessageView message={root} myMemberId={myMemberId} groupId={groupId} mentionNames={mentionNames} />
+        <FinzChatMessageView
+          message={root}
+          myMemberId={myMemberId}
+          groupId={groupId}
+          mentionNames={mentionNames}
+          speechSupported={speechSupported}
+          speechStatus={activeSpeechMessageId === root.id ? speechStatus : "idle"}
+          onToggleSpeech={() => onToggleSpeech(root)}
+          onStopSpeech={activeSpeechMessageId === root.id ? onStopSpeech : undefined}
+        />
         <div className="flex items-center gap-2 py-1">
           <div className="h-px flex-1 bg-[var(--fz-line)]" />
           <span className="text-[11px] font-medium text-[var(--fz-muted)]">답글 {replies.length}개</span>
@@ -78,7 +98,17 @@ export function FinzThreadView({
         </div>
         {/* 답글들 */}
         {replies.map((m) => (
-          <FinzChatMessageView key={m.id} message={m} myMemberId={myMemberId} groupId={groupId} mentionNames={mentionNames} />
+          <FinzChatMessageView
+            key={m.id}
+            message={m}
+            myMemberId={myMemberId}
+            groupId={groupId}
+            mentionNames={mentionNames}
+            speechSupported={speechSupported}
+            speechStatus={activeSpeechMessageId === m.id ? speechStatus : "idle"}
+            onToggleSpeech={() => onToggleSpeech(m)}
+            onStopSpeech={activeSpeechMessageId === m.id ? onStopSpeech : undefined}
+          />
         ))}
         {/* 내 답글 pending(낙관적) */}
         {pending.map((p) => (

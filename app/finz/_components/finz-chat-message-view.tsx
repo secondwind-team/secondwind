@@ -8,6 +8,7 @@ import {
   splitMessageBody,
   type FinzChatMessage,
 } from "@/lib/common/services/finz-chat";
+import { canListenToFinzMessage } from "@/lib/common/services/finz-message-listen";
 import { formatKstTime } from "@/lib/common/services/finz-time";
 import { FinzAttachmentList } from "./finz-attachment-list";
 import { FinzLinkPreview } from "./finz-link-preview";
@@ -17,6 +18,7 @@ import { FinzPartySummaryCard } from "./finz-party-summary";
 import { FinzChartBubble } from "./finz-chart-bubble";
 import { FinzPortfolioCard } from "./finz-portfolio-card";
 import { STANCE_EMOJI } from "./finz-position-input";
+import type { FinzSpeechStatus } from "./use-finz-message-speech";
 
 // 메시지 본문 — @finz·@멤버 멘션은 .fz-mention 칩으로, 평문 http(s) URL 은 클릭 가능한 링크로,
 // 나머지는 그대로. (finz 봇 답변은 FinzRichText 가 마크다운 링크까지 처리하므로 이 경로는 멤버 메시지용.)
@@ -162,6 +164,36 @@ function DeletedText() {
   return <span className="italic text-[var(--fz-muted)]">삭제된 메시지입니다</span>;
 }
 
+function MessageListenControls({
+  message,
+  supported,
+  status,
+  onToggle,
+  onStop,
+}: {
+  message: FinzChatMessage;
+  supported: boolean;
+  status: FinzSpeechStatus;
+  onToggle?: () => void;
+  onStop?: () => void;
+}) {
+  if (!supported || !canListenToFinzMessage(message) || !onToggle) return null;
+  const active = status !== "idle";
+  const label = status === "speaking" ? "⏸ 일시정지" : status === "paused" ? "▶ 이어듣기" : "🎧 듣기";
+  return (
+    <div className="fz-listen-controls">
+      <button type="button" className="fz-listen-btn" onClick={onToggle} aria-pressed={active}>
+        {label}
+      </button>
+      {active && onStop && (
+        <button type="button" className="fz-listen-btn fz-listen-btn--stop" onClick={onStop}>
+          ■ 듣기 종료
+        </button>
+      )}
+    </div>
+  );
+}
+
 // finz 봇 아바타(코랄 점) — 왼쪽 픽/요약/시스템성 봇 말풍선 앞에.
 function FinzAvatar() {
   return (
@@ -196,6 +228,10 @@ export function FinzChatMessageView({
   changed,
   onOpenActions,
   onReplyQuoteJump,
+  speechSupported = false,
+  speechStatus = "idle",
+  onToggleSpeech,
+  onStopSpeech,
 }: {
   message: FinzChatMessage;
   myMemberId: string | null;
@@ -207,6 +243,10 @@ export function FinzChatMessageView({
   changed?: boolean;
   onOpenActions?: (point: { x: number; y: number }) => void;
   onReplyQuoteJump?: (messageId: string) => void;
+  speechSupported?: boolean;
+  speechStatus?: FinzSpeechStatus;
+  onToggleSpeech?: () => void;
+  onStopSpeech?: () => void;
 }) {
   if (message.kind === "system") {
     // 시스템 알림은 시각을 붙이지 않는다(카카오톡과 동일 — 가운데 회색 pill).
@@ -295,6 +335,13 @@ export function FinzChatMessageView({
             <FinzHeader label="FINZ" iso={message.createdAt} />
             <div className="fz-bubble max-w-full break-words p-3.5 text-sm leading-relaxed text-[var(--fz-ink)]">
               <FinzRichText text={message.text} mentionNames={mentionNames} />
+              <MessageListenControls
+                message={message}
+                supported={speechSupported}
+                status={speechStatus}
+                onToggle={onToggleSpeech}
+                onStop={onStopSpeech}
+              />
             </div>
             <ReactionBar message={message} mine={false} />
           </div>
@@ -365,6 +412,13 @@ export function FinzChatMessageView({
                 <>
                   <MessageBody text={message.text} mentionNames={mentionNames} />
                   <EditedLabel message={message} />
+                  <MessageListenControls
+                    message={message}
+                    supported={speechSupported}
+                    status={speechStatus}
+                    onToggle={onToggleSpeech}
+                    onStop={onStopSpeech}
+                  />
                 </>
               ) : null}
             </div>
