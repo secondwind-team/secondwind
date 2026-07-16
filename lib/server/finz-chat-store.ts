@@ -31,6 +31,7 @@ import {
 } from "@/lib/common/services/finz-chat";
 import type { FinzPartyPick, FinzPartyStance, FinzPartySummary } from "@/lib/common/services/finz";
 import type { FinzPortfolioCardPayload } from "@/lib/common/services/finz-portfolio";
+import { subscribeFinzMonthlyReview } from "@/lib/server/finz-monthly-review-store";
 
 export const MAX_TEXT_LENGTH = 280;
 export const TEXT_RATE_LIMIT_MS = 800;
@@ -112,6 +113,8 @@ async function appendChatMessage(
   await redis.rpush(chatKey(id), JSON.stringify(stored));
   await bumpChatRevision(id);
   await refreshTtls(id);
+  // 대화가 실제로 쌓인 방만 월말 리뷰 대상으로 등록한다. 전역 "모든 방" 스캔은 하지 않는다.
+  await subscribeFinzMonthlyReview(id).catch(() => {});
   // 첨부가 있으면 pathname 을 방 SET 에 등록 — 프록시가 "이 방에 이 첨부가 있나"를 검증하는 근거.
   if (stored.attachments && stored.attachments.length > 0) {
     const paths = stored.attachments.map((a) => a.pathname).filter(Boolean);

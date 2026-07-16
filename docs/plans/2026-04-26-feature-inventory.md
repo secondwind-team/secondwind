@@ -190,6 +190,7 @@
 | `FINZ-CHAR-01` | 취향 카드 → 캐릭터 소환 | `live` | 취향 카드 3개+로 미래기술 딜러·배당 힐러 등 캐릭터·스탯을 deterministic 생성(가입 후 프로필에서). | `lib/common/services/finz.ts`(`summonFinzCharacter`·`FINZ_TASTE_CARDS`), `finz-character-builder` (`FINZ-MVP-01·02`) | AI 문장 다듬기, 아바타 이미지 | 카탈로그 변경 내성(렌더 시 재구성) |
 | `FINZ-PICK-01` | 우정주 생성 (파티 픽) | `live` | 방 멤버 조합으로 오늘 이야기할 테마 1개 + 싸울 포인트 + 역할을 Gemini 생성. theme-only 환각 방어 + fallback. | `app/api/finz/party/[groupId]/pick`(+`/summary`), `FINZ_PARTY_PICK_SCHEMA`, `finz-party-pick-result` (`FINZ-MVP-04`) | 실명 종목(그라운딩 후), 재추첨 변수 | 토큰 비용, 동시 호출 락 |
 | `FINZ-POSITION-01` | 한 줄 입장 + AI 요약 | `live` | 각 멤버가 stance(매력 있음/관망/…)+코멘트를 남기면 AI 가 1회 요약. | `app/api/finz/party/[groupId]/{position,pick/summary}`, `finz-position-input`, `finz-party-summary` (`FINZ-MVP-05`) | N인 방 요약 일반화 | "둘 다 입장" 게이트의 N인 의미 |
+| `FINZ-REVIEW-01` | 월간 투자 대화 리뷰 | `live` | 현재 방에서 나온 미국 주식·주요 코인과 사용자별 방향을 모아, 전달 정기 리뷰 시가 대비 실제 가격 변화와 함께 회고한다. `@finz 월간리뷰해줘` 또는 `+` 메뉴로 중간 리뷰를 만들고, 대화가 있는 방은 말일 KST 12:00에 자동 리뷰를 받는다. | `lib/common/services/finz-monthly-review.ts`, `lib/server/finz-monthly-review-{runner,store}.ts`, `app/api/finz/party/[groupId]/monthly-review`, `app/api/finz/cron/monthly-review`, `.github/workflows/monthly-review.yml` (`FINZ-MVP-07`) | LLM 기반 종목·방향 추출, 자산 카탈로그 확대 | Yahoo Finance 비공식 chart endpoint 변경 가능성, `CRON_SECRET` 수동 설정, 400개 채팅 보관 상한 |
 | `FINZ-RAID-01` | 투자 레이드 (보스/역할 미션) | `planned` | 우정주를 보스로 두고 캐릭터별 역할 미션으로 대화를 게임화. | 콘텐츠 훅만 존재(피드 `raid_started` 타입), 전용 UI 미구현 | 대화방 안 레이드 세션 | 게임 톤 데모로 검증 후 깊이 결정 |
 
 ### AI 봇

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FinzPartyStance } from "@/lib/common/services/finz";
 import type { FinzRoomKind, FinzRoomSummary } from "@/lib/common/services/finz-account";
 import { canListenToFinzMessage } from "@/lib/common/services/finz-message-listen";
+import { isFinzMonthlyReviewCommand } from "@/lib/common/services/finz-monthly-review";
 import {
   computeNextNudge,
   finzMessageSnippet,
@@ -96,6 +97,7 @@ export function FinzPartyRoom({
   const [shareTarget, setShareTarget] = useState<FinzChatMessage | null>(null);
   const [pickBusy, setPickBusy] = useState(false);
   const [recapBusy, setRecapBusy] = useState(false); // 대화 요약(general — @finz/+메뉴/nudge)
+  const [monthlyReviewBusy, setMonthlyReviewBusy] = useState(false);
   const [askBusy, setAskBusy] = useState(false);
   const [mentionBusy, setMentionBusy] = useState(false); // @finz 의도 분류~기능 응답까지 타이핑 인디케이터 유지
   const [positionSubmitting, setPositionSubmitting] = useState(false);
@@ -426,6 +428,10 @@ export function FinzPartyRoom({
     bumpStick();
     try {
       setActionError(null);
+      if (isFinzMonthlyReviewCommand(question)) {
+        await openMonthlyReview();
+        return;
+      }
       let intent: string = "qa";
       let symbol: string | undefined;
       let subscribe: boolean | undefined;
@@ -700,6 +706,28 @@ export function FinzPartyRoom({
     }
   }
 
+  // 현재 방의 마지막 월간 리뷰 이후 투자 대화를 실제 시가와 함께 회고한다.
+  // 중간 리뷰는 전달 정기 리뷰의 가격 기준선을 바꾸지 않는다.
+  async function openMonthlyReview() {
+    setMonthlyReviewBusy(true);
+    setActionError(null);
+    bumpStick();
+    try {
+      const res = await fetch(`/api/finz/party/${groupId}/monthly-review`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ memberId: myMemberId }),
+      });
+      if (!res.ok) setActionError("월간 리뷰를 만들지 못했어. 잠시 뒤 다시 시도해줘.");
+      await refetch();
+    } catch {
+      setActionError("연결이 잠깐 끊겼어. 다시 시도해줘.");
+    } finally {
+      setMonthlyReviewBusy(false);
+      bumpStick();
+    }
+  }
+
   async function inviteFriends(accountIds: string[]) {
     if (accountIds.length === 0) return;
     try {
@@ -796,7 +824,7 @@ export function FinzPartyRoom({
         groupId={groupId}
         mentionNames={members.map((m) => m.displayName)}
         nudge={nudge}
-        aiBusy={pickBusy || recapBusy || askBusy || mentionBusy}
+        aiBusy={pickBusy || recapBusy || monthlyReviewBusy || askBusy || mentionBusy}
         stickSignal={stickSignal}
         chatMode={chatMode}
         threadStats={stats}
@@ -845,6 +873,7 @@ export function FinzPartyRoom({
         sending={false}
         pickBusy={pickBusy}
         recapBusy={recapBusy}
+        monthlyReviewBusy={monthlyReviewBusy}
         positionSubmitting={positionSubmitting}
         myLatestStance={myPos?.stance ?? null}
         myLatestNote={myPos?.note ?? ""}
@@ -862,6 +891,7 @@ export function FinzPartyRoom({
         onPick={() => void openPick(false)}
         onPosition={submitPosition}
         onRecap={() => void openRecap()}
+        onMonthlyReview={() => void openMonthlyReview()}
       />
       {deleteTarget && (
         <FinzDeleteConfirm

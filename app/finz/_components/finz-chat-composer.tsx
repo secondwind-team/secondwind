@@ -102,6 +102,7 @@ export function FinzChatComposer({
   sending,
   pickBusy,
   recapBusy,
+  monthlyReviewBusy,
   positionSubmitting,
   myLatestStance,
   myLatestNote,
@@ -119,12 +120,14 @@ export function FinzChatComposer({
   onPick,
   onPosition,
   onRecap,
+  onMonthlyReview,
 }: {
   full: boolean;
   hasPick: boolean;
   sending: boolean;
   pickBusy: boolean;
   recapBusy: boolean;
+  monthlyReviewBusy: boolean;
   positionSubmitting: boolean;
   myLatestStance: FinzPartyStance | null;
   myLatestNote: string;
@@ -142,6 +145,7 @@ export function FinzChatComposer({
   onPick: () => void;
   onPosition: (stance: FinzPartyStance, note: string) => void;
   onRecap: () => void;
+  onMonthlyReview: () => void;
 }) {
   const [text, setText] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -378,6 +382,12 @@ export function FinzChatComposer({
                 }
               />
               <SheetItem label="📝 대화 요약" reason="" busy={recapBusy} onClick={() => runAction(onRecap)} />
+              <SheetItem
+                label="📊 월간 투자 리뷰"
+                reason=""
+                busy={monthlyReviewBusy}
+                onClick={() => runAction(onMonthlyReview)}
+              />
             </div>
           )}
 

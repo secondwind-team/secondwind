@@ -727,12 +727,18 @@
 .fz-input {
   width: 100%;
   font-family: var(--fz-body);
-  font-size: 14px;
+  /* iOS Safari는 16px 미만 입력창에 포커스하면 화면을 자동 확대한다. */
+  font-size: 16px;
   color: var(--fz-ink);
   background: var(--fz-surface);
   border: 1px solid var(--fz-line);
   border-radius: var(--fz-r);
   padding: 10px 14px;
+}
+@media (min-width: 640px) {
+  .fz-input {
+    font-size: 14px;
+  }
 }
 .fz-input:focus {
   outline: none;

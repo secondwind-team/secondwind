@@ -1,0 +1,37 @@
+# FINZ 대화방의 월간 투자 리뷰를 생성하는 스케줄 트리거.
+#
+# 무엇을 하나: 매일 12:00 KST(=03:00 UTC)에 보안 엔드포인트를 호출한다. 서버는 한국시간
+# 말일에만 실제 리뷰를 만들고, 평소에는 즉시 종료한다. 대화가 있었던 방만 대상으로 삼는다.
+#
+# 위험 설명(비개발자용): 외부 호출 1건만 보낸다. 실패해도 채팅은 정상이고 그달 자동 리뷰만
+# 늦어진다. 토큰이 틀리면 서버가 401로 거절해 데이터가 바뀌지 않는다.
+#
+# ⚠️ GitHub Secret과 Vercel 환경변수에 동일한 CRON_SECRET이 필요하다.
+
+name: monthly-review
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC = 12:00 KST
+  workflow_dispatch: {}
+
+concurrency:
+  group: finz-monthly-review
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    name: trigger monthly reviews
+    runs-on: ubuntu-latest
+    steps:
+      - name: call monthly review endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET 미설정 — GitHub와 Vercel 양쪽에 같은 값을 추가해야 합니다."
+            exit 1
+          fi
+          curl -fsS --retry 2 --retry-delay 15 -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://secondwind-mu.vercel.app/api/finz/cron/monthly-review"
